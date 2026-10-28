@@ -267,6 +267,24 @@ footer a{color:var(--cyan)}
 .tcard .who b{display:block;font-size:13.5px}
 .tcard .who span{font-size:12px;color:var(--muted)}
 
+/* ===== 视觉增强：3D 光环 / 极光 / 光标光晕 ===== */
+.ring{position:absolute;border-radius:50%;pointer-events:none;z-index:0}
+.ring.r1{width:440px;height:440px;top:50%;left:50%;margin:-220px 0 0 -220px;border:1px dashed rgba(96,165,250,.4);animation:ringSpin 18s linear infinite}
+.ring.r2{width:580px;height:580px;top:50%;left:50%;margin:-290px 0 0 -290px;border:1px solid rgba(56,189,248,.16);animation:ringSpin 30s linear infinite reverse}
+.ring.r2::after{content:"";position:absolute;top:-5px;left:50%;width:10px;height:10px;border-radius:50%;background:var(--cyan);box-shadow:0 0 18px var(--cyan)}
+@keyframes ringSpin{to{transform:rotate(360deg)}}
+
+.aurora{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.aurora i{position:absolute;border-radius:50%;filter:blur(90px);opacity:.5}
+.aurora i:nth-child(1){width:360px;height:360px;background:rgba(59,130,246,.35);top:-80px;left:-60px;animation:aur 20s ease-in-out infinite}
+.aurora i:nth-child(2){width:300px;height:300px;background:rgba(56,189,248,.3);top:40%;right:-40px;animation:aur 24s ease-in-out infinite reverse}
+.aurora i:nth-child(3){width:260px;height:260px;background:rgba(129,140,248,.28);bottom:-60px;left:30%;animation:aur 28s ease-in-out infinite}
+@keyframes aur{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(40px,30px) scale(1.15)}}
+
+.cursor-glow{position:fixed;width:520px;height:520px;border-radius:50%;pointer-events:none;z-index:-1;
+  background:radial-gradient(circle,rgba(59,130,246,.13),transparent 68%);
+  transform:translate(-50%,-50%);transition:opacity .4s;opacity:0}
+
 /* ===== 平板 ===== */
 @media(max-width:960px){
   .nav-links{display:none}
@@ -387,6 +405,7 @@ footer a{color:var(--cyan)}
 <body>
 <div class="bg"></div><div class="grid"></div>
 <div class="orb v"></div><div class="orb c"></div>
+<div class="cursor-glow" id="cursorGlow"></div>
 
 <nav id="nav">
   <div class="wrap">
@@ -411,6 +430,9 @@ footer a{color:var(--cyan)}
       <p class="note">联系大晴 <a class="contact1" href="https://t.me/mmmg" target="_blank" rel="noopener">@mmmmg</a> · 客服 <a class="contact2" href="https://t.me/kefu686" target="_blank" rel="noopener">@kefu686</a></p>
     </div>
     <div class="mock">
+      <div class="ring r1"></div>
+      <div class="ring r2"></div>
+      <div class="aurora"><i></i><i></i><i></i></div>
       <div class="mock-card">
         <div class="head">
           <span class="av">🃏</span>
@@ -654,6 +676,15 @@ addEventListener('mousemove',e=>{
   hero.style.setProperty('--mx',((e.clientX-r.left)/r.width*100)+'%');
   hero.style.setProperty('--my',((e.clientY-r.top)/r.height*100)+'%');
 });
+
+/* 全局光标光晕（跟随鼠标） */
+const glow=document.getElementById('cursorGlow');
+addEventListener('mousemove',e=>{
+  glow.style.opacity='1';
+  glow.style.left=e.clientX+'px';
+  glow.style.top=e.clientY+'px';
+});
+document.addEventListener('mouseleave',()=>{glow.style.opacity='0';});
 
 /* 转盘（演示） */
 const wheel=document.getElementById('wheel');
