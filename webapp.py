@@ -331,6 +331,39 @@ async def members_adjust_api(request: web.Request):
     return web.json_response({"ok": True, "result": result})
 
 
+async def public_site(request: web.Request):
+    """公开网站配置（无需登录）：落地页读取，用于动态渲染标题/联系方式/主色等。"""
+
+    def build():
+        with database.SessionLocal() as session:
+            return {"ok": True, "site": config_api.get_site_config(session)}
+
+    return web.json_response(_cached("site", build))
+
+
+async def site_api(request: web.Request):
+    """后台读取网站配置。"""
+    _auth(request)
+    with database.SessionLocal() as session:
+        return web.json_response({"ok": True, "site": config_api.get_site_config(session)})
+
+
+async def site_save_api(request: web.Request):
+    """后台保存网站配置。"""
+    _auth(request)
+    try:
+        data = await request.json()
+    except Exception:
+        raise web.HTTPBadRequest(text="请求格式错误")
+    with database.SessionLocal() as session:
+        try:
+            cfg = config_api.set_site_config(session, data)
+        except ValueError as e:
+            raise web.HTTPBadRequest(text=str(e))
+    _public_cache.pop("site", None)  # 立即让公开接口生效
+    return web.json_response({"ok": True, "site": cfg})
+
+
 def build_app(bot=None) -> web.Application:
     global _bot
     if bot is not None:
@@ -341,6 +374,7 @@ def build_app(bot=None) -> web.Application:
     app.router.add_get("/health", health)
     app.router.add_get("/api/public/feed", public_feed)
     app.router.add_get("/api/public/plans", public_plans)
+    app.router.add_get("/api/public/site", public_site)
     app.router.add_post("/api/login", login)
     app.router.add_post("/api/logout", logout)
     app.router.add_get("/api/config", get_config_api)
@@ -349,4 +383,6 @@ def build_app(bot=None) -> web.Application:
     app.router.add_get("/api/stats", stats_api)
     app.router.add_get("/api/members", members_api)
     app.router.add_post("/api/members/adjust", members_adjust_api)
+    app.router.add_get("/api/site", site_api)
+    app.router.add_post("/api/site", site_save_api)
     return app

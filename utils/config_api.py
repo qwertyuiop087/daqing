@@ -287,3 +287,55 @@ def adjust_member(session, user_id: int, days_delta: int = 0, balance_delta: flo
         "wash_balance": round(user.wash_balance or 0, 4),
         "changed": changed,
     }
+
+
+# ---------------- 网站设置（落地页内容可后台配置） ----------------
+
+SITE_FIELDS = {
+    "site_title", "brand", "hero_highlight", "hero_subtitle",
+    "accent", "contact1", "contact2", "bot_link",
+}
+
+DEFAULT_SITE_CONFIG = {
+    "site_title": "大晴分包机器人 · DQFB",
+    "brand": "大晴分包",
+    "hero_highlight": "大晴分包机器人",
+    "hero_subtitle": "文件切割、号码去重、空号检测、催收分包、洗数据…… 上传即处理，结果秒回。内置抽奖系统与会员体系，运营一步到位。",
+    "accent": "#3b82f6",
+    "contact1": "@mmmmg",
+    "contact2": "@kefu686",
+    "bot_link": "https://t.me/sechou_bot",
+}
+
+
+def get_site_config(session) -> dict:
+    """读取网站配置（带默认值）。"""
+    cfg = dict(DEFAULT_SITE_CONFIG)
+    raw = database.get_config(session, "site_config", "")
+    if raw:
+        try:
+            data = json.loads(raw)
+            for k in SITE_FIELDS:
+                if k in data:
+                    cfg[k] = data[k]
+        except Exception:
+            pass
+    return cfg
+
+
+def set_site_config(session, updates: dict) -> dict:
+    """保存网站配置。只接受白名单字段，返回保存后的完整配置。"""
+    import json as _json
+    cfg = dict(DEFAULT_SITE_CONFIG)
+    raw = database.get_config(session, "site_config", "")
+    if raw:
+        try:
+            cfg.update(_json.loads(raw))
+        except Exception:
+            pass
+    for k, v in (updates or {}).items():
+        if k not in SITE_FIELDS:
+            raise ValueError(f"未知字段：{k}")
+        cfg[k] = v
+    database.set_config(session, "site_config", _json.dumps(cfg, ensure_ascii=False))
+    return cfg

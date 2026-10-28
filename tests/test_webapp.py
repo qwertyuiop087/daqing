@@ -106,6 +106,15 @@ class TestWebapp(unittest.TestCase):
                 )
                 self.assertEqual(resp.status, 400)
 
+                # 网站设置：读取 + 保存 + 公开接口
+                site_resp = await (await client.get("/api/site")).json()
+                self.assertIn("site", site_resp)
+                self.assertIn("brand", site_resp["site"])
+                resp = await client.post("/api/site", json={"brand": "测试品牌", "accent": "#123456"})
+                self.assertEqual(resp.status, 200, await resp.text())
+                pub = await (await client.get("/api/public/site")).json()
+                self.assertEqual(pub["site"]["brand"], "测试品牌")
+
                 # 页面
                 self.assertEqual((await client.get("/")).status, 200)
                 self.assertEqual((await client.get("/admin")).status, 200)

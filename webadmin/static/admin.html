@@ -97,6 +97,7 @@ dialog .row{margin-top:18px}
     <a data-p="template" onclick="go('template')">📣 通知模板</a>
     <a data-p="member" onclick="go('member')">💎 会员设置</a>
     <a data-p="wash" onclick="go('wash')">🧼 洗数据设置</a>
+    <a data-p="site" onclick="go('site')">🌐 网站设置</a>
     <div style="flex:1"></div>
     <a href="/" target="_blank" style="color:var(--cyan)">🌐 查看介绍页</a>
     <a onclick="doLogout()">🚪 退出登录</a>
@@ -228,6 +229,30 @@ dialog .row{margin-top:18px}
         <div class="row"><button onclick="save('usdt_rate')">保存</button><button class="ghost" onclick="reset('usdt_rate')">清空</button></div>
       </div>
     </section>
+
+    <section id="p-site" class="page" style="display:none">
+      <h2>🌐 网站设置</h2>
+      <div class="sub">配置落地页的标题、品牌、主色、联系方式，保存后刷新网站即生效</div>
+      <div class="card">
+        <label>网站标题（浏览器标签栏）</label>
+        <input id="site_title">
+        <label>品牌名（左上角）</label>
+        <input id="brand">
+        <label>主标题渐变词</label>
+        <input id="hero_highlight">
+        <label>副标题</label>
+        <textarea id="hero_subtitle"></textarea>
+        <label>主色（十六进制色值，如 #3b82f6）</label>
+        <input id="accent" type="text">
+        <label>联系方式一（大晴，如 @mmmmg）</label>
+        <input id="contact1">
+        <label>联系方式二（客服，如 @kefu686）</label>
+        <input id="contact2">
+        <label>机器人链接</label>
+        <input id="bot_link">
+        <div class="row"><button onclick="saveSite()">💾 保存网站设置</button></div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -275,6 +300,7 @@ function go(p){
   document.querySelectorAll('.page').forEach(s=>s.style.display='none');
   $('p-'+p).style.display='block';
   if(p==='members')loadMembers();
+  if(p==='site')loadSite();
 }
 
 const KEY_TO_EL={
@@ -363,6 +389,23 @@ async function doAdjust(){
     toast('✅ '+(d.result.changed||[]).join('，'));
     document.getElementById('adjust-dialog').close();
     loadMembers();
+  }catch(e){toast('❌ '+e.message,false);}
+}
+
+/* ---- 网站设置 ---- */
+const SITE_FIELDS=['site_title','brand','hero_highlight','hero_subtitle','accent','contact1','contact2','bot_link'];
+async function loadSite(){
+  try{
+    const d=await api('/api/site');
+    SITE_FIELDS.forEach(k=>{ if($(k)) $(k).value=d.site[k]??''; });
+  }catch(e){toast('❌ '+e.message,false);}
+}
+async function saveSite(){
+  const body={};
+  SITE_FIELDS.forEach(k=>{ if($(k)) body[k]=$(k).value.trim(); });
+  try{
+    await api('/api/site',{method:'POST',body:JSON.stringify(body)});
+    toast('✅ 网站设置已保存，刷新网站即可看到效果');
   }catch(e){toast('❌ '+e.message,false);}
 }
 </script>
