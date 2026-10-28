@@ -45,7 +45,7 @@ class TestWebapp(unittest.TestCase):
                 resp = await client.post("/api/config/lottery_prizes", json={"value": "天:1:50,高级券:1:10"})
                 self.assertEqual(resp.status, 200, await resp.text())
                 cfg2 = await (await client.get("/api/config")).json()
-                self.assertIn("ticket", cfg2["lottery_prizes"])
+                self.assertIn("高级券", cfg2["lottery_prizes"])
 
                 # 非法输入 → 400
                 resp = await client.post("/api/config/lottery_prizes", json={"value": "天:1:60,天:2:50"})

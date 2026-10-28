@@ -712,25 +712,32 @@ def get_drop_records(session, limit: int = 30) -> list[DropRecord]:
 # ---------------- 抽奖系统（普通抽奖 / 高级抽奖 / 兑换） ----------------
 
 DEFAULT_LOTTERY_PRIZES = [
-    {"type": "days", "value": 1, "prob": 40},
-    {"type": "days", "value": 2, "prob": 25},
-    {"type": "days", "value": 3, "prob": 15},
-    {"type": "days", "value": 5, "prob": 10},
-    {"type": "days", "value": 7, "prob": 5},
-    {"type": "wash_balance", "value": 2, "prob": 3},
-    {"type": "ticket", "value": 1, "prob": 2},
+    {"type": "days", "value": 1, "prob": 10},
+    {"type": "days", "value": 5, "prob": 5},
+    {"type": "days", "value": 8, "prob": 3},
+    {"type": "days", "value": 20, "prob": 1},
+    {"type": "wash_balance", "value": 5, "prob": 3},
+    {"type": "wash_balance", "value": 20, "prob": 1},
+    {"type": "ticket", "value": 1, "prob": 5},
+    {"type": "days", "value": 50, "prob": 0.5},
 ]
 
 DEFAULT_LOTTERY_PREMIUM_PRIZES = [
-    {"type": "days", "value": 30, "prob": 45},
-    {"type": "days", "value": 90, "prob": 30},
-    {"type": "days", "value": 365, "prob": 15},
-    {"type": "wash_balance", "value": 50, "prob": 10},
+    {"type": "days", "value": 5, "prob": 15},
+    {"type": "days", "value": 10, "prob": 10},
+    {"type": "days", "value": 15, "prob": 5},
+    {"type": "days", "value": 20, "prob": 3},
+    {"type": "wash_balance", "value": 20, "prob": 5},
+    {"type": "wash_balance", "value": 50, "prob": 1},
+    {"type": "days", "value": 90, "prob": 0.5},
+    {"type": "days", "value": 180, "prob": 0.5},
 ]
 
 DEFAULT_LOTTERY_REDEEM = [
-    {"cost": 1, "type": "days", "value": 10},
-    {"cost": 2, "type": "wash_balance", "value": 20},
+    {"cost": 1, "type": "days", "value": 3},
+    {"cost": 1, "type": "wash_balance", "value": 10},
+    {"cost": 2, "type": "days", "value": 7},
+    {"cost": 2, "type": "wash_balance", "value": 30},
 ]
 
 DEFAULT_LOTTERY_NOTIFY_TEMPLATE = (

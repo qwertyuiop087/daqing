@@ -85,7 +85,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.13"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.16"))
 
 
 settings = Settings()

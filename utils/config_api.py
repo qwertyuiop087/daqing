@@ -55,11 +55,34 @@ def parse_wash_prices_input(text: str) -> list[dict]:
     return prices
 
 
+_PRIZE_TYPE_LABEL = {"days": "天", "wash_balance": "余额", "ticket": "高级券"}
+
+
+def _prizes_to_text(prizes: list[dict]) -> str:
+    """奖品池 → 「类型:数值:概率」文本（与网页后台输入格式一致）。"""
+    parts = []
+    for p in prizes:
+        t = _PRIZE_TYPE_LABEL.get(p["type"], p["type"])
+        v = int(p["value"]) if p["type"] in ("days", "ticket") else f"{float(p['value']):g}"
+        parts.append(f"{t}:{v}:{float(p['prob']):g}")
+    return ",".join(parts)
+
+
+def _redeem_to_text(items: list[dict]) -> str:
+    """兑换价目表 → 「券数:类型:数值」文本（与网页后台输入格式一致）。"""
+    parts = []
+    for it in items:
+        t = _PRIZE_TYPE_LABEL.get(it["type"], it["type"])
+        v = int(it["value"]) if it["type"] == "days" else f"{float(it['value']):g}"
+        parts.append(f"{int(it['cost'])}:{t}:{v}")
+    return ",".join(parts)
+
+
 def get_all_config(session) -> dict:
     return {
-        "lottery_prizes": json.dumps(database.get_lottery_prizes(session), ensure_ascii=False),
-        "lottery_premium_prizes": json.dumps(database.get_lottery_premium_prizes(session), ensure_ascii=False),
-        "lottery_redeem": json.dumps(database.get_lottery_redeem(session), ensure_ascii=False),
+        "lottery_prizes": _prizes_to_text(database.get_lottery_prizes(session)),
+        "lottery_premium_prizes": _prizes_to_text(database.get_lottery_premium_prizes(session)),
+        "lottery_redeem": _redeem_to_text(database.get_lottery_redeem(session)),
         "plans": json.dumps(database.get_plans(session), ensure_ascii=False),
         "wash_prices": json.dumps(database.get_wash_prices(session), ensure_ascii=False),
         "wash_price_floor": database.get_wash_price_floor(session),
