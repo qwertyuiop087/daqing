@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大晴分包机器人 · DQFB — 号码数据处理 · 抽奖 · 会员</title>
+<meta name="description" content="大晴分包机器人：文件切割、号码去重、空号检测、催收分包、洗数据、抽奖系统，Telegram 一键使用。">
+<style>
+:root{
+  --bg:#05060f;--bg2:#0b0d1d;
+  --card:rgba(255,255,255,.04);--card2:rgba(255,255,255,.07);
+  --line:rgba(255,255,255,.09);--line2:rgba(255,255,255,.16);
+  --text:#eef0fa;--muted:#9aa1bd;
+  --violet:#8b5cf6;--cyan:#22d3ee;--pink:#f472b6;--green:#34d399;
+  --grad:linear-gradient(120deg,#a78bfa,#22d3ee);
+  --radius:20px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,"MiSans","HarmonyOS Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--text);line-height:1.7;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1200px;margin:0 auto;padding:0 26px}
+::selection{background:rgba(139,92,246,.4)}
+
+/* 背景 */
+.bg{position:fixed;inset:0;z-index:-3;background:var(--bg)}
+.bg::before{content:"";position:absolute;inset:0;background:
+  radial-gradient(1100px 620px at 82% -12%,rgba(139,92,246,.20),transparent 62%),
+  radial-gradient(900px 520px at 8% 16%,rgba(34,211,238,.13),transparent 60%),
+  radial-gradient(700px 500px at 50% 120%,rgba(244,114,182,.10),transparent 65%)}
+.bg::after{content:"";position:absolute;inset:0;opacity:.05;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E")}
+.grid{position:fixed;inset:0;z-index:-2;opacity:.55;
+  background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);
+  background-size:58px 58px;
+  mask-image:radial-gradient(ellipse 95% 75% at 50% 0%,#000 25%,transparent 78%);
+  -webkit-mask-image:radial-gradient(ellipse 95% 75% at 50% 0%,#000 25%,transparent 78%)}
+.orb{position:fixed;border-radius:50%;filter:blur(100px);opacity:.45;z-index:-1;animation:float 16s ease-in-out infinite}
+.orb.v{width:460px;height:460px;background:rgba(139,92,246,.34);top:-140px;right:-100px}
+.orb.c{width:380px;height:380px;background:rgba(34,211,238,.26);top:42%;left:-160px;animation-delay:-8s}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(30px)}}
+
+/* 导航 */
+nav{position:fixed;top:0;left:0;right:0;z-index:60;transition:.35s}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;height:70px}
+nav.scrolled{background:rgba(5,6,15,.78);backdrop-filter:blur(20px);border-bottom:1px solid var(--line)}
+.logo{display:flex;align-items:center;gap:11px;font-weight:800;font-size:18px;letter-spacing:.4px}
+.logo .mark{width:36px;height:36px;border-radius:11px;background:var(--grad);display:grid;place-items:center;font-size:17px;box-shadow:0 0 26px rgba(139,92,246,.55)}
+.logo em{font-style:normal;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.nav-links{display:flex;gap:30px;font-size:14px;color:var(--muted)}
+.nav-links a{position:relative;transition:.2s;padding:4px 0}
+.nav-links a::after{content:"";position:absolute;left:0;bottom:-2px;width:0;height:2px;border-radius:2px;background:var(--grad);transition:.25s}
+.nav-links a:hover{color:var(--text)}
+.nav-links a:hover::after{width:100%}
+.btn{display:inline-flex;align-items:center;gap:9px;padding:11px 22px;border-radius:13px;font-size:14px;font-weight:650;border:1px solid var(--line);background:var(--card);backdrop-filter:blur(8px);transition:.28s;cursor:pointer;position:relative}
+.btn:hover{background:var(--card2);transform:translateY(-2px);border-color:var(--line2)}
+.btn.primary{background:var(--grad);border:none;color:#fff;box-shadow:0 10px 34px rgba(139,92,246,.38)}
+.btn.primary:hover{box-shadow:0 14px 44px rgba(34,211,238,.45)}
+.btn.glow{animation:glowPulse 2.6s ease-in-out infinite}
+@keyframes glowPulse{0%,100%{box-shadow:0 10px 34px rgba(139,92,246,.38)}50%{box-shadow:0 10px 50px rgba(34,211,238,.6)}}
+.btn.ghost{background:transparent}
+
+/* Hero */
+.hero{position:relative;padding:150px 0 70px;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.55;background:radial-gradient(560px 340px at var(--mx,50%) var(--my,20%),rgba(139,92,246,.16),transparent 70%)}
+.hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:64px;align-items:center}
+.badge{display:inline-flex;align-items:center;gap:9px;padding:8px 18px;border-radius:999px;font-size:13px;color:#c4b5fd;
+  background:linear-gradient(120deg,rgba(139,92,246,.16),rgba(34,211,238,.12));border:1px solid rgba(139,92,246,.35);margin-bottom:28px}
+.badge .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.hero h1{font-size:clamp(40px,6.2vw,72px);font-weight:900;letter-spacing:-2px;line-height:1.08}
+.grad-text{background:linear-gradient(110deg,#a78bfa 10%,#22d3ee 45%,#f472b6 80%);background-size:220% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:gradShift 6s ease infinite}
+@keyframes gradShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.hero p.sub{max-width:560px;margin:24px 0 0;color:var(--muted);font-size:17px;line-height:1.9}
+.hero .cta{display:flex;gap:16px;margin-top:40px;flex-wrap:wrap}
+.hero .note{margin-top:20px;font-size:13.5px;color:var(--muted)}
+.hero .note a{color:var(--cyan)}
+
+/* 聊天演示卡 */
+.mock{position:relative}
+.mock-card{position:relative;border-radius:24px;border:1px solid var(--line2);background:linear-gradient(165deg,rgba(255,255,255,.08),rgba(255,255,255,.02));
+  backdrop-filter:blur(16px);padding:22px;box-shadow:0 40px 90px rgba(0,0,0,.5),0 0 0 1px rgba(139,92,246,.08);animation:float 7s ease-in-out infinite}
+.mock-card .head{display:flex;align-items:center;gap:12px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.mock-card .head .av{width:40px;height:40px;border-radius:12px;background:var(--grad);display:grid;place-items:center;font-size:19px}
+.mock-card .head b{display:block;font-size:14.5px}
+.mock-card .head span{font-size:12px;color:var(--green)}
+.msg{margin-top:14px;display:flex;gap:10px;align-items:flex-start}
+.msg.me{justify-content:flex-end}
+.msg .bub{max-width:78%;padding:10px 14px;border-radius:14px;font-size:13.5px;background:rgba(255,255,255,.06);border:1px solid var(--line)}
+.msg.me .bub{background:linear-gradient(120deg,rgba(139,92,246,.35),rgba(34,211,238,.25));border:none;border-bottom-right-radius:4px}
+.msg.bot .bub{border-bottom-left-radius:4px}
+.win-chip{display:flex;align-items:center;gap:10px;margin-top:14px;padding:12px 14px;border-radius:14px;
+  background:linear-gradient(120deg,rgba(244,114,182,.16),rgba(139,92,246,.16));border:1px solid rgba(244,114,182,.3);font-size:13.5px}
+.win-chip b{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.mock .mini{position:absolute;border-radius:14px;border:1px solid var(--line2);background:rgba(11,13,29,.9);backdrop-filter:blur(12px);
+  padding:10px 14px;font-size:12.5px;display:flex;align-items:center;gap:8px;box-shadow:0 16px 40px rgba(0,0,0,.45);animation:float 6s ease-in-out infinite}
+.mock .mini.m1{top:-20px;left:-46px}
+.mock .mini.m2{bottom:24px;right:-40px;animation-delay:-3s}
+.mock .mini .ic{font-size:16px}
+
+/* 跑马灯 */
+.marquee{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:20px 0;overflow:hidden;position:relative;
+  background:linear-gradient(90deg,transparent,rgba(139,92,246,.06),transparent)}
+.marquee .track{display:flex;gap:56px;width:max-content;animation:mq 30s linear infinite}
+.marquee span{font-size:15px;font-weight:700;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:10px}
+.marquee span::after{content:"✦";color:var(--violet)}
+@keyframes mq{to{transform:translateX(-50%)}}
+
+/* 区块 */
+section{padding:96px 0}
+.sec-head{text-align:center;margin-bottom:60px}
+.sec-head .kicker{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:800;letter-spacing:3px;color:var(--cyan);text-transform:uppercase}
+.sec-head .kicker::before,.sec-head .kicker::after{content:"";width:26px;height:1px;background:linear-gradient(90deg,transparent,var(--cyan))}
+.sec-head .kicker::after{transform:scaleX(-1)}
+.sec-head h2{font-size:clamp(28px,4vw,44px);font-weight:850;margin:14px 0 16px;letter-spacing:-1px}
+.sec-head p{color:var(--muted);max-width:580px;margin:0 auto;font-size:15.5px}
+
+/* 功能卡片 */
+.features{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:18px}
+.fcard{position:relative;padding:28px 24px;border-radius:var(--radius);background:var(--card);border:1px solid var(--line);
+  transition:.35s;overflow:hidden;backdrop-filter:blur(8px)}
+.fcard::before{content:"";position:absolute;inset:0;background:radial-gradient(320px 140px at 50% -30%,rgba(139,92,246,.24),transparent);opacity:0;transition:.35s}
+.fcard:hover{transform:translateY(-6px);border-color:rgba(139,92,246,.5);box-shadow:0 24px 60px rgba(0,0,0,.4)}
+.fcard:hover::before{opacity:1}
+.fcard .ico{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-size:23px;margin-bottom:16px;
+  background:linear-gradient(140deg,rgba(139,92,246,.2),rgba(34,211,238,.14));border:1px solid rgba(139,92,246,.3)}
+.fcard h3{font-size:16px;margin-bottom:8px}
+.fcard p{font-size:13.5px;color:var(--muted);line-height:1.75}
+.fcard .num{position:absolute;top:18px;right:20px;font-size:26px;font-weight:900;color:rgba(255,255,255,.05)}
+
+/* 抽奖区 */
+.lottery{position:relative;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,transparent,rgba(139,92,246,.07),rgba(34,211,238,.05),transparent)}
+.lottery-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:70px;align-items:center}
+.wheel-box{display:flex;flex-direction:column;align-items:center;gap:30px}
+.wheel-wrap{position:relative;width:330px;height:330px}
+.wheel{width:100%;height:100%;border-radius:50%;position:relative;transition:transform 3.6s cubic-bezier(.15,.9,.2,1);
+  background:conic-gradient(#8b5cf6 0 12.5%,#22d3ee 0 25%,#f472b6 0 37.5%,#34d399 0 50%,#fbbf24 0 62.5%,#60a5fa 0 75%,#f87171 0 87.5%,#a78bfa 0 100%);
+  box-shadow:0 0 90px rgba(139,92,246,.4),inset 0 0 0 1px rgba(255,255,255,.14)}
+.wheel .seg{position:absolute;top:50%;left:50%;width:50%;height:0;transform-origin:0 0}
+.wheel .seg span{position:absolute;top:6px;left:60%;font-size:11px;font-weight:800;color:rgba(5,6,15,.85);white-space:nowrap}
+.wheel-hub{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70px;height:70px;border-radius:50%;
+  background:var(--bg2);border:1px solid var(--line2);display:grid;place-items:center;font-size:28px;box-shadow:0 10px 34px rgba(0,0,0,.55)}
+.wheel-pointer{position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-size:28px;filter:drop-shadow(0 5px 10px rgba(0,0,0,.5));z-index:2}
+.prize-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%}
+.prize{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:14px;background:var(--card);border:1px solid var(--line);transition:.3s}
+.prize:hover{border-color:rgba(244,114,182,.4);transform:translateY(-2px)}
+.prize .t{font-size:22px}
+.prize b{font-size:13.5px;display:block}
+.prize span{font-size:12px;color:var(--muted)}
+.lottery-info h3{font-size:28px;font-weight:850;margin-bottom:20px;letter-spacing:-.5px}
+.lottery-info .step{display:flex;gap:16px;margin-bottom:24px;padding:18px;border-radius:16px;background:var(--card);border:1px solid var(--line);transition:.3s}
+.lottery-info .step:hover{border-color:rgba(34,211,238,.4)}
+.lottery-info .step .n{flex:none;width:34px;height:34px;border-radius:11px;background:var(--grad);display:grid;place-items:center;font-weight:800;font-size:14px;color:#fff;box-shadow:0 8px 22px rgba(139,92,246,.35)}
+.lottery-info .step b{display:block;font-size:15px}
+.lottery-info .step p{font-size:13.5px;color:var(--muted)}
+
+/* 通知流 */
+.toasts{position:fixed;left:22px;bottom:22px;z-index:70;display:flex;flex-direction:column;gap:10px;pointer-events:none}
+.toast{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:14px;background:rgba(11,13,29,.92);border:1px solid var(--line2);
+  backdrop-filter:blur(14px);box-shadow:0 14px 44px rgba(0,0,0,.55);transform:translateX(-140%);opacity:0;animation:slideIn .5s forwards}
+.toast.out{animation:slideOut .5s forwards}
+.toast .ico{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;font-size:18px;background:linear-gradient(140deg,rgba(139,92,246,.25),rgba(34,211,238,.15));border:1px solid rgba(139,92,246,.3)}
+.toast b{font-size:13.5px;display:block}
+.toast span{font-size:12px;color:var(--muted)}
+@keyframes slideIn{to{transform:translateX(0);opacity:1}}
+@keyframes slideOut{to{transform:translateX(-140%);opacity:0}}
+
+/* 流程 */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;position:relative}
+.step-card{padding:34px 26px;border-radius:var(--radius);background:var(--card);border:1px solid var(--line);text-align:center;transition:.35s;position:relative}
+.step-card:hover{transform:translateY(-6px);border-color:rgba(34,211,238,.45);box-shadow:0 24px 60px rgba(0,0,0,.4)}
+.step-card .n{width:48px;height:48px;margin:0 auto 20px;border-radius:15px;background:var(--grad);display:grid;place-items:center;font-size:21px;font-weight:850;color:#fff;box-shadow:0 10px 28px rgba(139,92,246,.4)}
+.step-card h3{font-size:16.5px;margin-bottom:9px}
+.step-card p{font-size:13.5px;color:var(--muted)}
+.step-card .arrow{position:absolute;top:50%;right:-26px;transform:translateY(-50%);font-size:20px;color:var(--violet)}
+.step-card:last-child .arrow{display:none}
+
+/* 套餐 */
+.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(236px,1fr));gap:20px}
+.plan{position:relative;padding:38px 30px;border-radius:var(--radius);background:var(--card);border:1px solid var(--line);text-align:center;transition:.35s}
+.plan:hover{transform:translateY(-8px);border-color:rgba(139,92,246,.5);box-shadow:0 28px 70px rgba(0,0,0,.45)}
+.plan.hot{border-color:rgba(139,92,246,.6);background:linear-gradient(180deg,rgba(139,92,246,.16),rgba(139,92,246,.04));box-shadow:0 26px 70px rgba(139,92,246,.2)}
+.plan .tag{position:absolute;top:-13px;left:50%;transform:translateX(-50%);padding:5px 16px;border-radius:999px;background:var(--grad);font-size:12px;font-weight:800;color:#fff;box-shadow:0 8px 22px rgba(139,92,246,.4)}
+.plan h3{font-size:15px;color:var(--muted);margin-bottom:16px}
+.plan .price{font-size:40px;font-weight:900;letter-spacing:-1.5px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.plan .price small{font-size:15px;color:var(--muted);font-weight:550}
+.plan ul{list-style:none;margin:22px 0 28px;display:grid;gap:10px;font-size:13.5px;color:var(--muted);text-align:left;padding-left:6px}
+.plan ul li::before{content:"✓";color:var(--green);margin-right:9px;font-weight:800}
+
+/* FAQ */
+.faq{max-width:780px;margin:0 auto;display:grid;gap:12px}
+.faq details{border:1px solid var(--line);border-radius:15px;background:var(--card);overflow:hidden;transition:.3s}
+.faq details[open]{border-color:rgba(139,92,246,.45);background:var(--card2)}
+.faq summary{padding:18px 22px;cursor:pointer;font-weight:650;font-size:15px;list-style:none;display:flex;justify-content:space-between;align-items:center}
+.faq summary::after{content:"+";font-size:22px;color:var(--muted);transition:.25s}
+.faq details[open] summary::after{transform:rotate(45deg);color:var(--cyan)}
+.faq .a{padding:0 22px 18px;color:var(--muted);font-size:14px;line-height:1.85}
+
+/* CTA / footer */
+.cta-band{text-align:center;padding:80px 28px;border-radius:28px;position:relative;overflow:hidden;
+  background:linear-gradient(120deg,rgba(139,92,246,.18),rgba(34,211,238,.12),rgba(244,114,182,.1));border:1px solid rgba(139,92,246,.35)}
+.cta-band::before{content:"";position:absolute;width:420px;height:420px;border-radius:50%;background:rgba(139,92,246,.22);filter:blur(110px);top:-180px;left:50%;transform:translateX(-50%)}
+.cta-band h2{font-size:clamp(26px,4vw,40px);font-weight:850;margin-bottom:14px;position:relative}
+.cta-band p{color:var(--muted);margin-bottom:32px;position:relative}
+footer{border-top:1px solid var(--line);padding:48px 0 56px;color:var(--muted);font-size:13px}
+footer .wrap{display:flex;justify-content:space-between;gap:22px;flex-wrap:wrap;align-items:center}
+footer a{color:var(--cyan)}
+
+/* 动效 */
+.reveal{opacity:0;transform:translateY(30px);transition:opacity .8s ease,transform .8s ease;transition-delay:var(--d,0s)}
+.reveal.show{opacity:1;transform:none}
+
+/* ===== 产品演示（后台仪表盘） ===== */
+.showcase-grid{display:grid;grid-template-columns:1fr 1.1fr;gap:56px;align-items:center}
+.showcase-list{display:grid;gap:16px}
+.sitem{display:flex;gap:16px;padding:18px;border-radius:16px;background:var(--card);border:1px solid var(--line);transition:.3s}
+.sitem:hover{border-color:rgba(139,92,246,.45);transform:translateX(4px)}
+.sitem .ic{width:44px;height:44px;flex:none;border-radius:13px;display:grid;place-items:center;font-size:20px;background:linear-gradient(140deg,rgba(139,92,246,.22),rgba(34,211,238,.14));border:1px solid rgba(139,92,246,.3)}
+.sitem b{display:block;font-size:15px;margin-bottom:3px}
+.sitem p{font-size:13px;color:var(--muted)}
+.dash-mock{border-radius:20px;border:1px solid var(--line2);background:linear-gradient(165deg,rgba(255,255,255,.07),rgba(255,255,255,.02));
+  backdrop-filter:blur(14px);padding:0;overflow:hidden;box-shadow:0 40px 90px rgba(0,0,0,.5),0 0 0 1px rgba(139,92,246,.08)}
+.dash-top{display:flex;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.dash-top i{width:11px;height:11px;border-radius:50%;display:block}
+.dash-top i:nth-child(1){background:#f87171}.dash-top i:nth-child(2){background:#fbbf24}.dash-top i:nth-child(3){background:#34d399}
+.dash-top span{margin-left:10px;font-size:12px;color:var(--muted)}
+.dash-body{display:flex;min-height:300px}
+.dash-side{width:130px;flex:none;border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:6px}
+.dash-side span{padding:8px 12px;border-radius:9px;font-size:12px;color:var(--muted)}
+.dash-side span.on{background:linear-gradient(120deg,rgba(139,92,246,.3),rgba(34,211,238,.18));color:#fff;border:1px solid rgba(139,92,246,.4)}
+.dash-main{flex:1;padding:16px;display:flex;flex-direction:column;gap:14px}
+.dash-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.dstat{background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.dstat b{display:block;font-size:17px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.dstat span{font-size:10.5px;color:var(--muted)}
+.dash-chart{display:flex;align-items:flex-end;gap:8px;height:86px;padding:0 4px}
+.dash-chart i{flex:1;border-radius:6px 6px 2px 2px;background:linear-gradient(180deg,var(--violet),rgba(34,211,238,.5));animation:barGrow 1.2s ease both}
+.dash-chart i:nth-child(1){height:34%}.dash-chart i:nth-child(2){height:52%;animation-delay:.08s}
+.dash-chart i:nth-child(3){height:44%;animation-delay:.16s}.dash-chart i:nth-child(4){height:70%;animation-delay:.24s}
+.dash-chart i:nth-child(5){height:60%;animation-delay:.32s}.dash-chart i:nth-child(6){height:88%;animation-delay:.4s}
+.dash-chart i:nth-child(7){height:100%;animation-delay:.48s}
+@keyframes barGrow{from{height:0}}
+.dash-row{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid var(--line);font-size:12px;color:var(--muted)}
+.dash-row b{color:var(--text)}
+.dash-row .t{display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;background:rgba(52,211,153,.15);color:var(--green)}
+
+/* ===== 对比表 ===== */
+.compare{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius);background:var(--card)}
+.compare table{width:100%;border-collapse:collapse;min-width:560px}
+.compare th,.compare td{padding:16px 20px;text-align:center;font-size:14px;border-bottom:1px solid var(--line)}
+.compare th{color:var(--muted);font-weight:600;background:rgba(255,255,255,.03)}
+.compare td:first-child,.compare th:first-child{text-align:left;color:var(--muted);font-weight:600}
+.compare .us{background:linear-gradient(120deg,rgba(139,92,246,.14),rgba(34,211,238,.1));color:#fff;font-weight:700}
+.compare th.us{position:relative;color:#fff}
+.compare th.us::after{content:"推荐";position:absolute;top:-11px;left:50%;transform:translateX(-50%);padding:3px 12px;border-radius:999px;background:var(--grad);font-size:11px;font-weight:800}
+
+/* ===== 用户评价 ===== */
+.testis{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.tcard{padding:26px 24px;border-radius:var(--radius);background:var(--card);border:1px solid var(--line);transition:.3s}
+.tcard:hover{border-color:rgba(139,92,246,.45);transform:translateY(-4px)}
+.tcard .stars{color:#fbbf24;font-size:13px;letter-spacing:2px;margin-bottom:12px}
+.tcard p{font-size:14px;line-height:1.9;color:var(--text);margin-bottom:18px}
+.tcard .who{display:flex;align-items:center;gap:12px}
+.tcard .av{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:16px;background:var(--grad);color:#fff;flex:none}
+.tcard .who b{display:block;font-size:13.5px}
+.tcard .who span{font-size:12px;color:var(--muted)}
+
+/* ===== 平板 ===== */
+@media(max-width:960px){
+  .nav-links{display:none}
+  .hero{padding:118px 0 50px}
+  .hero-grid,.lottery-grid{grid-template-columns:1fr;gap:46px}
+  .showcase-grid{grid-template-columns:1fr;gap:36px}
+  .lottery-grid{gap:40px}
+  .mock .mini.m1{left:-6px}
+  .mock .mini.m2{right:-6px}
+  .steps{grid-template-columns:1fr}
+  .step-card .arrow{display:none}
+  section{padding:74px 0}
+  .sec-head{margin-bottom:42px}
+  .lottery-info .step{padding:15px}
+}
+
+/* ===== 手机 ===== */
+@media(max-width:640px){
+  .wrap{padding:0 18px}
+  nav .wrap{height:62px}
+  .logo{font-size:16px;gap:9px}
+  .logo .mark{width:32px;height:32px;font-size:15px;border-radius:10px}
+  nav .btn{padding:9px 15px;font-size:13px;border-radius:11px}
+  .hero{padding:100px 0 40px}
+  .badge{font-size:12px;padding:6px 14px;margin-bottom:20px}
+  .hero h1{font-size:clamp(30px,9vw,40px);letter-spacing:-1px;line-height:1.16}
+  .hero p.sub{font-size:15px;line-height:1.85;margin-top:18px}
+  .hero .cta{flex-direction:column;gap:12px;margin-top:30px}
+  .hero .cta .btn{width:100%;justify-content:center}
+  .hero .note{font-size:12.5px;margin-top:16px}
+  .mock .mini{display:none}
+  .mock-card{padding:18px;border-radius:20px}
+  .mock-card .head .av{width:36px;height:36px;font-size:17px}
+  .msg .bub{font-size:13px;padding:9px 12px}
+  .win-chip{font-size:13px;padding:11px 12px}
+  .marquee{padding:16px 0}
+  .marquee .track{gap:36px}
+  .marquee span{font-size:13px}
+  section{padding:62px 0}
+  .sec-head{margin-bottom:34px}
+  .sec-head h2{font-size:28px;letter-spacing:-.5px}
+  .sec-head p{font-size:14px;padding:0 6px}
+  .features{grid-template-columns:1fr;gap:12px}
+  .fcard{display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border-radius:16px}
+  .fcard .ico{width:42px;height:42px;flex:none;margin-bottom:0;font-size:20px;border-radius:12px}
+  .fcard h3{font-size:15px;margin-bottom:3px}
+  .fcard p{font-size:12.5px;line-height:1.6}
+  .fcard .num{display:none}
+  .wheel-wrap{width:min(300px,74vw);height:min(300px,74vw)}
+  .wheel-hub{width:58px;height:58px;font-size:23px}
+  .wheel-pointer{top:-11px;font-size:23px}
+  .wheel .seg span{font-size:10px}
+  .prize-cards{gap:10px}
+  .prize{padding:12px 14px;border-radius:12px}
+  .prize .t{font-size:19px}
+  .prize b{font-size:13px}
+  .prize span{font-size:11px}
+  .lottery-info h3{font-size:22px;margin-bottom:16px}
+  .lottery-info .step{padding:14px;border-radius:14px;gap:12px;margin-bottom:16px}
+  .lottery-info .step .n{width:30px;height:30px;font-size:13px;border-radius:10px}
+  .lottery-info .step b{font-size:14px}
+  .lottery-info .step p{font-size:12.5px}
+  .lottery-info a.btn{width:100%;justify-content:center}
+  .steps{gap:12px}
+  .step-card{padding:24px 20px}
+  .step-card .n{width:42px;height:42px;font-size:18px;border-radius:13px;margin-bottom:14px}
+  .step-card h3{font-size:15px}
+  .step-card p{font-size:12.5px}
+  .plans{gap:14px}
+  .plan{padding:30px 22px}
+  .plan .price{font-size:34px}
+  .faq summary{padding:16px 18px;font-size:14px}
+  .faq .a{padding:0 18px 16px;font-size:13px}
+  .cta-band{padding:52px 20px;border-radius:22px}
+  .cta-band h2{font-size:26px}
+  .cta-band p{font-size:14px}
+  .cta-band .btn{width:100%;justify-content:center}
+  .dash-side{width:96px}
+  .dash-side span{padding:7px 9px;font-size:11px}
+  .dash-stats{grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .dstat b{font-size:15px}
+  .dash-row{font-size:11px}
+  .testis{grid-template-columns:1fr}
+  .tcard{padding:22px 20px}
+  footer{padding:36px 0 44px}
+  footer .wrap{flex-direction:column;gap:10px;text-align:center;justify-content:center}
+  .toasts{left:12px;right:12px;bottom:12px}
+  .toast{padding:10px 12px;width:100%}
+  .toast .ico{width:32px;height:32px;font-size:16px}
+  .toast b{font-size:12.5px}
+  .toast span{font-size:11px}
+}
+
+/* ===== 超小屏 ===== */
+@media(max-width:380px){
+  .hero h1{font-size:29px}
+  .wheel-wrap{width:min(270px,72vw);height:min(270px,72vw)}
+  .prize-cards{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="bg"></div><div class="grid"></div>
+<div class="orb v"></div><div class="orb c"></div>
+
+<nav id="nav">
+  <div class="wrap">
+    <a class="logo" href="#"><span class="mark">🃏</span>大晴分包<em> DQFB</em></a>
+    <div class="nav-links">
+      <a href="#features">功能</a><a href="#lottery">抽奖系统</a><a href="#plans">会员套餐</a><a href="#faq">常见问题</a>
+    </div>
+    <a class="btn primary" href="https://t.me/sechou_bot" target="_blank" rel="noopener">✈️ 打开机器人</a>
+  </div>
+</nav>
+
+<header class="hero" id="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="badge"><span class="dot"></span> Telegram 机器人 · 24/7 自动处理</span>
+      <h1>号码数据处理<br>一站式的 <span class="grad-text">大晴分包机器人</span></h1>
+      <p class="sub">文件切割、号码去重、空号检测、催收分包、洗数据…… 上传即处理，结果秒回。内置抽奖系统与会员体系，运营一步到位。</p>
+      <div class="cta">
+        <a class="btn primary glow" href="https://t.me/sechou_bot" target="_blank" rel="noopener">✈️ 立即开始使用</a>
+        <a class="btn ghost" href="#features">浏览全部功能 ↓</a>
+      </div>
+      <p class="note">联系大晴 <a href="https://t.me/mmmg" target="_blank" rel="noopener">@mmmmg</a> · 客服 <a href="https://t.me/kefu686" target="_blank" rel="noopener">@kefu686</a></p>
+    </div>
+    <div class="mock">
+      <div class="mock-card">
+        <div class="head">
+          <span class="av">🃏</span>
+          <div><b>大晴分包机器人</b><span>● 在线 · 秒级响应</span></div>
+        </div>
+        <div class="msg me"><div class="bub">文件切割</div></div>
+        <div class="msg bot"><div class="bub">✅ 已切割 12 份，开始发送…</div></div>
+        <div class="msg me"><div class="bub">抽奖</div></div>
+        <div class="win-chip">🎰 恭喜抽中 <b>3 天会员</b>，已自动到账 ✨</div>
+        <div class="msg bot"><div class="bub">💎 会员有效期已累加，感谢使用～</div></div>
+      </div>
+      <div class="mini m1"><span class="ic">🎡</span> 转盘抽奖</div>
+      <div class="mini m2"><span class="ic">⚡</span> 秒级处理</div>
+    </div>
+  </div>
+</header>
+
+<div class="marquee">
+  <div class="track">
+    <span>文件切割</span><span>号码去重</span><span>空号检测</span><span>号码分类</span><span>催收分包</span><span>洗数据</span><span>抽奖中心</span><span>高级抽奖</span><span>奖品兑换</span><span>Excel转txt</span><span>批量重命名</span><span>加区号</span><span>号码转VCF</span><span>解压提取</span><span>合并文本</span>
+    <span>文件切割</span><span>号码去重</span><span>空号检测</span><span>号码分类</span><span>催收分包</span><span>洗数据</span><span>抽奖中心</span><span>高级抽奖</span><span>奖品兑换</span><span>Excel转txt</span><span>批量重命名</span><span>加区号</span><span>号码转VCF</span><span>解压提取</span><span>合并文本</span>
+  </div>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker">Features</span>
+      <h2>十五项功能，覆盖号码处理全流程</h2>
+      <p>从原始数据到交付格式，每一步都有对应的自动化工具。</p>
+    </div>
+    <div class="features">
+      <div class="fcard reveal" style="--d:.02s"><span class="ico">✂️</span><h3>文件切割</h3><p>按行数切割 TXT，可选随机插入手机号并输出插入报告。</p><span class="num">01</span></div>
+      <div class="fcard reveal" style="--d:.04s"><span class="ico">🗜️</span><h3>解压提取</h3><p>ZIP 安全解压，自动提取其中全部 TXT（防路径穿越）。</p><span class="num">02</span></div>
+      <div class="fcard reveal" style="--d:.06s"><span class="ico">✏️</span><h3>批量重命名</h3><p>多文件统一前缀重命名，一键规范交付格式。</p><span class="num">03</span></div>
+      <div class="fcard reveal" style="--d:.08s"><span class="ico">📇</span><h3>号码转 VCF</h3><p>号码列表一键转手机通讯录文件，导入即用。</p><span class="num">04</span></div>
+      <div class="fcard reveal" style="--d:.10s"><span class="ico">🔄</span><h3>号码去重</h3><p>按纯数字智能去重，自动忽略空格/横杠/括号。</p><span class="num">05</span></div>
+      <div class="fcard reveal" style="--d:.12s"><span class="ico">📱</span><h3>提取手机号</h3><p>从 TXT / Excel 中批量提取 11 位手机号，可选去重。</p><span class="num">06</span></div>
+      <div class="fcard reveal" style="--d:.14s"><span class="ico">🇨🇳</span><h3>加区号</h3><p>批量给号码前缀补充 +86，自动跳过已有区号。</p><span class="num">07</span></div>
+      <div class="fcard reveal" style="--d:.16s"><span class="ico">🗺️</span><h3>号码分类</h3><p>51 万号段库，按运营商 / 省份 / 城市自动分组导出。</p><span class="num">08</span></div>
+      <div class="fcard reveal" style="--d:.18s"><span class="ico">🔍</span><h3>空号检测</h3><p>批量检测活跃号 / 空号 / 沉默号，自动回传分类结果。</p><span class="num">09</span></div>
+      <div class="fcard reveal" style="--d:.20s"><span class="ico">📚</span><h3>合并文本</h3><p>多文件一键合并，导出文件名自定义。</p><span class="num">10</span></div>
+      <div class="fcard reveal" style="--d:.22s"><span class="ico">📋</span><h3>催收分包</h3><p>自动识别手机号/银行卡/身份证/金额/名字，按指定顺序重排。</p><span class="num">11</span></div>
+      <div class="fcard reveal" style="--d:.24s"><span class="ico">📊</span><h3>Excel 转 TXT</h3><p>内容原样保真转换，不科学计数法、不四舍五入。</p><span class="num">12</span></div>
+      <div class="fcard reveal" style="--d:.26s"><span class="ico">🧼</span><h3>洗数据</h3><p>按行计费的专业清洗流程，完成后自动回传结果。</p><span class="num">13</span></div>
+      <div class="fcard reveal" style="--d:.28s"><span class="ico">🎰</span><h3>抽奖系统</h3><p>每日抽奖 + 高级抽奖 + 奖品兑换，运营活跃度利器。</p><span class="num">14</span></div>
+      <div class="fcard reveal" style="--d:.30s"><span class="ico">💎</span><h3>会员体系</h3><p>卡密兑换 + USDT 购买，会员时长自动累加。</p><span class="num">15</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="showcase">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker">Admin Panel</span>
+      <h2>运营后台，一切尽在掌握</h2>
+      <p>抽奖奖品、会员套餐、洗数据定价、成员管理…… 网页后台随时改，机器人立即生效。</p>
+    </div>
+    <div class="showcase-grid">
+      <div class="showcase-list">
+        <div class="sitem reveal"><span class="ic">🎰</span><div><b>抽奖奖品与概率</b><p>普通/高级奖池、兑换价目表，改完即生效。</p></div></div>
+        <div class="sitem reveal" style="--d:.08s"><span class="ic">💎</span><div><b>套餐与欢迎语</b><p>会员套餐价格、欢迎语随时调整。</p></div></div>
+        <div class="sitem reveal" style="--d:.16s"><span class="ic">👥</span><div><b>成员天数与余额</b><p>搜索成员，一键加扣会员天数、洗数据余额。</p></div></div>
+        <div class="sitem reveal" style="--d:.24s"><span class="ic">📊</span><div><b>数据与抽奖记录</b><p>用户数、会员数、抽奖记录一目了然。</p></div></div>
+      </div>
+      <div class="dash-mock reveal">
+        <div class="dash-top"><i></i><i></i><i></i><span>dqfb.net/admin — 管理后台</span></div>
+        <div class="dash-body">
+          <div class="dash-side">
+            <span class="on">📊 概览</span>
+            <span>👥 成员管理</span>
+            <span>🎰 抽奖设置</span>
+            <span>💎 会员设置</span>
+            <span>🧼 洗数据</span>
+          </div>
+          <div class="dash-main">
+            <div class="dash-stats">
+              <div class="dstat"><b>1,286</b><span>注册用户</span></div>
+              <div class="dstat"><b>862</b><span>有效会员</span></div>
+              <div class="dstat"><b>154</b><span>今日抽奖</span></div>
+            </div>
+            <div class="dash-chart"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="dash-row"><span>🎉 王*二 抽中 3 天会员</span><b class="t">已到账</b></div>
+            <div class="dash-row"><span>💰 李* 充值 ¥50 洗数据余额</span><b class="t">已到账</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="lottery" id="lottery">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker">Lucky Draw</span>
+      <h2>抽奖系统，让用户每天回来</h2>
+      <p>普通抽奖每日一次，抽中「高级券」可参与高级抽奖或直接兑换奖品。</p>
+    </div>
+    <div class="lottery-grid">
+      <div class="wheel-box reveal">
+        <div class="wheel-wrap">
+          <div class="wheel-pointer">📍</div>
+          <div class="wheel" id="wheel"></div>
+          <div class="wheel-hub">🎰</div>
+        </div>
+        <a class="btn primary" id="spinBtn" href="javascript:void(0)">🎡 试一下手气（演示）</a>
+        <div class="prize-cards">
+          <div class="prize"><span class="t">🎫</span><div><b>高级抽奖券</b><span>普通抽奖掉落</span></div></div>
+          <div class="prize"><span class="t">👑</span><div><b>会员天数</b><span>1 ~ 365 天</span></div></div>
+          <div class="prize"><span class="t">💰</span><div><b>洗数据余额</b><span>直接到账</span></div></div>
+          <div class="prize"><span class="t">🛍️</span><div><b>奖品兑换</b><span>券换固定奖品</span></div></div>
+        </div>
+      </div>
+      <div class="lottery-info reveal">
+        <h3>三级玩法，简单又有粘性</h3>
+        <div class="step"><div class="n">1</div><div><b>普通抽奖 · 每日一次</b><p>会员每天可抽一次，奖品池概率由后台配置，中奖直接到账。</p></div></div>
+        <div class="step"><div class="n">2</div><div><b>高级抽奖 · 更大奖池</b><p>抽中「高级券」解锁高级抽奖，30 天、90 天、365 天会员等你开。</p></div></div>
+        <div class="step"><div class="n">3</div><div><b>直接兑换 · 不靠运气</b><p>不想赌？用高级券按后台价目表直接兑换固定奖品。</p></div></div>
+        <a class="btn primary" href="https://t.me/sechou_bot" target="_blank" rel="noopener">🎰 去机器人里抽一次</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker">Why DQFB</span>
+      <h2>和传统方式对比</h2>
+      <p>同样的活，省下的时间是实实在在的。</p>
+    </div>
+    <div class="compare reveal">
+      <table>
+        <thead><tr><th>对比项</th><th>手动处理</th><th class="us">大晴机器人</th><th>其他工具</th></tr></thead>
+        <tbody>
+          <tr><td>处理速度</td><td>小时级</td><td class="us">秒级</td><td>分钟级</td></tr>
+          <tr><td>功能覆盖</td><td>单一</td><td class="us">15+ 项功能</td><td>3~5 项</td></tr>
+          <tr><td>自动化程度</td><td>全手动</td><td class="us">全自动</td><td>半自动</td></tr>
+          <tr><td>准确率</td><td>不稳定</td><td class="us">51 万号段库</td><td>一般</td></tr>
+          <tr><td>运营能力</td><td>无</td><td class="us">抽奖 + 会员</td><td>无</td></tr>
+          <tr><td>交付方式</td><td>人工整理</td><td class="us">自动回传</td><td>手动下载</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker">How it works</span>
+      <h2>三步开始使用</h2>
+    </div>
+    <div class="steps">
+      <div class="step-card reveal"><div class="n">1</div><h3>打开机器人</h3><p>Telegram 搜索 @sechou_bot，点「开始」。</p><span class="arrow">➜</span></div>
+      <div class="step-card reveal" style="--d:.12s"><div class="n">2</div><h3>开通会员</h3><p>兑换卡密或 USDT 购买，会员时长自动累加。</p><span class="arrow">➜</span></div>
+      <div class="step-card reveal" style="--d:.24s"><div class="n">3</div><h3>上传即用</h3><p>点选功能、上传文件，结果自动回传。</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="testimonials">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker">Testimonials</span>
+      <h2>用户怎么说</h2>
+      <p>来自不同行业用户的真实反馈。</p>
+    </div>
+    <div class="testis">
+      <div class="tcard reveal"><div class="stars">★★★★★</div><p>「切割去重一条龙，几万行几分钟就搞定，以前要折腾一下午。」</p><div class="who"><span class="av">王</span><div><b>王*二</b><span>数据工作室</span></div></div></div>
+      <div class="tcard reveal" style="--d:.06s"><div class="stars">★★★★★</div><p>「号段分类特别准，省市直接分好文件，交付都不用改。」</p><div class="who"><span class="av">李</span><div><b>李*</b><span>营销团队</span></div></div></div>
+      <div class="tcard reveal" style="--d:.12s"><div class="stars">★★★★★</div><p>「抽奖系统上线后群里活跃多了，会员续费率肉眼可见地上涨。」</p><div class="who"><span class="av">赵</span><div><b>赵*</b><span>社群运营</span></div></div></div>
+      <div class="tcard reveal" style="--d:.18s"><div class="stars">★★★★★</div><p>「洗数据按行计费明明白白，洗完自动回传，太省心了。」</p><div class="who"><span class="av">陈</span><div><b>陈*</b><span>数据商</span></div></div></div>
+      <div class="tcard reveal" style="--d:.24s"><div class="stars">★★★★★</div><p>「催收分包的字段重排太实用了，格式直接对接我们系统。」</p><div class="who"><span class="av">刘</span><div><b>刘*</b><span>催收团队</span></div></div></div>
+      <div class="tcard reveal" style="--d:.3s"><div class="stars">★★★★★</div><p>「客服响应快，问题基本秒回，用起来很放心。」</p><div class="who"><span class="av">孙</span><div><b>孙*</b><span>个体用户</span></div></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="plans">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker">Pricing</span>
+      <h2>会员套餐</h2>
+      <p>USDT 支付，兑换后立即生效，套餐与机器人实时同步。</p>
+    </div>
+    <div class="plans" id="plans"></div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="kicker">FAQ</span>
+      <h2>常见问题</h2>
+    </div>
+    <div class="faq">
+      <details class="reveal"><summary>机器人收费吗？</summary><div class="a">所有功能需会员才能使用，会员可通过卡密兑换或 USDT 购买。每天还有抽奖可赢会员天数。</div></details>
+      <details class="reveal"><summary>支持哪些文件格式？</summary><div class="a">TXT 为主，部分功能支持 ZIP、XLSX、XLS、CSV。上传文件自动识别 UTF-8 / GBK 编码。</div></details>
+      <details class="reveal"><summary>洗数据是怎么收费的？</summary><div class="a">按文件行数阶梯计费，行数越多单价越低，洗完再扣费，结果自动回传。</div></details>
+      <details class="reveal"><summary>抽奖怎么玩？</summary><div class="a">普通抽奖会员每天一次；抽中「高级券」可参加高级抽奖或直接兑换奖品。</div></details>
+      <details class="reveal"><summary>数据安全吗？</summary><div class="a">文件仅用于本次处理，处理完成后临时文件自动清理。</div></details>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="cta-band reveal">
+      <h2>现在就试试你的手气 🎰</h2>
+      <p>打开机器人，每天一次抽奖，会员天数、高级券等你拿。</p>
+      <a class="btn primary glow" href="https://t.me/sechou_bot" target="_blank" rel="noopener">✈️ 打开 @sechou_bot</a>
+      <p style="margin-top:24px;font-size:14px;color:var(--muted);position:relative">联系大晴 <a href="https://t.me/mmmg" target="_blank" rel="noopener">@mmmmg</a> · 客服 <a href="https://t.me/kefu686" target="_blank" rel="noopener">@kefu686</a></p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>© 2026 大晴分包机器人 · DQFB</div>
+    <div>大晴 <a href="https://t.me/mmmg" target="_blank" rel="noopener">@mmmmg</a> · 客服 <a href="https://t.me/kefu686" target="_blank" rel="noopener">@kefu686</a></div>
+    <div>本页面为功能演示，奖品概率与套餐以机器人内实际配置为准。</div>
+  </div>
+</footer>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+/* 滚动显现（带交错） */
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('show');io.unobserve(e.target)}}),{threshold:.1});
+document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+/* 导航滚动态 */
+const nav=document.getElementById('nav');
+addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>24));
+
+/* 英雄区鼠标光晕 */
+const hero=document.getElementById('hero');
+addEventListener('mousemove',e=>{
+  const r=hero.getBoundingClientRect();
+  hero.style.setProperty('--mx',((e.clientX-r.left)/r.width*100)+'%');
+  hero.style.setProperty('--my',((e.clientY-r.top)/r.height*100)+'%');
+});
+
+/* 转盘（演示） */
+const wheel=document.getElementById('wheel');
+const segs=['1天','高级券','3天','谢谢参与','5天','余额','7天','2天'];
+wheel.innerHTML=segs.map((s,i)=>`<div class="seg" style="transform:rotate(${i*45+22.5}deg)"><span style="transform:translateY(-14px) rotate(90deg)">${s}</span></div>`).join('');
+let spinDeg=0;
+document.getElementById('spinBtn').addEventListener('click',()=>{
+  spinDeg+=1440+Math.floor(Math.random()*360);
+  wheel.style.transform=`rotate(${spinDeg}deg)`;
+});
+
+/* 中奖通知流：优先读机器人真实抽奖记录；取不到（如网站单独托管）则回退演示数据 */
+const demoFeed=[
+  ['🎉','@chen**','抽中 3 天会员'],
+  ['🎁','@liu**','抽中 高级抽奖券 ×1'],
+  ['👑','@wang**','高级抽奖开出 30 天会员'],
+  ['💰','@zhao**','兑换 ¥20 洗数据余额'],
+  ['🎉','@sun**','抽中 7 天会员'],
+  ['🎁','@zhou**','抽中 高级抽奖券 ×1'],
+  ['👑','@wu**','高级抽奖开出 365 天会员'],
+];
+let feed=demoFeed;
+async function loadRealFeed(){
+  try{
+    const r=await fetch('/api/public/feed',{cache:'no-store'});
+    if(!r.ok)return;
+    const d=await r.json();
+    if(d&&Array.isArray(d.items)&&d.items.length){
+      const icon=t=>t.indexOf('余额')>-1?'💰':t.indexOf('券')>-1?'🎁':'🎉';
+      feed=d.items.map(it=>[icon(it.prize),'@'+it.user,'抽中 '+it.prize]);
+    }
+  }catch(e){}
+}
+loadRealFeed();
+const box=document.getElementById('toasts');
+let fi=0;
+function pushToast(){
+  if(fi>=feed.length)fi=0;
+  const [ico,user,msg]=feed[fi++];
+  const t=document.createElement('div');
+  t.className='toast';
+  t.innerHTML=`<span class="ico">${ico}</span><div><b>${user} ${msg}</b><span>刚刚 · 大晴分包机器人</span></div>`;
+  box.appendChild(t);
+  while(box.children.length>3)box.firstChild.remove();
+  setTimeout(()=>t.classList.add('out'),5200);
+  setTimeout(()=>t.remove(),5800);
+}
+setTimeout(pushToast,1800);
+setInterval(pushToast,6000);
+
+/* 套餐同步机器人配置（读取后台真实套餐；取不到回退默认值） */
+const DEFAULT_PLANS=[{"days":7,"price":1},{"days":30,"price":3},{"days":90,"price":8},{"days":365,"price":25}];
+const plansBox=document.getElementById('plans');
+function renderPlans(plans){
+  if(!plansBox)return;
+  const hot=plans.findIndex(p=>p.days===30);
+  const hotIdx=hot>=0?hot:(plans.length>1?1:0);
+  plansBox.innerHTML=plans.map((p,i)=>{
+    const isHot=i===hotIdx;
+    return `<div class="plan${isHot?' hot':''} reveal show" style="--d:${i*0.08}s">
+      ${isHot?'<span class="tag">最受欢迎</span>':''}
+      <h3>${p.days} 天</h3>
+      <div class="price">${p.price}<small> USDT</small></div>
+      <ul><li>${p.days} 天会员</li><li>全部功能</li><li>每日抽奖</li></ul>
+      <a class="btn ${isHot?'primary':'ghost'}" href="https://t.me/sechou_bot" target="_blank" rel="noopener">选择套餐</a>
+    </div>`;
+  }).join('');
+}
+async function loadPlans(){
+  try{
+    const r=await fetch('/api/public/plans',{cache:'no-store'});
+    if(r.ok){const d=await r.json();if(d&&Array.isArray(d.items)&&d.items.length){renderPlans(d.items);return;}}
+  }catch(e){}
+  renderPlans(DEFAULT_PLANS);
+}
+loadPlans();
+</script>
+</body>
+</html>

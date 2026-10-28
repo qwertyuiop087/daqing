@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DQFB 管理后台</title>
+<style>
+:root{
+  --bg:#0a0a14;--panel:#11121f;--panel2:#161829;--line:#262a45;--text:#e8e9f2;--muted:#8b90a8;
+  --violet:#8b5cf6;--cyan:#22d3ee;--green:#34d399;--red:#f87171;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px}
+a{color:var(--cyan)}
+
+/* 登录 */
+#login{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(800px 500px at 50% -10%,rgba(139,92,246,.15),transparent),var(--bg)}
+.login-box{width:min(380px,90vw);padding:36px 30px;border-radius:18px;background:var(--panel);border:1px solid var(--line)}
+.login-box h1{font-size:20px;margin-bottom:6px}
+.login-box p{color:var(--muted);font-size:13px;margin-bottom:22px}
+input,textarea{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:11px 13px;font-size:14px;font-family:inherit;outline:none;transition:.2s}
+input:focus,textarea:focus{border-color:var(--violet)}
+textarea{min-height:120px;resize:vertical;line-height:1.6}
+button{background:linear-gradient(120deg,var(--violet),var(--cyan));border:none;color:#fff;font-weight:700;padding:11px 22px;border-radius:10px;cursor:pointer;font-size:14px;transition:.2s}
+button:hover{opacity:.9}
+button.ghost{background:var(--panel2);border:1px solid var(--line)}
+button.danger{background:rgba(248,113,113,.15);color:var(--red);border:1px solid rgba(248,113,113,.35)}
+#err{color:var(--red);font-size:13px;margin-top:12px;min-height:18px}
+
+/* 布局 */
+#app{display:none}
+aside{position:fixed;left:0;top:0;bottom:0;width:220px;background:var(--panel);border-right:1px solid var(--line);padding:22px 14px;display:flex;flex-direction:column;gap:6px}
+aside .brand{font-size:17px;font-weight:800;padding:4px 12px 18px}
+aside .brand span{background:linear-gradient(120deg,var(--violet),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
+aside a{padding:10px 14px;border-radius:10px;color:var(--muted);cursor:pointer;transition:.2s;text-decoration:none}
+aside a:hover{color:var(--text);background:var(--panel2)}
+aside a.on{color:#fff;background:linear-gradient(120deg,rgba(139,92,246,.25),rgba(34,211,238,.15));border:1px solid var(--line)}
+main{margin-left:220px;padding:34px 40px;max-width:960px}
+h2{font-size:22px;margin-bottom:8px}
+.sub{color:var(--muted);margin-bottom:26px;font-size:13px}
+
+/* 卡片 */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;margin-bottom:20px}
+.card h3{font-size:15px;margin-bottom:6px}
+.hint{font-size:12.5px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:10px 0;line-height:1.7}
+.hint code{color:var(--cyan)}
+.row{display:flex;gap:12px;margin-top:14px;align-items:center;flex-wrap:wrap}
+.row input{width:220px}
+label{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px}
+
+/* 概览 */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+.stat b{font-size:26px;background:linear-gradient(120deg,var(--violet),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent;display:block}
+.stat span{font-size:12.5px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600}
+td .tag{padding:2px 10px;border-radius:999px;font-size:12px}
+.tag.ordinary{background:rgba(139,92,246,.18);color:#c4b5fd}
+.tag.premium{background:rgba(244,114,182,.18);color:#f9a8d4}
+.tag.redeem{background:rgba(52,211,153,.15);color:var(--green)}
+
+/* 通知 */
+#toast{position:fixed;top:22px;right:22px;z-index:99;display:flex;flex-direction:column;gap:10px}
+#toast div{padding:12px 18px;border-radius:12px;background:var(--panel);border:1px solid var(--line);box-shadow:0 10px 40px rgba(0,0,0,.4);animation:fade .3s}
+#toast .ok{border-color:rgba(52,211,153,.4)}
+#toast .bad{border-color:rgba(248,113,113,.5);color:var(--red)}
+@keyframes fade{from{opacity:0;transform:translateY(-8px)}}
+
+/* 调整弹窗 */
+dialog{border:1px solid var(--line);border-radius:16px;background:var(--panel);color:var(--text);padding:26px;width:min(420px,92vw)}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+dialog h3{margin-bottom:16px}
+dialog label{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}
+dialog .row{margin-top:18px}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <div class="login-box">
+    <h1>🔐 DQFB 管理后台</h1>
+    <p>输入管理密码登录</p>
+    <input type="password" id="pwd" placeholder="ADMIN_PASSWORD" onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="row"><button onclick="doLogin()">登录</button></div>
+    <div id="err"></div>
+  </div>
+</div>
+
+<div id="app">
+  <aside>
+    <div class="brand">🃏 大晴分包 <span>DQFB</span></div>
+    <a data-p="overview" class="on" onclick="go('overview')">📊 概览</a>
+    <a data-p="members" onclick="go('members')">👥 成员管理</a>
+    <a data-p="lottery" onclick="go('lottery')">🎰 抽奖设置</a>
+    <a data-p="template" onclick="go('template')">📣 通知模板</a>
+    <a data-p="member" onclick="go('member')">💎 会员设置</a>
+    <a data-p="wash" onclick="go('wash')">🧼 洗数据设置</a>
+    <div style="flex:1"></div>
+    <a href="/" target="_blank" style="color:var(--cyan)">🌐 查看介绍页</a>
+    <a onclick="doLogout()">🚪 退出登录</a>
+  </aside>
+
+  <main>
+    <section id="p-overview" class="page">
+      <h2>📊 概览</h2>
+      <div class="sub">机器人实时数据（与机器人共用数据库）</div>
+      <div class="grid">
+        <div class="stat"><b id="s-users">-</b><span>注册用户</span></div>
+        <div class="stat"><b id="s-members">-</b><span>有效会员</span></div>
+        <div class="stat"><b id="s-lottery">-</b><span>累计抽奖</span></div>
+        <div class="stat"><b id="s-lottery-today">-</b><span>今日抽奖</span></div>
+        <div class="stat"><b id="s-washed">-</b><span>已洗数据（行）</span></div>
+      </div>
+      <div class="card">
+        <h3>🎰 最近抽奖 / 兑换记录</h3>
+        <table><thead><tr><th>时间</th><th>用户</th><th>来源</th><th>奖品</th></tr></thead><tbody id="records"></tbody></table>
+      </div>
+    </section>
+
+    <section id="p-members" class="page" style="display:none">
+      <h2>👥 成员管理</h2>
+      <div class="sub">查看会员剩余天数、洗数据余额、高级券；可直接加/扣（正数增加、负数扣减）</div>
+      <div class="card">
+        <div class="row" style="margin-bottom:16px">
+          <input id="member-q" placeholder="搜索 ID / 用户名 / 昵称" style="flex:1" onkeydown="if(event.key==='Enter')loadMembers()">
+          <button onclick="loadMembers()">🔍 搜索</button>
+          <button class="ghost" onclick="document.getElementById('member-q').value='';loadMembers()">显示全部</button>
+        </div>
+        <table><thead><tr><th>ID</th><th>用户</th><th>会员</th><th>洗数据余额</th><th>高级券</th><th>操作</th></tr></thead>
+        <tbody id="member-rows"><tr><td colspan="6" style="color:var(--muted)">加载中…</td></tr></tbody></table>
+      </div>
+    </section>
+
+    <section id="p-lottery" class="page" style="display:none">
+      <h2>🎰 抽奖设置</h2>
+      <div class="sub">保存后机器人立即生效。概率总和 ≤100%，差额自动为「谢谢参与」。</div>
+
+      <div class="card">
+        <h3>普通抽奖奖品池</h3>
+        <div class="hint">格式：<code>类型:数值:概率</code>，逗号分隔。<br>类型：<code>天</code>=会员天数，<code>余额</code>=洗数据余额（元），<code>高级券</code>=高级抽奖次数<br>例：<code>天:1:40,天:3:30,余额:5:5,高级券:1:3</code></div>
+        <textarea id="lottery_prizes"></textarea>
+        <div class="row"><button onclick="save('lottery_prizes')">保存</button><button class="ghost" onclick="reset('lottery_prizes')">重置默认</button></div>
+      </div>
+
+      <div class="card">
+        <h3>高级抽奖奖品池</h3>
+        <div class="hint">消耗 1 次高级券抽取。格式同普通抽奖（不支持高级券）。<br>例：<code>天:30:45,天:90:30,天:365:15,余额:50:10</code></div>
+        <textarea id="lottery_premium_prizes"></textarea>
+        <div class="row"><button onclick="save('lottery_premium_prizes')">保存</button><button class="ghost" onclick="reset('lottery_premium_prizes')">重置默认</button></div>
+      </div>
+
+      <div class="card">
+        <h3>兑换价目表（高级券直接兑换）</h3>
+        <div class="hint">格式：<code>券数:类型:数值</code>，逗号分隔。<br>例：<code>1:天:10,2:余额:20</code>（1 券换 10 天会员 / 2 券换 20 元余额）</div>
+        <textarea id="lottery_redeem"></textarea>
+        <div class="row"><button onclick="save('lottery_redeem')">保存</button><button class="ghost" onclick="reset('lottery_redeem')">重置默认</button></div>
+      </div>
+    </section>
+
+    <section id="p-template" class="page" style="display:none">
+      <h2>📣 通知模板</h2>
+      <div class="sub">抽奖/兑换到账后，自动发到已绑定的通知群</div>
+
+      <div class="card">
+        <h3>抽奖到账通知模板</h3>
+        <div class="hint">可用占位符（会替换成真实内容）：<br>
+          <code>{username}</code> — 用户名字（Telegram 昵称，自动打码，如 张* / 王*二）<br>
+          <code>{user_id}</code> — 用户 Telegram ID<br>
+          <code>{source}</code> — 来源（普通抽奖 / 高级抽奖 / 兑换）<br>
+          <code>{prize}</code> — 奖品（如「3 天会员」）
+        </div>
+        <textarea id="lottery_notify_template" style="min-height:160px"></textarea>
+        <div class="row"><button onclick="save('lottery_notify_template')">保存</button><button class="ghost" onclick="reset('lottery_notify_template')">重置默认</button></div>
+      </div>
+    </section>
+
+    <section id="p-member" class="page" style="display:none">
+      <h2>💎 会员设置</h2>
+      <div class="sub">套餐与欢迎语，保存后机器人立即生效</div>
+
+      <div class="card">
+        <h3>会员套餐（购买页）</h3>
+        <div class="hint">格式：<code>天数:价格(USDT)</code>，逗号分隔。<br>例：<code>7:1,30:3,90:8,365:25</code></div>
+        <textarea id="plans"></textarea>
+        <div class="row"><button onclick="save('plans')">保存</button><button class="ghost" onclick="reset('plans')">重置默认</button></div>
+      </div>
+
+      <div class="card">
+        <h3>欢迎语（/start 显示）</h3>
+        <div class="hint">支持占位符 <code>{昵称}</code>（替换成用户名字，让每个用户看到自己的名字）。<br>
+        支持 HTML：<code>&lt;b&gt;加粗&lt;/b&gt;</code>。例：<code>你好，{昵称}！欢迎使用 &lt;b&gt;大晴分包机器人&lt;/b&gt;</code></div>
+        <textarea id="welcome_text" style="min-height:150px"></textarea>
+        <div class="row"><button onclick="save('welcome_text')">保存</button><button class="ghost" onclick="reset('welcome_text')">重置默认</button></div>
+      </div>
+    </section>
+
+    <section id="p-wash" class="page" style="display:none">
+      <h2>🧼 洗数据设置</h2>
+      <div class="sub">定价与配额，保存后机器人立即生效</div>
+
+      <div class="card">
+        <h3>阶梯定价（每行价格）</h3>
+        <div class="hint">格式：<code>行数:单价(元)</code>，逗号分隔。<br>例：<code>0:0.0013,100000:0.0010</code></div>
+        <textarea id="wash_prices"></textarea>
+        <div class="row"><button onclick="save('wash_prices')">保存</button><button class="ghost" onclick="reset('wash_prices')">重置默认</button></div>
+      </div>
+
+      <div class="card">
+        <h3>价格下限（元/行）</h3>
+        <label>所有档位单价不得低于此值</label>
+        <input id="wash_price_floor" type="text">
+        <div class="row"><button onclick="save('wash_price_floor')">保存</button><button class="ghost" onclick="reset('wash_price_floor')">重置默认</button></div>
+      </div>
+
+      <div class="card">
+        <h3>累计洗数据配额（行）</h3>
+        <label>达到后不再接受新任务；0 = 不限制</label>
+        <input id="wash_quota" type="text">
+        <div class="row"><button onclick="save('wash_quota')">保存</button><button class="ghost" onclick="reset('wash_quota')">重置默认</button></div>
+      </div>
+
+      <div class="card">
+        <h3>USDT 固定汇率（兜底）</h3>
+        <label>实时汇率获取失败时使用；留空 = 用内置默认 6.8</label>
+        <input id="usdt_rate" type="text" placeholder="6.8">
+        <div class="row"><button onclick="save('usdt_rate')">保存</button><button class="ghost" onclick="reset('usdt_rate')">清空</button></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="adjust-dialog">
+  <h3 id="adjust-title">调整用户</h3>
+  <label>会员天数调整（+ 加 / - 扣）</label>
+  <input id="adjust-days" type="number" step="1" value="0">
+  <label>洗数据余额调整（+ 加 / - 扣，元）</label>
+  <input id="adjust-balance" type="number" step="0.0001" value="0">
+  <div class="row">
+    <button onclick="doAdjust()">保存</button>
+    <button class="ghost" onclick="document.getElementById('adjust-dialog').close()">取消</button>
+  </div>
+</dialog>
+
+<div id="toast"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+let CONFIG={};
+
+async function api(path,opt={}){
+  const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opt});
+  if(r.status===401){showLogin();throw new Error('未登录');}
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.detail||'请求失败');
+  return d;
+}
+function toast(msg,ok=true){
+  const t=document.createElement('div');t.className=ok?'ok':'bad';t.textContent=msg;
+  $('toast').appendChild(t);setTimeout(()=>t.remove(),3200);
+}
+function showLogin(){$('login').style.display='grid';$('app').style.display='none';$('err').textContent='';}
+function showApp(){$('login').style.display='none';$('app').style.display='block';loadAll();}
+
+async function doLogin(){
+  $('err').textContent='';
+  try{await api('/api/login',{method:'POST',body:JSON.stringify({password:$('pwd').value})});showApp();}
+  catch(e){$('err').textContent='❌ '+e.message;}
+}
+async function doLogout(){try{await api('/api/logout',{method:'POST'})}catch(e){}showLogin();}
+
+function go(p){
+  document.querySelectorAll('aside a[data-p]').forEach(a=>a.classList.toggle('on',a.dataset.p===p));
+  document.querySelectorAll('.page').forEach(s=>s.style.display='none');
+  $('p-'+p).style.display='block';
+  if(p==='members')loadMembers();
+}
+
+const KEY_TO_EL={
+  lottery_prizes:'lottery_prizes',
+  lottery_premium_prizes:'lottery_premium_prizes',
+  lottery_redeem:'lottery_redeem',
+  lottery_notify_template:'lottery_notify_template',
+  plans:'plans',
+  welcome_text:'welcome_text',
+  wash_prices:'wash_prices',
+  wash_price_floor:'wash_price_floor',
+  wash_quota:'wash_quota',
+  usdt_rate:'usdt_rate',
+};
+
+async function loadAll(){
+  try{
+    CONFIG=await api('/api/config');
+    Object.entries(KEY_TO_EL).forEach(([k,el])=>{$(el).value=CONFIG[k]??'';});
+    const st=await api('/api/stats');
+    $('s-users').textContent=st.total_users;
+    $('s-members').textContent=st.members;
+    $('s-lottery').textContent=st.lottery_total;
+    $('s-lottery-today').textContent=st.lottery_today;
+    $('s-washed').textContent=st.washed_charged.toLocaleString();
+    const tags={ordinary:['普通抽奖','ordinary'],premium:['高级抽奖','premium'],redeem:['兑换','redeem']};
+    $('records').innerHTML=st.records.map(r=>{
+      const [t,cls]=tags[r.source]||[r.source,'ordinary'];
+      const who=(r.user||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+      const prize=(r.prize||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+      return `<tr><td>${r.time}</td><td>@${who}</td><td><span class="tag ${cls}">${t}</span></td><td>${prize}</td></tr>`;
+    }).join('')||'<tr><td colspan="4" style="color:var(--muted)">暂无记录</td></tr>';
+  }catch(e){toast('❌ '+e.message,false);}
+}
+
+async function save(key){
+  const el=$(KEY_TO_EL[key]);
+  try{
+    await api('/api/config/'+key,{method:'POST',body:JSON.stringify({value:el.value})});
+    toast('✅ 已保存：'+key);
+    if(key==='welcome_text'){} // 无需额外处理
+  }catch(e){toast('❌ '+e.message,false);}
+}
+async function reset(key){
+  try{await api('/api/reset/'+key,{method:'POST'});toast('✅ 已重置');loadAll();}
+  catch(e){toast('❌ '+e.message,false);}
+}
+
+/* ---- 成员管理 ---- */
+const esc=t=>String(t??'').replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+let adjustUserId=null;
+
+async function loadMembers(){
+  const q=$('member-q').value.trim();
+  try{
+    const d=await api('/api/members?q='+encodeURIComponent(q));
+    const rows=d.items.map(u=>{
+      const name=[u.username?'@'+u.username:'',u.first_name].filter(Boolean).join(' / ')||String(u.id);
+      return `<tr>
+        <td>${u.id}</td>
+        <td>${esc(name)}</td>
+        <td>${esc(u.member_text)}${u.expires?'<br><span style="color:var(--muted);font-size:12px">至 '+esc(u.expires)+'</span>':''}</td>
+        <td>¥${u.wash_balance.toFixed(4)}</td>
+        <td>${u.lottery_tickets}</td>
+        <td><button class="ghost" onclick='openAdjust(${u.id},"${esc(name)}")'>调整</button></td>
+      </tr>`;
+    }).join('');
+    $('member-rows').innerHTML=rows||'<tr><td colspan="6" style="color:var(--muted)">没有找到用户</td></tr>';
+  }catch(e){toast('❌ '+e.message,false);}
+}
+
+function openAdjust(id,name){
+  adjustUserId=id;
+  $('adjust-title').textContent='调整用户：'+name+'（'+id+'）';
+  $('adjust-days').value=0;
+  $('adjust-balance').value=0;
+  document.getElementById('adjust-dialog').showModal();
+}
+
+async function doAdjust(){
+  const days=parseInt($('adjust-days').value||'0');
+  const balance=parseFloat($('adjust-balance').value||'0');
+  if(!days&&!balance){toast('请填写调整值',false);return;}
+  try{
+    const d=await api('/api/members/adjust',{method:'POST',body:JSON.stringify({user_id:adjustUserId,days_delta:days,balance_delta:balance})});
+    toast('✅ '+(d.result.changed||[]).join('，'));
+    document.getElementById('adjust-dialog').close();
+    loadMembers();
+  }catch(e){toast('❌ '+e.message,false);}
+}
+</script>
+</body>
+</html>
