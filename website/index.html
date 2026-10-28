@@ -285,6 +285,8 @@ footer a{color:var(--cyan)}
 
 /* ===== 手机 ===== */
 @media(max-width:640px){
+  /* 手机端导航不再固定，随页面滚走，避免一直悬浮挡内容 */
+  nav{position:absolute}
   .wrap{padding:0 18px}
   nav .wrap{height:62px}
   .logo{font-size:16px;gap:9px}
@@ -461,7 +463,7 @@ footer a{color:var(--cyan)}
         <div class="sitem reveal" style="--d:.24s"><span class="ic">📊</span><div><b>数据与抽奖记录</b><p>用户数、会员数、抽奖记录一目了然。</p></div></div>
       </div>
       <div class="dash-mock reveal">
-        <div class="dash-top"><i></i><i></i><i></i><span>dqfb.net/admin — 管理后台</span></div>
+        <div class="dash-top"><i></i><i></i><i></i><span>运营后台 · 数据概览</span></div>
         <div class="dash-body">
           <div class="dash-side">
             <span class="on">📊 概览</span>
