@@ -324,7 +324,7 @@ DEFAULT_SITE_CONFIG = {
     "brand": "大晴分包",
     "hero_highlight": "大晴分包机器人",
     "hero_subtitle": "文件切割、号码去重、空号检测、催收分包、洗数据…… 上传即处理，结果秒回。内置抽奖系统与会员体系，运营一步到位。",
-    "accent": "#3b82f6",
+    "accent": "#7f9db9",
     "contact1": "@mmmmg",
     "contact2": "@kefu686",
     "bot_link": "https://t.me/sechou_bot",
