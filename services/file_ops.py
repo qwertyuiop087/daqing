@@ -627,7 +627,7 @@ def xlsx_to_lines(data: bytes) -> list[str]:
     - 每行 = 工作表的一行，各列用制表符连接；
     - 空单元格保留为空字段，整行全空跳过；
     - 单元格内的换行/制表符替换为空格，保证一行一条记录、不乱；
-    - 只转第一个工作表。
+    - 遍历全部工作表（第一个 sheet 之后的数据也会被读取）。
     """
     from io import BytesIO
 
@@ -636,20 +636,23 @@ def xlsx_to_lines(data: bytes) -> list[str]:
 
     lines: list[str] = []
 
+    def _append_row(cells) -> None:
+        if not any(cells):
+            return
+        line = "\t".join(cells)
+        line = line.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
+        lines.append(line)
+
     if is_xls:
         # 旧版 xls 格式，用 xlrd
         import xlrd
         wb = xlrd.open_workbook(file_contents=data)
         try:
-            ws = wb.sheet_by_index(0)
-            for row_idx in range(ws.nrows):
-                row = ws.row_values(row_idx)
-                cells = [_xlsx_cell_to_text(v) for v in row]
-                if not any(cells):
-                    continue
-                line = "\t".join(cells)
-                line = line.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
-                lines.append(line)
+            for sheet_idx in range(wb.nsheets):
+                ws = wb.sheet_by_index(sheet_idx)
+                for row_idx in range(ws.nrows):
+                    row = ws.row_values(row_idx)
+                    _append_row([_xlsx_cell_to_text(v) for v in row])
         finally:
             wb.release_resources()
     else:
@@ -657,14 +660,9 @@ def xlsx_to_lines(data: bytes) -> list[str]:
         from openpyxl import load_workbook
         wb = load_workbook(BytesIO(data), data_only=True)
         try:
-            ws = wb.worksheets[0]
-            for row in ws.iter_rows(values_only=True):
-                cells = [_xlsx_cell_to_text(v) for v in row]
-                if not any(cells):
-                    continue
-                line = "\t".join(cells)
-                line = line.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
-                lines.append(line)
+            for ws in wb.worksheets:
+                for row in ws.iter_rows(values_only=True):
+                    _append_row([_xlsx_cell_to_text(v) for v in row])
         finally:
             wb.close()
 

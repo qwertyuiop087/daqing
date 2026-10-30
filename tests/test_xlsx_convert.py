@@ -72,6 +72,23 @@ class TestXlsxConvert(unittest.TestCase):
             ["廖林培\t450421199010193538\t1400\t6217003400002221946\t18978486083"],
         )
 
+    def test_all_sheets_included(self):
+        # 数据在第二个工作表，也应被读取到
+        from openpyxl import Workbook
+
+        wb = Workbook()
+        ws1 = wb.active
+        ws1.append(["这是第一页的表头"])
+        ws2 = wb.create_sheet("第二页")
+        ws2.append(["张三", "13800138000"])
+        ws2.append(["李四", "13900139000"])
+        buf = BytesIO()
+        wb.save(buf)
+        lines = xlsx_to_lines(buf.getvalue())
+        self.assertIn("张三\t13800138000", lines)
+        self.assertIn("李四\t13900139000", lines)
+        self.assertIn("这是第一页的表头", lines)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
