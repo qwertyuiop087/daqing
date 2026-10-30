@@ -1,8 +1,10 @@
 """共享辅助函数：临时目录、清理、会员门槛、批量发文件。"""
+import asyncio
 import os
 import shutil
 import tempfile
 
+from aiogram import exceptions
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, FSInputFile, InputMediaDocument, Message
 
@@ -58,27 +60,65 @@ async def ensure_member(event) -> User | None:
     return None
 
 
+async def _send_group_retry(message: Message, group: list) -> None:
+    """发送媒体组，遇到限流自动等待重试。"""
+    for _ in range(4):
+        try:
+            await message.answer_media_group(group)
+            return
+        except exceptions.TelegramRetryAfter as e:
+            await asyncio.sleep(e.retry_after + 1)
+    # 多次重试仍失败，向上抛出让调用方退化为逐个发送
+    raise RuntimeError("media group send failed")
+
+
+async def _send_document_retry(message: Message, path: str, name: str) -> None:
+    """发送单个文件，遇到限流自动等待重试。"""
+    for _ in range(4):
+        try:
+            await message.answer_document(FSInputFile(path, filename=name))
+            return
+        except exceptions.TelegramRetryAfter as e:
+            await asyncio.sleep(e.retry_after + 1)
+    raise RuntimeError("document send failed")
+
+
 async def send_files_in_batches(
     message: Message, files: list[tuple[str, str]], batch: int | None = None
 ) -> None:
     """批量发送文件：files 为 [(本地路径, 展示文件名)]。
 
     每 batch 个（默认 10，Telegram 媒体组上限）一起发送，
-    不足 batch 个时全部一起发送。
+    批次之间停顿规避限流；遇到「Too Many Requests」自动等待重试。
+    媒体组整体失败时退化为逐个发送，避免整批丢失。
     """
     if not files:
         return
     batch = batch or settings.MAX_BATCH_FILES
     if len(files) == 1:
         path, name = files[0]
-        await message.answer_document(FSInputFile(path, filename=name))
+        try:
+            await _send_document_retry(message, path, name)
+        except Exception:
+            pass
         return
     for i in range(0, len(files), batch):
         group = [
             InputMediaDocument(media=FSInputFile(path, filename=name))
             for path, name in files[i:i + batch]
         ]
-        await message.answer_media_group(group)
+        try:
+            await _send_group_retry(message, group)
+        except Exception:
+            # 媒体组整体失败（如个别文件异常）：退化为逐个发送
+            for path, name in files[i:i + batch]:
+                try:
+                    await _send_document_retry(message, path, name)
+                except Exception:
+                    pass
+        # 批次之间停顿，规避 Telegram 限流（关键修复：超过 10 份时第二组不会再被限流打断）
+        if i + batch < len(files):
+            await asyncio.sleep(2.5)
 
 
 async def send_menu(message: Message, text: str) -> None:
