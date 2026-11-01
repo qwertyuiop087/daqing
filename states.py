@@ -38,6 +38,11 @@ class SortStates(StatesGroup):
     waiting_order = State()     # 等待输入期望字段顺序
 
 
+class PlateStates(StatesGroup):
+    waiting_file = State()      # 等待上传文件（不限格式）
+    waiting_order = State()     # 等待选择输出顺序（手机号/车牌）
+
+
 class XlsxStates(StatesGroup):
     waiting_files = State()     # 等待上传多个 XLSX
 

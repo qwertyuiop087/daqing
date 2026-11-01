@@ -1395,6 +1395,7 @@ BTN_ICONS_LIST = [
     ("空号检测", "menu:phonecheck"),
     ("合并文本", "menu:merge"),
     ("催收分包", "menu:sort"),
+    ("车牌分包", "menu:plate"),
     ("Excel转txt", "menu:xlsx"),
     ("洗数据", "menu:wash"),
     ("抽奖中心", "menu:lottery"),

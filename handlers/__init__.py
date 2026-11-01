@@ -11,6 +11,7 @@ from handlers import (
     membership,
     merge,
     phone_check,
+    plate,
     rename,
     sort,
     split,
@@ -40,6 +41,7 @@ def register_all_routers(dp: Dispatcher) -> None:
     dp.include_router(classify.router)
     dp.include_router(merge.router)
     dp.include_router(sort.router)
+    dp.include_router(plate.router)
     dp.include_router(xlsx_convert.router)
     # wash 路由放最后，避免通用文件 handler 拦截其他功能的文件
     dp.include_router(wash.router)

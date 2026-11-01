@@ -40,7 +40,7 @@ def load_btn_icons() -> None:
             for key in [
                 "menu:split", "menu:zip", "menu:rename", "menu:vcf",
                 "menu:dedup", "menu:extract", "menu:addcode", "menu:classify", "menu:phonecheck",
-                "menu:merge", "menu:sort", "menu:xlsx", "menu:wash", "menu:lottery",
+                "menu:merge", "menu:sort", "menu:plate", "menu:xlsx", "menu:wash", "menu:lottery",
                 "menu:membership", "buy:plans", "menu:admin",
                 "admin:bind_drop_chat",
             ]:
@@ -104,6 +104,7 @@ def main_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
         ("空号检测", "menu:phonecheck"),
         ("合并文本", "menu:merge"),
         ("催收分包", "menu:sort"),
+        ("车牌分包", "menu:plate"),
         ("Excel转txt", "menu:xlsx"),
         ("洗数据", "menu:wash"),
         ("抽奖中心", "menu:lottery"),

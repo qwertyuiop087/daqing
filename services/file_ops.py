@@ -162,6 +162,22 @@ def parse_numbers(text: str) -> list[str]:
     return [ln.strip() for ln in text.splitlines() if ln.strip()]
 
 
+_PLATE_RE = re.compile(
+    r"[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼]"
+    r"[A-Z][0-9A-Z]{5,6}(?![0-9A-Z])"
+)
+
+
+def extract_plates(text: str) -> list[str]:
+    """从文本中提取全部车牌号（保留出现顺序，含重复）。
+
+    匹配中国大陆民用/新能源车牌：
+    省份简称 + 发牌机关字母 + 5~6 位数字字母（如 京A12345、京AD12345）。
+    末尾用负向断言避免把相邻手机号/数字串吞进来。
+    """
+    return [m.group(0) for m in _PLATE_RE.finditer(text)]
+
+
 def normalize_phone_digits(line: str) -> str:
     """提取一行中的纯数字，用于去重判断。
 
