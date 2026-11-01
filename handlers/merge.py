@@ -47,8 +47,9 @@ async def merge_got_file(message: Message, state: FSMContext, bot: Bot):
         await message.answer(f"⚠️ 最多上传 {settings.MAX_UPLOAD_FILES} 个文件，请先点击「✅ 完成上传」。")
         return
 
-    name = sanitize_filename(doc.file_name or f"file_{len(files) + 1}.txt")
-    path = os.path.join(data["workdir"], name)
+    name = sanitize_filename(doc.file_name or "file.txt")
+    # 用唯一路径存储（加序号前缀），避免同名文件互相覆盖导致内容重复/丢失
+    path = os.path.join(data["workdir"], f"merge_{len(files) + 1}_{name}")
     file = await bot.get_file(doc.file_id)
     await bot.download_file(file.file_path, destination=path)
 
