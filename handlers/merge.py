@@ -70,8 +70,9 @@ async def merge_got_file(message: Message, state: FSMContext, bot: Bot):
         f"✅ 已接收第 <b>{len(files)}</b> 个文件：<code>{name}</code>\n"
         f"　本文件：<b>{lines}</b> 行\n"
         f"　累计：{len(files)} 个文件 / <b>{total_lines}</b> 行\n\n"
-        f"可继续发送，或点击「✅ 完成上传」，\n"
-        f"也可以直接发文字「完成」开始合并。"
+        f"可继续发送，发完点下方「✅ 完成上传」，\n"
+        f"或直接发文字「完成」开始合并。",
+        reply_markup=finish_upload_kb("merge"),
     )
 
 
