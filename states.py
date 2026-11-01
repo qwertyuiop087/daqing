@@ -41,6 +41,7 @@ class SortStates(StatesGroup):
 class PlateStates(StatesGroup):
     waiting_file = State()      # 等待上传文件（不限格式）
     waiting_order = State()     # 等待选择输出顺序（手机号/车牌）
+    waiting_split = State()     # 等待选择/输入每份行数
 
 
 class XlsxStates(StatesGroup):

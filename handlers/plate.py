@@ -1,4 +1,4 @@
-"""车牌分包：上传文件（不限格式）→ 自动识别车牌与手机号 → 按用户指定顺序输出 TXT。"""
+"""车牌分包：上传文件（不限格式）→ 自动识别车牌与手机号 → 按用户指定顺序与行数输出 TXT。"""
 import os
 
 from aiogram import Bot, F, Router
@@ -17,7 +17,7 @@ from services.file_ops import (
 )
 from states import PlateStates
 from utils.drops import maybe_drop
-from utils.helpers import cleanup_state, ensure_member, get_workdir
+from utils.helpers import cleanup_state, ensure_member, get_workdir, send_files_in_batches
 from utils.keyboards import cancel_kb, menu_kb
 from utils.phone_db import extract_phones
 
@@ -47,6 +47,49 @@ def _order_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def _split_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="📄 一个文件（不分割）", callback_data="plate:split:all")
+    b.button(text="500 行", callback_data="plate:split:500")
+    b.button(text="1000 行", callback_data="plate:split:1000")
+    b.button(text="2000 行", callback_data="plate:split:2000")
+    b.button(text="5000 行", callback_data="plate:split:5000")
+    b.button(text="✍️ 自定义行数", callback_data="plate:split:custom")
+    b.button(text="❌ 取消", callback_data="cancel")
+    b.adjust(2)
+    return b.as_markup()
+
+
+def _generate_outputs(records, phone_first, per_file, src_name, workdir):
+    """按顺序与行数生成输出文件，返回 [(路径, 文件名)]。"""
+    out_lines = []
+    for r in records:
+        if phone_first:
+            out_lines.append(f"{r['phone']} {r['plate']}")
+        else:
+            out_lines.append(f"{r['plate']} {r['phone']}")
+
+    stem = os.path.splitext(src_name)[0]
+    order_tag = "手机号_车牌" if phone_first else "车牌_手机号"
+
+    outputs: list[tuple[str, str]] = []
+    if per_file <= 0 or per_file >= len(out_lines):
+        out_name = f"{stem}_{order_tag}.txt"
+        out_path = os.path.join(workdir, out_name)
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(out_lines))
+        outputs.append((out_path, out_name))
+    else:
+        for idx in range(0, len(out_lines), per_file):
+            chunk = out_lines[idx:idx + per_file]
+            out_name = f"{stem}_{order_tag}_{(idx // per_file) + 1:02d}.txt"
+            out_path = os.path.join(workdir, out_name)
+            with open(out_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(chunk))
+            outputs.append((out_path, out_name))
+    return outputs
+
+
 @router.callback_query(F.data == "menu:plate")
 async def menu_plate(cq: CallbackQuery, state: FSMContext):
     if not await ensure_member(cq):
@@ -57,7 +100,7 @@ async def menu_plate(cq: CallbackQuery, state: FSMContext):
     await cq.message.edit_text(
         "🚗 <b>车牌分包</b>\n\n"
         "上传文件，我会自动识别里面的<b>车牌号</b>和<b>手机号</b>，"
-        "再按你指定的顺序整理成 TXT 发回。\n\n"
+        "再按你指定的顺序与行数整理成 TXT 发回。\n\n"
         "支持格式：<b>txt / csv / xlsx / xls / zip</b>\n"
         f"单个文件最大 {settings.MAX_FILE_SIZE // 1024 // 1024}MB。\n\n"
         "请发送文件：",
@@ -128,26 +171,70 @@ async def plate_order_pick(cq: CallbackQuery, state: FSMContext):
         await cleanup_state(state)
         return
 
-    out_lines = []
-    for r in records:
-        if phone_first:
-            out_lines.append(f"{r['phone']} {r['plate']}")
-        else:
-            out_lines.append(f"{r['plate']} {r['phone']}")
-
-    stem = os.path.splitext(data.get("src_name", "output"))[0]
-    order_tag = "手机号_车牌" if phone_first else "车牌_手机号"
-    out_name = f"{stem}_{order_tag}.txt"
-    out_path = os.path.join(data["workdir"], out_name)
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(out_lines))
-
+    await state.update_data(phone_first=phone_first)
+    await state.set_state(PlateStates.waiting_split)
+    order_str = "手机号 → 车牌" if phone_first else "车牌 → 手机号"
     await cq.message.edit_text(
-        f"✅ 完成！共 <b>{len(records)}</b> 条，顺序："
-        f"<b>{'手机号 → 车牌' if phone_first else '车牌 → 手机号'}</b>（空格分隔）",
-        reply_markup=None,
+        f"✅ 顺序已选：<b>{order_str}</b>\n\n"
+        "要不要按行数拆成多个文件？\n"
+        "· 选「一个文件」则全部输出到一个 TXT\n"
+        "· 选行数则每份 N 行，拆成多个 TXT 发送",
+        reply_markup=_split_kb(),
     )
-    await cq.message.answer_document(FSInputFile(out_path, filename=out_name))
-    await maybe_drop(cq.message, "车牌分包")
-    await cq.message.answer("✅ 全部完成！", reply_markup=menu_kb(cq.from_user.id))
+
+
+@router.callback_query(PlateStates.waiting_split, F.data == "plate:split:custom")
+async def plate_split_custom(cq: CallbackQuery, state: FSMContext):
+    await cq.answer()
+    await cq.message.edit_text(
+        f"请输入每份行数（正整数，不超过 {settings.MAX_SPLIT_LINES}）：",
+        reply_markup=cancel_kb(),
+    )
+
+
+@router.message(PlateStates.waiting_split, F.text)
+async def plate_split_custom_input(message: Message, state: FSMContext):
+    import re
+    m = re.fullmatch(r"\s*(\d+)\s*", message.text or "")
+    if not m:
+        await message.answer("请输入正整数，例如 <code>1000</code>。")
+        return
+    n = int(m.group(1))
+    if not (1 <= n <= settings.MAX_SPLIT_LINES):
+        await message.answer(f"每份行数需在 1 ~ {settings.MAX_SPLIT_LINES} 之间。")
+        return
+    await _do_finish(message, state, n)
+
+
+@router.callback_query(PlateStates.waiting_split, F.data.startswith("plate:split:"))
+async def plate_split_pick(cq: CallbackQuery, state: FSMContext):
+    val = cq.data.split(":")[2]
+    await cq.answer()
+    per_file = 0 if val == "all" else int(val)
+    await _do_finish(cq.message, state, per_file)
+
+
+async def _do_finish(event, state: FSMContext, per_file: int):
+    data = await state.get_data()
+    records = data.get("records", [])
+    phone_first = data.get("phone_first", True)
+    src_name = data.get("src_name", "output")
+    workdir = data["workdir"]
+
+    if not records:
+        await event.answer("⚠️ 会话异常，请重新开始。")
+        await cleanup_state(state)
+        return
+
+    outputs = _generate_outputs(records, phone_first, per_file, src_name, workdir)
+    order_str = "手机号 → 车牌" if phone_first else "车牌 → 手机号"
+    split_note = "一个文件" if len(outputs) == 1 else f"共 {len(outputs)} 个文件（每份 {per_file} 行）"
+
+    await event.answer(
+        f"✅ 完成！共 <b>{len(records)}</b> 条，顺序：<b>{order_str}</b>\n"
+        f"输出：<b>{split_note}</b>（空格分隔），开始发送："
+    )
+    await send_files_in_batches(event, outputs)
+    await maybe_drop(event, "车牌分包")
+    await event.answer("✅ 全部完成！", reply_markup=menu_kb(event.from_user.id))
     await cleanup_state(state)
