@@ -112,7 +112,7 @@ async def plate_got_file(message: Message, state: FSMContext, bot: Bot):
         f"· 手机号+车牌配对：<b>{both}</b> 条\n"
         f"· 仅有手机号：<b>{only_phone}</b> 条\n"
         f"· 仅有车牌：<b>{only_plate}</b> 条\n\n"
-        "请选择输出顺序（每行用制表符分隔）：",
+        "请选择输出顺序（每行用空格分隔）：",
         reply_markup=_order_kb(),
     )
 
@@ -131,9 +131,9 @@ async def plate_order_pick(cq: CallbackQuery, state: FSMContext):
     out_lines = []
     for r in records:
         if phone_first:
-            out_lines.append(f"{r['phone']}\t{r['plate']}")
+            out_lines.append(f"{r['phone']} {r['plate']}")
         else:
-            out_lines.append(f"{r['plate']}\t{r['phone']}")
+            out_lines.append(f"{r['plate']} {r['phone']}")
 
     stem = os.path.splitext(data.get("src_name", "output"))[0]
     order_tag = "手机号_车牌" if phone_first else "车牌_手机号"
@@ -144,7 +144,7 @@ async def plate_order_pick(cq: CallbackQuery, state: FSMContext):
 
     await cq.message.edit_text(
         f"✅ 完成！共 <b>{len(records)}</b> 条，顺序："
-        f"<b>{'手机号 → 车牌' if phone_first else '车牌 → 手机号'}</b>（制表符分隔）",
+        f"<b>{'手机号 → 车牌' if phone_first else '车牌 → 手机号'}</b>（空格分隔）",
         reply_markup=None,
     )
     await cq.message.answer_document(FSInputFile(out_path, filename=out_name))
