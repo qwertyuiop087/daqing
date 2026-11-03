@@ -29,10 +29,13 @@ class TestWebapp(unittest.TestCase):
                 resp = await client.get("/api/config")
                 self.assertEqual(resp.status, 401)
                 # 错误密码 → 401
-                resp = await client.post("/api/login", json={"password": "wrong"})
+                resp = await client.post("/api/login", json={"username": "admin", "password": "wrong"})
+                self.assertEqual(resp.status, 401)
+                # 错误用户名 → 401
+                resp = await client.post("/api/login", json={"username": "nobody", "password": "test123"})
                 self.assertEqual(resp.status, 401)
                 # 正确登录
-                resp = await client.post("/api/login", json={"password": "test123"})
+                resp = await client.post("/api/login", json={"username": "admin", "password": "test123"})
                 self.assertEqual(resp.status, 200)
 
                 # 读配置
