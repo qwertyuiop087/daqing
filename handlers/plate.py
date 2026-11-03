@@ -87,7 +87,11 @@ def _split_kb() -> InlineKeyboardMarkup:
 
 def _generate_outputs(records, order, per_file, src_name, workdir):
     """按顺序与行数生成输出文件，返回 [(路径, 文件名)]。"""
-    out_lines = [" ".join(r.get(k, "") for k in order) for r in records]
+    # 空字段直接过滤，保证字段之间只有一个空格（无连续空格/首尾空格）
+    out_lines = [
+        " ".join(p for p in (r.get(k, "") for k in order) if p)
+        for r in records
+    ]
 
     stem = os.path.splitext(src_name)[0]
     order_tag = "_".join(_FIELD_LABELS[k] for k in order)
