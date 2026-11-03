@@ -317,6 +317,7 @@ def adjust_member(session, user_id: int, days_delta: int = 0, balance_delta: flo
 SITE_FIELDS = {
     "site_title", "brand", "hero_highlight", "hero_subtitle",
     "accent", "contact1", "contact2", "contact1_label", "contact2_label", "bot_link",
+    "mock_name", "mock_status", "mock_chip1", "mock_chip2",
 }
 
 DEFAULT_SITE_CONFIG = {
@@ -330,6 +331,10 @@ DEFAULT_SITE_CONFIG = {
     "contact1_label": "大晴",
     "contact2_label": "客服",
     "bot_link": "https://t.me/sechou_bot",
+    "mock_name": "大晴分包机器人",
+    "mock_status": "● 在线 · 秒级响应",
+    "mock_chip1": "转盘抽奖",
+    "mock_chip2": "秒级处理",
 }
 
 
