@@ -267,6 +267,8 @@ dialog .row{margin-top:18px}
         <input id="bot_name">
         <label>简介（0~512 字，用户打开机器人时看到）</label>
         <textarea id="bot_description"></textarea>
+        <label>简短说明（0~120 字，资料页顶部那一行）</label>
+        <textarea id="bot_short_description"></textarea>
         <div class="row"><button onclick="saveBotProfile()">💾 保存机器人资料</button></div>
       </div>
     </section>
@@ -433,13 +435,14 @@ async function loadBotProfile(){
     const d=await api('/api/bot/profile');
     if($('bot_name')) $('bot_name').value=d.name||'';
     if($('bot_description')) $('bot_description').value=d.description||'';
+    if($('bot_short_description')) $('bot_short_description').value=d.short_description||'';
   }catch(e){toast('❌ '+e.message,false);}
 }
 async function saveBotProfile(){
-  const body={ name:$('bot_name').value.trim(), description:$('bot_description').value.trim() };
+  const body={ name:$('bot_name').value.trim(), description:$('bot_description').value.trim(), short_description:$('bot_short_description').value.trim() };
   try{
     const d=await api('/api/bot/profile',{method:'POST',body:JSON.stringify(body)});
-    toast('✅ 已更新：'+(d.updated||[]).join('、')||'无变化');
+    toast('✅ 已更新：'+((d.updated||[]).join('、')||'无变化'));
   }catch(e){toast('❌ '+e.message,false);}
 }
 </script>
