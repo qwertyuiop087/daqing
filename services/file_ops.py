@@ -162,9 +162,10 @@ def parse_numbers(text: str) -> list[str]:
     return [ln.strip() for ln in text.splitlines() if ln.strip()]
 
 
+_PROVINCES = "京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼"
+
 _PLATE_RE = re.compile(
-    r"[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼]"
-    r"[A-Z][0-9A-Z]{5,6}(?![0-9A-Z])"
+    rf"[{_PROVINCES}][A-Z][0-9A-Z]{{5,6}}(?![0-9A-Z])"
 )
 
 
@@ -373,6 +374,25 @@ def detect_field_type(line: str) -> str:
         return "其他"
 
     return "其他"
+
+
+def extract_name(text: str) -> str:
+    """从一行文本中提取第一个中文姓名（2~4 字，或含 · 的少数民族名）。
+
+    优先按常见分隔符切 token 后用字段类型识别；再做粘连兜底：
+    名字紧贴在车牌前（张三京A12345）或车牌后（京A12345张三）。
+    """
+    for tok in re.split(r"[\s\t,，;；|]+", text):
+        tok = tok.strip()
+        if tok and detect_field_type(tok) == "名字":
+            return tok
+    m = re.search(rf"([\u4e00-\u9fff·]{{2,4}})(?=[{_PROVINCES}][A-Z])", text)
+    if m:
+        return m.group(1)
+    m = re.search(rf"[{_PROVINCES}][A-Z][0-9A-Z]{{5,6}}([\u4e00-\u9fff·]{{2,4}})", text)
+    if m:
+        return m.group(1)
+    return ""
 
 
 # ---------------- 定制分包：行内多字段识别 + 调换顺序 ----------------

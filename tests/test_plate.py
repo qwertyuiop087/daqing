@@ -1,11 +1,11 @@
-"""车牌识别测试：车牌正则 + 车牌/手机号配对。"""
+"""车牌识别测试：车牌正则 + 车牌/手机号/名字识别。"""
 import os
 import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from services.file_ops import extract_plates  # noqa: E402
+from services.file_ops import extract_name, extract_plates  # noqa: E402
 from utils.phone_db import extract_phones  # noqa: E402
 
 
@@ -46,6 +46,24 @@ class TestPlate(unittest.TestCase):
         line = "京AD12345 13800138000"
         self.assertEqual(extract_phones(line), ["13800138000"])
         self.assertEqual(extract_plates(line), ["京AD12345"])
+
+    def test_extract_name_middle(self):
+        self.assertEqual(extract_name("张三 13800138000 京A12345"), "张三")
+
+    def test_extract_name_after(self):
+        self.assertEqual(extract_name("13800138000 京A12345 李四"), "李四")
+
+    def test_extract_name_glued_before_plate(self):
+        self.assertEqual(extract_name("张三京A12345"), "张三")
+
+    def test_extract_name_glued_after_plate(self):
+        self.assertEqual(extract_name("京A12345张三"), "张三")
+
+    def test_extract_name_minority(self):
+        self.assertEqual(extract_name("古丽·阿依 13800138000"), "古丽·阿依")
+
+    def test_extract_name_none(self):
+        self.assertEqual(extract_name("13800138000 京A12345"), "")
 
 
 if __name__ == "__main__":
