@@ -366,7 +366,7 @@ footer a{color:var(--cyan)}
       <div class="mock-card">
         <div class="head">
           <span class="av">🃏</span>
-          <div><b>大晴分包机器人</b><span>● 在线 · 秒级响应</span></div>
+          <div><b id="mockName">大晴分包机器人</b><span id="mockStatus">● 在线 · 秒级响应</span></div>
         </div>
         <div class="msg me"><div class="bub">文件切割</div></div>
         <div class="msg bot"><div class="bub">✅ 已切割 12 份，开始发送…</div></div>
@@ -374,8 +374,8 @@ footer a{color:var(--cyan)}
         <div class="win-chip">🎰 恭喜抽中 <b>3 天会员</b>，已自动到账 ✨</div>
         <div class="msg bot"><div class="bub">💎 会员有效期已累加，感谢使用～</div></div>
       </div>
-      <div class="mini m1"><span class="ic">🎡</span> 转盘抽奖</div>
-      <div class="mini m2"><span class="ic">⚡</span> 秒级处理</div>
+      <div class="mini m1"><span class="ic">🎡</span> <span id="mockChip1">转盘抽奖</span></div>
+      <div class="mini m2"><span class="ic">⚡</span> <span id="mockChip2">秒级处理</span></div>
     </div>
   </div>
 </header>
@@ -696,6 +696,10 @@ async function loadSiteConfig(){
     if(s.contact2) document.querySelectorAll('.contact2').forEach(a=>{a.textContent=s.contact2; a.href='https://t.me/'+String(s.contact2).replace(/^@/,'');});
     if(s.contact1_label) document.querySelectorAll('.c1label').forEach(e=>e.textContent=s.contact1_label);
     if(s.contact2_label) document.querySelectorAll('.c2label').forEach(e=>e.textContent=s.contact2_label);
+    if(s.mock_name){const e=document.getElementById('mockName'); if(e)e.textContent=s.mock_name;}
+    if(s.mock_status){const e=document.getElementById('mockStatus'); if(e)e.textContent=s.mock_status;}
+    if(s.mock_chip1){const e=document.getElementById('mockChip1'); if(e)e.textContent=s.mock_chip1;}
+    if(s.mock_chip2){const e=document.getElementById('mockChip2'); if(e)e.textContent=s.mock_chip2;}
     if(s.bot_link) document.querySelectorAll('.bot-link').forEach(a=>a.href=s.bot_link);
   }catch(e){}
 }
