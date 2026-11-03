@@ -623,7 +623,8 @@ document.getElementById('spinBtn').addEventListener('click',()=>{
 });
 
 /* 中奖通知流：优先读真实数据 */
-const demoFeed=[['🎉','@chen**','抽中 3 天会员'],['🎁','@liu**','抽中 高级抽奖券 ×1'],['👑','@wang**','高级抽奖开出 30 天会员'],['💰','@zhao**','兑换 ¥20 洗数据余额'],['🎉','@sun**','抽中 7 天会员'],['🎁','@zhou**','抽中 高级抽奖券 ×1']];
+let SITE_CFG={};
+const demoFeed=[['🎉','@chen**','3 天会员'],['🎁','@liu**','高级抽奖券 ×1'],['👑','@wang**','30 天会员'],['💰','@zhao**','¥20 洗数据余额'],['🎉','@sun**','7 天会员'],['🎁','@zhou**','高级抽奖券 ×1']];
 let feed=demoFeed;
 async function loadRealFeed(){
   try{
@@ -632,7 +633,7 @@ async function loadRealFeed(){
     const d=await r.json();
     if(d&&Array.isArray(d.items)&&d.items.length){
       const icon=t=>t.indexOf('余额')>-1?'💰':t.indexOf('券')>-1?'🎁':'🎉';
-      feed=d.items.map(it=>[icon(it.prize),'@'+it.user,'抽中 '+it.prize]);
+      feed=d.items.map(it=>[icon(it.prize),'@'+it.user,it.prize]);
     }
   }catch(e){}
 }
@@ -641,10 +642,12 @@ const box=document.getElementById('toasts');
 let fi=0;
 function pushToast(){
   if(fi>=feed.length)fi=0;
-  const [ico,user,msg]=feed[fi++];
+  const [ico,user,prize]=feed[fi++];
+  const prefix=SITE_CFG.toast_prefix||'抽中';
+  const footer=SITE_CFG.toast_footer||'刚刚 · 大晴分包机器人';
   const t=document.createElement('div');
   t.className='toast';
-  t.innerHTML=`<span class="ico">${ico}</span><div><b>${user} ${msg}</b><span>刚刚 · 大晴分包机器人</span></div>`;
+  t.innerHTML=`<span class="ico">${ico}</span><div><b>${user} ${prefix} ${prize}</b><span>${footer}</span></div>`;
   box.appendChild(t);
   while(box.children.length>3)box.firstChild.remove();
   setTimeout(()=>t.classList.add('out'),5200);
@@ -687,6 +690,7 @@ async function loadSiteConfig(){
     if(!r.ok)return;
     const d=await r.json();
     const s=(d&&d.site)||{};
+    SITE_CFG=s;
     if(s.site_title) document.title=s.site_title;
     if(s.brand){const e=document.getElementById('brandText'); if(e)e.textContent=s.brand;}
     if(s.hero_highlight){const e=document.getElementById('heroHighlight'); if(e)e.textContent=s.hero_highlight;}
