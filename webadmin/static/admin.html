@@ -244,9 +244,13 @@ dialog .row{margin-top:18px}
         <textarea id="hero_subtitle"></textarea>
         <label>主色（十六进制色值，如 #3b82f6）</label>
         <input id="accent" type="text">
-        <label>联系方式一（大晴，如 @mmmmg）</label>
+        <label>联系方式一 · 显示名称（如 大晴）</label>
+        <input id="contact1_label">
+        <label>联系方式一 · @用户名（如 @mmmmg）</label>
         <input id="contact1">
-        <label>联系方式二（客服，如 @kefu686）</label>
+        <label>联系方式二 · 显示名称（如 客服）</label>
+        <input id="contact2_label">
+        <label>联系方式二 · @用户名（如 @kefu686）</label>
         <input id="contact2">
         <label>机器人链接</label>
         <input id="bot_link">
@@ -393,7 +397,7 @@ async function doAdjust(){
 }
 
 /* ---- 网站设置 ---- */
-const SITE_FIELDS=['site_title','brand','hero_highlight','hero_subtitle','accent','contact1','contact2','bot_link'];
+const SITE_FIELDS=['site_title','brand','hero_highlight','hero_subtitle','accent','contact1','contact2','contact1_label','contact2_label','bot_link'];
 async function loadSite(){
   try{
     const d=await api('/api/site');
