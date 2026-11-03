@@ -316,7 +316,7 @@ def adjust_member(session, user_id: int, days_delta: int = 0, balance_delta: flo
 
 SITE_FIELDS = {
     "site_title", "brand", "hero_highlight", "hero_subtitle",
-    "accent", "contact1", "contact2", "bot_link",
+    "accent", "contact1", "contact2", "contact1_label", "contact2_label", "bot_link",
 }
 
 DEFAULT_SITE_CONFIG = {
@@ -327,6 +327,8 @@ DEFAULT_SITE_CONFIG = {
     "accent": "#3b82f6",
     "contact1": "@mmmmg",
     "contact2": "@kefu686",
+    "contact1_label": "大晴",
+    "contact2_label": "客服",
     "bot_link": "https://t.me/sechou_bot",
 }
 
