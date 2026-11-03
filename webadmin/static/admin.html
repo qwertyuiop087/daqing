@@ -264,6 +264,10 @@ dialog .row{margin-top:18px}
         <input id="mock_chip1">
         <label>首屏演示卡 · 浮动标签二（如 秒级处理）</label>
         <input id="mock_chip2">
+        <label>中奖通知 · 动词（如 抽中）</label>
+        <input id="toast_prefix">
+        <label>中奖通知 · 底部文字（如 刚刚 · 大晴分包机器人）</label>
+        <input id="toast_footer">
         <div class="row"><button onclick="saveSite()">💾 保存网站设置</button></div>
       </div>
     </section>
@@ -422,7 +426,7 @@ async function doAdjust(){
 }
 
 /* ---- 网站设置 ---- */
-const SITE_FIELDS=['site_title','brand','hero_highlight','hero_subtitle','accent','contact1','contact2','contact1_label','contact2_label','bot_link','mock_name','mock_status','mock_chip1','mock_chip2'];
+const SITE_FIELDS=['site_title','brand','hero_highlight','hero_subtitle','accent','contact1','contact2','contact1_label','contact2_label','bot_link','mock_name','mock_status','mock_chip1','mock_chip2','toast_prefix','toast_footer'];
 async function loadSite(){
   try{
     const d=await api('/api/site');
