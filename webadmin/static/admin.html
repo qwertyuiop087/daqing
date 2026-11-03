@@ -98,6 +98,7 @@ dialog .row{margin-top:18px}
     <a data-p="member" onclick="go('member')">💎 会员设置</a>
     <a data-p="wash" onclick="go('wash')">🧼 洗数据设置</a>
     <a data-p="site" onclick="go('site')">🌐 网站设置</a>
+    <a data-p="botprofile" onclick="go('botprofile')">🤖 机器人资料</a>
     <div style="flex:1"></div>
     <a href="/" target="_blank" style="color:var(--cyan)">🌐 查看介绍页</a>
     <a onclick="doLogout()">🚪 退出登录</a>
@@ -257,6 +258,18 @@ dialog .row{margin-top:18px}
         <div class="row"><button onclick="saveSite()">💾 保存网站设置</button></div>
       </div>
     </section>
+
+    <section id="p-botprofile" class="page" style="display:none">
+      <h2>🤖 机器人资料</h2>
+      <div class="sub">修改机器人在 Telegram 里显示的<b>名字</b>和<b>简介</b>（保存后立即生效，无需重启）</div>
+      <div class="card">
+        <label>显示名称（1~64 字）</label>
+        <input id="bot_name">
+        <label>简介（0~512 字，用户打开机器人时看到）</label>
+        <textarea id="bot_description"></textarea>
+        <div class="row"><button onclick="saveBotProfile()">💾 保存机器人资料</button></div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -305,6 +318,7 @@ function go(p){
   $('p-'+p).style.display='block';
   if(p==='members')loadMembers();
   if(p==='site')loadSite();
+  if(p==='botprofile')loadBotProfile();
 }
 
 const KEY_TO_EL={
@@ -410,6 +424,22 @@ async function saveSite(){
   try{
     await api('/api/site',{method:'POST',body:JSON.stringify(body)});
     toast('✅ 网站设置已保存，刷新网站即可看到效果');
+  }catch(e){toast('❌ '+e.message,false);}
+}
+
+/* ---- 机器人资料 ---- */
+async function loadBotProfile(){
+  try{
+    const d=await api('/api/bot/profile');
+    if($('bot_name')) $('bot_name').value=d.name||'';
+    if($('bot_description')) $('bot_description').value=d.description||'';
+  }catch(e){toast('❌ '+e.message,false);}
+}
+async function saveBotProfile(){
+  const body={ name:$('bot_name').value.trim(), description:$('bot_description').value.trim() };
+  try{
+    const d=await api('/api/bot/profile',{method:'POST',body:JSON.stringify(body)});
+    toast('✅ 已更新：'+(d.updated||[]).join('、')||'无变化');
   }catch(e){toast('❌ '+e.message,false);}
 }
 </script>
