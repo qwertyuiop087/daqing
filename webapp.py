@@ -13,9 +13,11 @@ import os
 import time
 from pathlib import Path
 
+import aiohttp
 from aiohttp import web
 
 import database
+from config import settings
 from utils import config_api
 
 ROOT = Path(__file__).resolve().parent
@@ -364,6 +366,84 @@ async def site_save_api(request: web.Request):
     return web.json_response({"ok": True, "site": cfg})
 
 
+# ---------------- 机器人资料（改名字 / 简介） ----------------
+
+def _bot_token() -> str:
+    return str(getattr(settings, "BOT_TOKEN", "") or "").strip()
+
+
+async def bot_profile_api(request: web.Request):
+    """读取机器人当前显示名称与简介（调用 Telegram Bot API）。"""
+    _auth(request)
+    token = _bot_token()
+    if not token:
+        raise web.HTTPBadRequest(text="未配置 BOT_TOKEN")
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"https://api.telegram.org/bot{token}/getMe",
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as r:
+                me = await r.json()
+            async with session.get(
+                f"https://api.telegram.org/bot{token}/getMyDescription",
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as r:
+                desc = await r.json()
+    except Exception as e:
+        raise web.HTTPBadRequest(text=f"读取失败：{str(e)[:100]}")
+    name = (me.get("result") or {}).get("first_name", "") or ""
+    description = (desc.get("result") or {}).get("description", "") or ""
+    return web.json_response({"ok": True, "name": name, "description": description})
+
+
+async def bot_profile_save_api(request: web.Request):
+    """修改机器人显示名称与简介（调用 Telegram Bot API，立即生效）。"""
+    _auth(request)
+    try:
+        data = await request.json()
+    except Exception:
+        raise web.HTTPBadRequest(text="请求格式错误")
+    token = _bot_token()
+    if not token:
+        raise web.HTTPBadRequest(text="未配置 BOT_TOKEN")
+
+    updated: list[str] = []
+    try:
+        async with aiohttp.ClientSession() as session:
+            if "name" in data:
+                name = str(data.get("name", "")).strip()
+                if not (1 <= len(name) <= 64):
+                    raise web.HTTPBadRequest(text="名字需 1~64 个字符")
+                async with session.get(
+                    f"https://api.telegram.org/bot{token}/setMyName",
+                    params={"name": name},
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as r:
+                    j = await r.json()
+                if not j.get("ok"):
+                    raise web.HTTPBadRequest(text=f"改名失败：{j.get('description', '')}")
+                updated.append("名字")
+            if "description" in data:
+                desc = str(data.get("description", "")).strip()
+                if len(desc) > 512:
+                    raise web.HTTPBadRequest(text="简介不能超过 512 个字符")
+                async with session.get(
+                    f"https://api.telegram.org/bot{token}/setMyDescription",
+                    params={"description": desc},
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as r:
+                    j = await r.json()
+                if not j.get("ok"):
+                    raise web.HTTPBadRequest(text=f"改简介失败：{j.get('description', '')}")
+                updated.append("简介")
+    except web.HTTPException:
+        raise
+    except Exception as e:
+        raise web.HTTPBadRequest(text=f"操作失败：{str(e)[:100]}")
+    return web.json_response({"ok": True, "updated": updated})
+
+
 def build_app(bot=None) -> web.Application:
     global _bot
     if bot is not None:
@@ -385,4 +465,6 @@ def build_app(bot=None) -> web.Application:
     app.router.add_post("/api/members/adjust", members_adjust_api)
     app.router.add_get("/api/site", site_api)
     app.router.add_post("/api/site", site_save_api)
+    app.router.add_get("/api/bot/profile", bot_profile_api)
+    app.router.add_post("/api/bot/profile", bot_profile_save_api)
     return app
