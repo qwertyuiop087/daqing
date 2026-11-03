@@ -256,6 +256,14 @@ dialog .row{margin-top:18px}
         <input id="contact2">
         <label>机器人链接</label>
         <input id="bot_link">
+        <label>首屏演示卡 · 名字</label>
+        <input id="mock_name">
+        <label>首屏演示卡 · 在线状态（如 ● 在线 · 秒级响应）</label>
+        <input id="mock_status">
+        <label>首屏演示卡 · 浮动标签一（如 转盘抽奖）</label>
+        <input id="mock_chip1">
+        <label>首屏演示卡 · 浮动标签二（如 秒级处理）</label>
+        <input id="mock_chip2">
         <div class="row"><button onclick="saveSite()">💾 保存网站设置</button></div>
       </div>
     </section>
@@ -414,7 +422,7 @@ async function doAdjust(){
 }
 
 /* ---- 网站设置 ---- */
-const SITE_FIELDS=['site_title','brand','hero_highlight','hero_subtitle','accent','contact1','contact2','contact1_label','contact2_label','bot_link'];
+const SITE_FIELDS=['site_title','brand','hero_highlight','hero_subtitle','accent','contact1','contact2','contact1_label','contact2_label','bot_link','mock_name','mock_status','mock_chip1','mock_chip2'];
 async function loadSite(){
   try{
     const d=await api('/api/site');
