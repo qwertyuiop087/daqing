@@ -81,8 +81,9 @@ dialog .row{margin-top:18px}
 <div id="login">
   <div class="login-box">
     <h1>🔐 DQFB 管理后台</h1>
-    <p>输入管理密码登录</p>
-    <input type="password" id="pwd" placeholder="ADMIN_PASSWORD" onkeydown="if(event.key==='Enter')doLogin()">
+    <p>输入用户名和密码登录</p>
+    <input type="text" id="user" placeholder="用户名（ADMIN_USERNAME）" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
+    <input type="password" id="pwd" placeholder="密码（ADMIN_PASSWORD）" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
     <div class="row"><button onclick="doLogin()">登录</button></div>
     <div id="err"></div>
   </div>
@@ -309,7 +310,7 @@ function showApp(){$('login').style.display='none';$('app').style.display='block
 
 async function doLogin(){
   $('err').textContent='';
-  try{await api('/api/login',{method:'POST',body:JSON.stringify({password:$('pwd').value})});showApp();}
+  try{await api('/api/login',{method:'POST',body:JSON.stringify({username:$('user').value.trim(),password:$('pwd').value})});showApp();}
   catch(e){$('err').textContent='❌ '+e.message;}
 }
 async function doLogout(){try{await api('/api/logout',{method:'POST'})}catch(e){}showLogin();}
