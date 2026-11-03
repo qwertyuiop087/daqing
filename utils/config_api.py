@@ -318,6 +318,7 @@ SITE_FIELDS = {
     "site_title", "brand", "hero_highlight", "hero_subtitle",
     "accent", "contact1", "contact2", "contact1_label", "contact2_label", "bot_link",
     "mock_name", "mock_status", "mock_chip1", "mock_chip2",
+    "toast_prefix", "toast_footer",
 }
 
 DEFAULT_SITE_CONFIG = {
@@ -335,6 +336,8 @@ DEFAULT_SITE_CONFIG = {
     "mock_status": "● 在线 · 秒级响应",
     "mock_chip1": "转盘抽奖",
     "mock_chip2": "秒级处理",
+    "toast_prefix": "抽中",
+    "toast_footer": "刚刚 · 大晴分包机器人",
 }
 
 
