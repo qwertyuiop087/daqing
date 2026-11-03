@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parent
 COOKIE_NAME = "dqfb_admin"
 COOKIE_TTL = 24 * 3600  # 登录有效期 24 小时
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")  # 后台登录用户名，默认 admin
 
 # ---------------- 登录防护（防暴力破解） ----------------
 
@@ -187,10 +188,15 @@ async def login(request: web.Request):
     if ADMIN_IP_WHITELIST and _client_ip(request) not in ADMIN_IP_WHITELIST:
         raise web.HTTPForbidden(text="当前网络不在允许登录的白名单内")
 
-    if not ADMIN_PASSWORD or not hmac.compare_digest(str(data.get("password", "")), ADMIN_PASSWORD):
+    # 用户名 + 密码双验证（用户名未配置时默认 admin）
+    username = str(data.get("username", "")).strip()
+    password = str(data.get("password", ""))
+    ok_user = bool(ADMIN_USERNAME) and hmac.compare_digest(username, ADMIN_USERNAME)
+    ok_pass = bool(ADMIN_PASSWORD) and hmac.compare_digest(password, ADMIN_PASSWORD)
+    if not (ok_user and ok_pass):
         _login_fails.append(now)
         await asyncio.sleep(0.5)  # 失败延时，拖慢爆破速度
-        raise web.HTTPUnauthorized(text="密码错误")
+        raise web.HTTPUnauthorized(text="用户名或密码错误")
     resp = web.json_response({"ok": True})
     resp.set_cookie(COOKIE_NAME, _make_token(), max_age=COOKIE_TTL, httponly=True, samesite="lax")
     return resp
