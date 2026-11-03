@@ -373,7 +373,7 @@ def _bot_token() -> str:
 
 
 async def bot_profile_api(request: web.Request):
-    """读取机器人当前显示名称与简介（调用 Telegram Bot API）。"""
+    """读取机器人当前显示名称、简介与简短说明（调用 Telegram Bot API）。"""
     _auth(request)
     token = _bot_token()
     if not token:
@@ -390,11 +390,24 @@ async def bot_profile_api(request: web.Request):
                 timeout=aiohttp.ClientTimeout(total=15),
             ) as r:
                 desc = await r.json()
+            async with session.get(
+                f"https://api.telegram.org/bot{token}/getMyShortDescription",
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as r:
+                short = await r.json()
     except Exception as e:
         raise web.HTTPBadRequest(text=f"读取失败：{str(e)[:100]}")
     name = (me.get("result") or {}).get("first_name", "") or ""
     description = (desc.get("result") or {}).get("description", "") or ""
-    return web.json_response({"ok": True, "name": name, "description": description})
+    short_description = (short.get("result") or {}).get("short_description", "") or ""
+    return web.json_response(
+        {
+            "ok": True,
+            "name": name,
+            "description": description,
+            "short_description": short_description,
+        }
+    )
 
 
 async def bot_profile_save_api(request: web.Request):
@@ -437,6 +450,19 @@ async def bot_profile_save_api(request: web.Request):
                 if not j.get("ok"):
                     raise web.HTTPBadRequest(text=f"改简介失败：{j.get('description', '')}")
                 updated.append("简介")
+            if "short_description" in data:
+                sd = str(data.get("short_description", "")).strip()
+                if len(sd) > 120:
+                    raise web.HTTPBadRequest(text="简短说明不能超过 120 个字符")
+                async with session.get(
+                    f"https://api.telegram.org/bot{token}/setMyShortDescription",
+                    params={"short_description": sd},
+                    timeout=aiohttp.ClientTimeout(total=15),
+                ) as r:
+                    j = await r.json()
+                if not j.get("ok"):
+                    raise web.HTTPBadRequest(text=f"改简短说明失败：{j.get('description', '')}")
+                updated.append("简短说明")
     except web.HTTPException:
         raise
     except Exception as e:
