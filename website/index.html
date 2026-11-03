@@ -357,7 +357,7 @@ footer a{color:var(--cyan)}
       <a class="btn primary glow bot-link" href="https://t.me/sechou_bot" target="_blank" rel="noopener">✈️ 立即开始使用</a>
       <a class="btn ghost" href="#features">浏览全部功能 ↓</a>
     </div>
-    <p class="note">联系大晴 <a class="contact1" href="https://t.me/mmmg" target="_blank" rel="noopener">@mmmmg</a> · 客服 <a class="contact2" href="https://t.me/kefu686" target="_blank" rel="noopener">@kefu686</a></p>
+    <p class="note">联系<span class="c1label">大晴</span> <a class="contact1" href="https://t.me/mmmg" target="_blank" rel="noopener">@mmmmg</a> · <span class="c2label">客服</span> <a class="contact2" href="https://t.me/kefu686" target="_blank" rel="noopener">@kefu686</a></p>
 
     <div class="mock">
       <div class="ring r1"></div>
@@ -575,7 +575,7 @@ footer a{color:var(--cyan)}
       <h2>现在就试试你的手气 🎰</h2>
       <p>打开机器人，每天一次抽奖，会员天数、高级券等你拿。</p>
       <a class="btn primary glow bot-link" href="https://t.me/sechou_bot" target="_blank" rel="noopener">✈️ 打开 @sechou_bot</a>
-      <p style="margin-top:22px;font-size:14px;color:var(--muted)">联系大晴 <a class="contact1" href="https://t.me/mmmg" target="_blank" rel="noopener">@mmmmg</a> · 客服 <a class="contact2" href="https://t.me/kefu686" target="_blank" rel="noopener">@kefu686</a></p>
+      <p style="margin-top:22px;font-size:14px;color:var(--muted)">联系<span class="c1label">大晴</span> <a class="contact1" href="https://t.me/mmmg" target="_blank" rel="noopener">@mmmmg</a> · <span class="c2label">客服</span> <a class="contact2" href="https://t.me/kefu686" target="_blank" rel="noopener">@kefu686</a></p>
     </div>
   </div>
 </section>
@@ -583,7 +583,7 @@ footer a{color:var(--cyan)}
 <footer>
   <div class="wrap">
     <div>© 2026 大晴分包机器人 · DQFB</div>
-    <div>大晴 <a class="contact1" href="https://t.me/mmmg" target="_blank" rel="noopener">@mmmmg</a> · 客服 <a class="contact2" href="https://t.me/kefu686" target="_blank" rel="noopener">@kefu686</a></div>
+    <div><span class="c1label">大晴</span> <a class="contact1" href="https://t.me/mmmg" target="_blank" rel="noopener">@mmmmg</a> · <span class="c2label">客服</span> <a class="contact2" href="https://t.me/kefu686" target="_blank" rel="noopener">@kefu686</a></div>
     <div>本页面为功能演示，奖品概率与套餐以机器人内实际配置为准。</div>
   </div>
 </footer>
@@ -694,6 +694,8 @@ async function loadSiteConfig(){
     if(s.accent) document.documentElement.style.setProperty('--violet',s.accent);
     if(s.contact1) document.querySelectorAll('.contact1').forEach(a=>{a.textContent=s.contact1; a.href='https://t.me/'+String(s.contact1).replace(/^@/,'');});
     if(s.contact2) document.querySelectorAll('.contact2').forEach(a=>{a.textContent=s.contact2; a.href='https://t.me/'+String(s.contact2).replace(/^@/,'');});
+    if(s.contact1_label) document.querySelectorAll('.c1label').forEach(e=>e.textContent=s.contact1_label);
+    if(s.contact2_label) document.querySelectorAll('.c2label').forEach(e=>e.textContent=s.contact2_label);
     if(s.bot_link) document.querySelectorAll('.bot-link').forEach(a=>a.href=s.bot_link);
   }catch(e){}
 }
