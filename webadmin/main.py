@@ -1,4 +1,4 @@
-﻿"""错落雨 管理后台（FastAPI）：连机器人同一个数据库，网页配置抽奖/套餐/洗数据/欢迎语。
+"""错落雨 管理后台（FastAPI）：连机器人同一个数据库，网页配置抽奖/套餐/洗数据/欢迎语。
 
 部署要求：
 - 环境变量 DATABASE_URL 指向机器人在用的同一个 Postgres
@@ -158,12 +158,13 @@ def _parse_wash_prices(text: str) -> list[dict]:
 def get_config_api(request: Request):
     _auth(request)
     with database.SessionLocal() as session:
+        from utils.config_api import _plans_to_text, _prizes_to_text, _redeem_to_text, _wash_prices_to_text
         return {
-            "lottery_prizes": json.dumps(database.get_lottery_prizes(session), ensure_ascii=False),
-            "lottery_premium_prizes": json.dumps(database.get_lottery_premium_prizes(session), ensure_ascii=False),
-            "lottery_redeem": json.dumps(database.get_lottery_redeem(session), ensure_ascii=False),
-            "plans": json.dumps(database.get_plans(session), ensure_ascii=False),
-            "wash_prices": json.dumps(database.get_wash_prices(session), ensure_ascii=False),
+            "lottery_prizes": _prizes_to_text(database.get_lottery_prizes(session)),
+            "lottery_premium_prizes": _prizes_to_text(database.get_lottery_premium_prizes(session)),
+            "lottery_redeem": _redeem_to_text(database.get_lottery_redeem(session)),
+            "plans": _plans_to_text(database.get_plans(session)),
+            "wash_prices": _wash_prices_to_text(database.get_wash_prices(session)),
             "wash_price_floor": database.get_wash_price_floor(session),
             "wash_quota": database.get_wash_quota(session),
             "usdt_rate": database.get_config(session, "usdt_rate", ""),
