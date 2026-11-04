@@ -116,6 +116,91 @@ class TestWashReplyFlow(unittest.TestCase):
 
         asyncio.run(flow())
 
+    def test_stale_pending_refunded(self):
+        """超时未回传的预扣任务：退回费用、释放配额、删除 pending，并记退款流水。"""
+        import time as _time
+        from sqlalchemy import select
+
+        from database import (
+            WASH_PENDING_TTL_SECONDS,
+            WashOrder,
+            add_wash_balance,
+            delete_config,
+            get_or_create_user,
+            get_washed_breakdown,
+            get_wash_balance,
+        )
+
+        uid = 555
+        with SessionLocal() as session:
+            # 清掉 setUp 写入的标准任务，保证本测试自包含
+            delete_config(session, f"wash_pending:{CODE}")
+            delete_config(session, f"wash_code:{CODE}")
+            # 造一个用户：10 元余额，提交时已预扣 1.3 元（剩 8.7）
+            get_or_create_user(session, uid)
+            add_wash_balance(session, uid, 8.7)
+            charged_before, _ = get_washed_breakdown(session)
+            old_ts = int(_time.time()) - WASH_PENDING_TTL_SECONDS - 60
+            set_config(session, f"wash_pending:OldCode", f"{uid}:1000:1.3:{old_ts}")
+
+        with SessionLocal() as session:
+            charged, pending = get_washed_breakdown(session)
+            self.assertEqual(pending, 0)
+            # 预扣费用已退回：8.7 + 1.3 = 10.0
+            self.assertAlmostEqual(get_wash_balance(session, uid), 10.0)
+            # pending 记录已删除
+            self.assertEqual(get_config(session, "wash_pending:OldCode", ""), "")
+            # 退款流水：负数行数、负数金额、type=refund
+            refunds = list(
+                session.scalars(select(WashOrder).where(WashOrder.type == "refund"))
+            )
+            self.assertEqual(len(refunds), 1)
+            self.assertEqual(refunds[0].row_count, -1000)
+            self.assertAlmostEqual(refunds[0].cost, -1.3)
+            self.assertEqual(refunds[0].user_id, uid)
+            # 退款冲减后，累计已洗行数比退款前少 1000
+            self.assertEqual(charged, charged_before - 1000)
+
+        # 再次调用：幂等，不会重复退款
+        with SessionLocal() as session:
+            charged2, pending2 = get_washed_breakdown(session)
+            self.assertEqual(pending2, 0)
+            self.assertAlmostEqual(get_wash_balance(session, uid), 10.0)
+            self.assertEqual(charged2, charged)
+
+    def test_reply_does_not_deduct_again(self):
+        """回传时只记账不扣费（费用在提交时已预扣），余额保持不变。"""
+        from database import add_wash_balance, get_or_create_user, get_wash_balance
+
+        # 用独立的用户与独立随机码，避免与其它测试的账单/映射混淆
+        uid = 999888777
+        own_code = "Qq9r7X2"
+        with SessionLocal() as session:
+            get_or_create_user(session, uid)
+            add_wash_balance(session, uid, 50.0)
+            set_config(session, f"wash_code:{own_code}", f"{uid}:1698000000")
+            set_config(session, f"wash_pending:{own_code}", f"{uid}:5000:6.5:1698000000")
+
+        async def flow():
+            handler = get_handler("message", "alt_user_reply")
+            bot = FakeBot()
+            await handler(FakeMessage(f"{own_code}_结果.txt"), bot)
+            self.assertEqual(len(bot.sent), 1)
+            self.assertEqual(bot.sent[0][0], uid)
+
+        asyncio.run(flow())
+
+        with SessionLocal() as session:
+            # 回传后余额不变（提交时已扣），并生成一条 deduct 账单
+            self.assertAlmostEqual(get_wash_balance(session, uid), 50.0)
+            from sqlalchemy import select
+            from database import WashOrder
+            rows = list(session.scalars(
+                select(WashOrder).where(WashOrder.user_id == uid, WashOrder.type == "deduct")
+            ))
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].row_count, 5000)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
