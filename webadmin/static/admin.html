@@ -268,6 +268,10 @@ dialog .row{margin-top:18px}
         <input id="toast_prefix">
         <label>中奖通知 · 底部文字（如 刚刚 · 大晴分包机器人）</label>
         <input id="toast_footer">
+        <label>页脚 · 版权文字（如 © 2026 大晴分包机器人 · DQFB）</label>
+        <input id="footer_text">
+        <label>页脚 · 底部说明（如 本页面为功能演示…）</label>
+        <input id="footer_note">
         <div class="row"><button onclick="saveSite()">💾 保存网站设置</button></div>
       </div>
     </section>
@@ -426,7 +430,7 @@ async function doAdjust(){
 }
 
 /* ---- 网站设置 ---- */
-const SITE_FIELDS=['site_title','brand','hero_highlight','hero_subtitle','accent','contact1','contact2','contact1_label','contact2_label','bot_link','mock_name','mock_status','mock_chip1','mock_chip2','toast_prefix','toast_footer'];
+const SITE_FIELDS=['site_title','brand','hero_highlight','hero_subtitle','accent','contact1','contact2','contact1_label','contact2_label','bot_link','mock_name','mock_status','mock_chip1','mock_chip2','toast_prefix','toast_footer','footer_text','footer_note'];
 async function loadSite(){
   try{
     const d=await api('/api/site');
