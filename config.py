@@ -1,4 +1,4 @@
-"""全局配置：从环境变量 / .env 文件读取。"""
+﻿"""全局配置：从环境变量 / .env 文件读取。"""
 import os
 
 from dotenv import load_dotenv
@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.37"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.38"))
 
 
 settings = Settings()
