@@ -7,7 +7,7 @@ import uuid
 from aiogram import Bot, F, Router
 from aiogram.filters import BaseFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, FSInputFile, Message
+from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import select
 
@@ -413,6 +413,18 @@ async def wash_check_order(cq: CallbackQuery):
     )
 
 
+# 一次洗数据任务最多收集的文件数（防止消息刷屏与发送限流）
+WASH_MAX_FILES = 20
+
+
+def wash_upload_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="🚀 开始洗数据", callback_data="wash:submit")
+    b.button(text="❌ 取消", callback_data="cancel")
+    b.adjust(1)
+    return b.as_markup()
+
+
 @router.callback_query(F.data == "wash:upload")
 async def wash_upload(cq: CallbackQuery, state: FSMContext):
     await cq.answer()
@@ -426,104 +438,158 @@ async def wash_upload(cq: CallbackQuery, state: FSMContext):
         )
         return
 
-    await state.update_data(workdir=get_workdir(cq.from_user.id))
+    await state.update_data(workdir=get_workdir(cq.from_user.id), files=[], status_msg_id=None)
     await state.set_state(WashStates.waiting_file)
     await cq.message.edit_text(
-        "📤 <b>上传文件洗数据</b>\n\n"
-        "请发送要洗的 TXT 文件，我会自动计算行数、扣余额，然后转发到洗数据群处理。\n\n"
-        "处理完成后会自动把结果发回给你。",
-        reply_markup=cancel_kb(),
+        "📤 <b>上传文件洗数据（支持多文件）</b>\n\n"
+        "把要洗的 TXT 文件全部发给我，可以一次发多个。\n\n"
+        "费用按<b>全部文件的总行数</b>计算：\n"
+        "文件越多、总行数越大，档位越高、单价越便宜。\n\n"
+        "全部发完后点「🚀 开始洗数据」。",
+        reply_markup=wash_upload_kb(),
     )
 
 
 @router.message(WashStates.waiting_file, F.document)
 async def wash_got_file(message: Message, state: FSMContext, bot: Bot):
+    """收集文件：每收到一个 TXT 就存起来并更新汇总，提交时按总行数计费。"""
     doc = message.document
     if not (doc.file_name or "").lower().endswith((".txt", ".text")):
         await message.answer("⚠️ 只接受 TXT 文件。")
         return
 
     data = await state.get_data()
-    workdir = data["workdir"]
-    tmp_path = os.path.join(workdir, doc.file_name or "input.txt")
-
-    progress_msg = await message.answer("⏳ 正在下载文件并计算行数…")
-
-    try:
-        await progress_msg.edit_text("⏳ 正在下载文件…")
-        file = await bot.get_file(doc.file_id)
-        file_size = file.file_size
-
-        # 大于20MB的文件提示联系客服
-        if file_size > 20 * 1024 * 1024:
-            size_mb = file_size / 1024 / 1024
-            await progress_msg.edit_text(
-                f"⚠️ 文件大小：{size_mb:.1f}MB\n\n"
-                "大于20MB的文件请联系 @mmmmg 手动处理。"
-            )
-            await cleanup_state(state)
-            return
-
-        await bot.download_file(file.file_path, destination=tmp_path)
-
-        await progress_msg.edit_text("⏳ 正在计算行数…")
-        # 计算行数（与其它功能一致：自动识别 UTF-8 / GBK / GB18030 等编码）
-        from services.file_ops import decode_bytes, read_file
-        text = decode_bytes(read_file(tmp_path))
-        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-        line_count = len(lines)
-
-        # 检查是不是只有手机号
-        from utils.phone_db import extract_phones
-        all_phones = []
-        for ln in lines:
-            all_phones.extend(extract_phones(ln))
-        phone_count = len(all_phones)
-
-        # 如果行数和手机号数量不一样，说明文件里不只有手机号
-        if line_count != phone_count:
-            await progress_msg.edit_text(
-                f"⚠️ 文件里不只有手机号！\n\n"
-                f"文件总行数：{line_count:,} 行\n"
-                f"提取到手机号：{phone_count:,} 个\n\n"
-                "请先使用「提取手机号」功能，把文件里的手机号提取出来，\n"
-                "再用提取后的文件来洗数据。"
-            )
-            await cleanup_state(state)
-            return
-
-        # 检查累计洗数据配额
-        await progress_msg.edit_text("⏳ 正在检查累计洗数据配额…")
-        with SessionLocal() as session:
-            quota = get_wash_quota(session)
-            washed = get_washed_total(session)
-        if quota > 0 and washed + line_count > quota:
-            await progress_msg.edit_text(
-                f"⚠️ 已达累计洗数据上限，无法继续洗！\n\n"
-                f"累计已洗：{washed:,} 行\n"
-                f"本次文件：{line_count:,} 行\n"
-                f"总配额：{quota:,} 行（剩余 {max(0, quota - washed):,} 行）\n\n"
-                "超出配额的部分暂不能洗，请联系管理员。",
-                reply_markup=menu_kb(message.from_user.id),
-            )
-            await cleanup_state(state)
-            return
-
-        await progress_msg.edit_text("⏳ 正在计算费用…")
-        # 计算费用
-        with SessionLocal() as session:
-            cost = calc_wash_cost(session, line_count)
-            balance = get_wash_balance(session, message.from_user.id)
-    except Exception as e:
-        await progress_msg.edit_text(f"⚠️ 处理失败：{str(e)[:200]}")
-        import traceback
-        traceback.print_exc()
+    files = list(data.get("files") or [])
+    if len(files) >= WASH_MAX_FILES:
+        await message.answer(
+            f"⚠️ 一次最多 {WASH_MAX_FILES} 个文件。请点「🚀 开始洗数据」提交当前这批。",
+            reply_markup=wash_upload_kb(),
+        )
         return
 
+    workdir = data.get("workdir") or get_workdir(message.from_user.id)
+
+    # 下载文件（大小超限直接提示）
+    try:
+        file = await bot.get_file(doc.file_id)
+        if (file.file_size or 0) > settings.MAX_FILE_SIZE:
+            await message.answer(
+                f"⚠️ 文件 <code>{html.escape(doc.file_name or '')}</code> 超过 20MB 上限，已跳过。"
+            )
+            return
+        idx = len(files) + 1
+        from services.file_ops import sanitize_filename
+        safe = sanitize_filename(doc.file_name or f"input_{idx}.txt")
+        tmp_path = os.path.join(workdir, f"in_{idx}_{safe}")
+        await bot.download_file(file.file_path, destination=tmp_path)
+    except Exception as e:
+        await message.answer(f"⚠️ 下载失败：{str(e)[:100]}")
+        return
+
+    # 统计行数与手机号数量
+    try:
+        from services.file_ops import decode_bytes, read_file
+        from utils.phone_db import extract_phones
+        text = decode_bytes(read_file(tmp_path))
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        phones = 0
+        for ln in lines:
+            phones += len(extract_phones(ln))
+    except Exception as e:
+        await message.answer(f"⚠️ 读取文件失败：{str(e)[:100]}")
+        return
+
+    files.append(
+        {
+            "name": doc.file_name or f"input_{idx}.txt",
+            "path": tmp_path,
+            "lines": len(lines),
+            "phones": phones,
+        }
+    )
+    await state.update_data(files=files, workdir=workdir)
+
+    # 汇总信息：总行数、当前单价、预估费用
+    total = sum(f["lines"] for f in files)
+    with SessionLocal() as session:
+        cost = calc_wash_cost(session, total)
+    per = cost / total if total else 0
+    shown = "\n".join(f"· {html.escape(f['name'])}（{f['lines']:,} 行）" for f in files[:10])
+    if len(files) > 10:
+        shown += f"\n… 还有 {len(files) - 10} 个文件"
+    text = (
+        f"已收到 <b>{len(files)}</b> 个文件，共 <b>{total:,}</b> 行\n"
+        f"{shown}\n\n"
+        f"当前单价：¥{per:.6f}/行 · 预估费用：¥{cost:.4f}\n\n"
+        "继续发文件，或点「🚀 开始洗数据」。"
+    )
+
+    status_id = data.get("status_msg_id")
+    edited = False
+    if status_id:
+        try:
+            await bot.edit_message_text(
+                text, chat_id=message.chat.id, message_id=status_id,
+                reply_markup=wash_upload_kb(), parse_mode="HTML",
+            )
+            edited = True
+        except Exception:
+            edited = False
+    if not edited:
+        sent = await message.answer(text, reply_markup=wash_upload_kb(), parse_mode="HTML")
+        await state.update_data(status_msg_id=sent.message_id)
+
+
+@router.callback_query(F.data == "wash:submit")
+async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
+    """提交整批文件：按总行数计费（档位越高单价越低），预扣费后转发到洗数据群。"""
+    await cq.answer()
+    data = await state.get_data()
+    files = list(data.get("files") or [])
+    if not files:
+        await cq.answer("还没收到文件，请先发送要洗的 TXT 文件。", show_alert=True)
+        return
+
+    total_lines = sum(f["lines"] for f in files)
+    total_phones = sum(f["phones"] for f in files)
+
+    # 行数和手机号数量不一致，说明文件里不只有手机号
+    if total_lines != total_phones:
+        await cq.message.answer(
+            f"⚠️ 文件里不只有手机号！\n\n"
+            f"文件总行数：{total_lines:,} 行\n"
+            f"提取到手机号：{total_phones:,} 个\n\n"
+            "请先用「提取手机号」功能，把文件里的手机号提取出来，"
+            "再用提取后的文件来洗数据。",
+            reply_markup=menu_kb(cq.from_user.id),
+        )
+        await cleanup_state(state)
+        return
+
+    # 检查累计洗数据配额
+    with SessionLocal() as session:
+        quota = get_wash_quota(session)
+        washed = get_washed_total(session)
+    if quota > 0 and washed + total_lines > quota:
+        await cq.message.answer(
+            f"⚠️ 已达累计洗数据上限，无法继续洗！\n\n"
+            f"累计已洗：{washed:,} 行\n"
+            f"本次文件：{total_lines:,} 行\n"
+            f"总配额：{quota:,} 行（剩余 {max(0, quota - washed):,} 行）\n\n"
+            "超出配额的部分暂不能洗，请联系管理员。",
+            reply_markup=menu_kb(cq.from_user.id),
+        )
+        await cleanup_state(state)
+        return
+
+    # 按总行数计费
+    with SessionLocal() as session:
+        cost = calc_wash_cost(session, total_lines)
+        balance = get_wash_balance(session, cq.from_user.id)
     if balance < cost:
-        await progress_msg.edit_text(
+        await cq.message.answer(
             f"⚠️ 余额不足！\n\n"
-            f"文件行数：{line_count:,} 行\n"
+            f"总行数：{total_lines:,} 行\n"
             f"本次费用：¥{cost:.4f} 元\n"
             f"当前余额：¥{balance:.4f} 元\n"
             f"还差：¥{cost - balance:.4f} 元\n\n"
@@ -533,66 +599,51 @@ async def wash_got_file(message: Message, state: FSMContext, bot: Bot):
         await cleanup_state(state)
         return
 
-    # 提交时预扣费用：防止用户同时提交多个任务，把余额透支成负数。
-    # 任务超时未回传时，由 database.get_washed_breakdown 自动退回预扣费用。
+    # 提交时预扣费用：防止并发任务透支余额；发送失败会退回
     with SessionLocal() as session:
         from database import deduct_wash_balance
-        if not deduct_wash_balance(session, message.from_user.id, cost):
-            await progress_msg.edit_text(
-                f"⚠️ 余额不足！\n\n"
-                f"本次费用：¥{cost:.4f} 元\n"
-                f"当前余额：¥{balance:.4f} 元\n\n"
-                "请先充值。",
+        if not deduct_wash_balance(session, cq.from_user.id, cost):
+            await cq.message.answer(
+                f"⚠️ 余额不足！\n\n本次费用：¥{cost:.4f} 元\n当前余额：¥{balance:.4f} 元\n\n请先充值。",
                 reply_markup=wash_main_kb(balance),
             )
             await cleanup_state(state)
             return
 
-    user_id = message.from_user.id
-    safe_name = doc.file_name or "input.txt"
+    user_id = cq.from_user.id
 
-    # 生成7位随机码（字母+数字），保护用户隐私
+    # 生成7位随机码（字母+数字），保护用户隐私；整批文件共用同一个随机码
     import random
     import string
     random_code = ''.join(random.choices(string.ascii_letters + string.digits, k=7))
 
-    # 费用已在提交时预扣；这里存下费用和行数供回传时记账，
-    # 末尾附提交时间戳，超时未回传的任务会由 get_washed_breakdown 自动退款作废
     with SessionLocal() as session:
         from database import set_config
         import time
         set_config(
             session,
             f"wash_pending:{random_code}",
-            f"{user_id}:{line_count}:{cost}:{int(time.time())}",
+            f"{user_id}:{total_lines}:{cost}:{int(time.time())}",
         )
-
-    # 存映射：随机码 → 用户ID（附时间戳，供过期清理）。
-    # 注意：一份任务可能回传多个结果文件，它们共用同一个随机码，
-    # 所以收到第一个文件后绝不能删除这条映射，否则后面的文件找不到用户。
-    with SessionLocal() as session:
-        from database import set_config
-        import time
         set_config(
             session,
             f"wash_code:{random_code}",
             f"{user_id}:{int(time.time())}",
         )
 
-    # 转发文件给小号，让小号转发到洗数据群（绕过机器人隐私模式限制）
+    # 读取小号信息
     with SessionLocal() as session:
         wash_chat_id = get_config(session, "wash_chat_id", "")
         alt_username = get_config(session, "alt_username", "")
         alt_user_id = get_config(session, "alt_user_id", "")
         alt_session = get_config(session, "alt_session", "")
 
-    # 如果用户名是空的，自动从会话里获取
     if (not alt_username or not alt_user_id) and alt_session:
         try:
             from telethon import TelegramClient
             from telethon.sessions import StringSession
-            from config import settings
-            temp_client = TelegramClient(StringSession(alt_session), settings.TELETHON_API_ID, settings.TELETHON_API_HASH)
+            from config import settings as _settings
+            temp_client = TelegramClient(StringSession(alt_session), _settings.TELETHON_API_ID, _settings.TELETHON_API_HASH)
             await temp_client.connect()
             me = await temp_client.get_me()
             alt_username = me.username or ""
@@ -603,49 +654,65 @@ async def wash_got_file(message: Message, state: FSMContext, bot: Bot):
                 set_config(session, "alt_user_id", alt_user_id)
             await temp_client.disconnect()
         except Exception as e:
-            await progress_msg.edit_text(f"⚠️ 获取小号信息失败：{e}")
+            await cq.message.answer(f"⚠️ 获取小号信息失败：{str(e)[:100]}")
             await cleanup_state(state)
             return
 
     if not alt_user_id:
-        await progress_msg.edit_text("⚠️ 小号未登录，请先在管理面板登录小号。")
+        await cq.message.answer("⚠️ 小号未登录，请先在管理面板登录小号。")
         await cleanup_state(state)
         return
 
-    user_id = message.from_user.id
-    safe_name = doc.file_name or "input.txt"
-
-    # 文件名加随机码前缀，方便洗好回来的时候识别
-    new_filename = f"{random_code}_{safe_name}"
-
-    # 发给小号（优先用 user_id，更可靠）
-    chat_target = int(alt_user_id)
+    # 逐个转发给小号（文件名加随机码前缀，回传时靠它识别）
+    sent_ok = 0
+    send_error = None
     try:
-        await bot.send_document(
-            chat_id=chat_target,
-            document=FSInputFile(tmp_path, filename=new_filename),
-            caption="im",
-        )
+        for f in files:
+            new_filename = f"{random_code}_{f['name']}"
+            await bot.send_document(
+                chat_id=int(alt_user_id),
+                document=FSInputFile(f["path"], filename=new_filename),
+                caption="im",
+            )
+            sent_ok += 1
+            await asyncio.sleep(0.6)  # 连发多个文件，稍作间隔避免限流
     except Exception as e:
-        if "chat not found" in str(e).lower():
-            await progress_msg.edit_text(
-                f"⚠️ 小号还没和我们的机器人建立会话！\n\n"
-                f"请用小号给我们的机器人发一条消息（比如发个 /start），然后再试。"
+        send_error = str(e)
+        # 发送失败：退回预扣费用并作废任务
+        with SessionLocal() as session:
+            from database import add_wash_balance, delete_config, WashOrder
+            add_wash_balance(session, user_id, cost)
+            session.add(
+                WashOrder(
+                    user_id=user_id,
+                    filename="发送失败退款",
+                    row_count=-total_lines,
+                    cost=-cost,
+                    type="refund",
+                )
+            )
+            delete_config(session, f"wash_pending:{random_code}")
+            session.commit()
+        if "chat not found" in send_error.lower():
+            tip = (
+                "⚠️ 小号还没和我们的机器人建立会话！\n\n"
+                "请用小号给我们的机器人发一条消息（比如发个 /start），然后再试。"
             )
         else:
-            await progress_msg.edit_text(f"⚠️ 转发给小号失败：{str(e)[:100]}")
+            tip = f"⚠️ 转发给小号失败：{send_error[:100]}"
+        await cq.message.answer(f"{tip}\n\n费用已原路退回。", reply_markup=menu_kb(user_id))
         await cleanup_state(state)
         return
 
-    await progress_msg.edit_text(
+    await cq.message.answer(
         f"✅ <b>已提交洗数据</b>\n\n"
-        f"文件：{html.escape(doc.file_name or '')}\n"
-        f"行数：{line_count:,} 行\n"
+        f"文件数：{sent_ok} 个\n"
+        f"总行数：{total_lines:,} 行\n"
         f"扣除费用：¥{cost:.4f} 元\n"
         f"剩余余额：¥{balance - cost:.4f} 元\n\n"
         "────────────\n"
         "正在处理中，完成后会自动把结果发回给你，请稍等。",
-        reply_markup=menu_kb(message.from_user.id),
+        reply_markup=menu_kb(user_id),
     )
     await cleanup_state(state)
 
