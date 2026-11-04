@@ -50,6 +50,13 @@ class TestWebapp(unittest.TestCase):
                 cfg2 = await (await client.get("/api/config")).json()
                 self.assertIn("高级券", cfg2["lottery_prizes"])
 
+                # 操作审计：配置保存应记录一条 config_save
+                aud = await (await client.get("/api/audit")).json()
+                self.assertTrue(any(
+                    a.get("action") == "config_save" and a.get("admin") == "admin"
+                    for a in aud["items"]
+                ))
+
                 # 非法输入 → 400
                 resp = await client.post("/api/config/lottery_prizes", json={"value": "天:1:60,天:2:50"})
                 self.assertEqual(resp.status, 400)
