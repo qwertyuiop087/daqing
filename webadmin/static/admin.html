@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DQFB 管理后台</title>
+<title>错落雨 管理后台</title>
 <style>
 /* ============================================================
    设计规范
@@ -206,7 +206,7 @@ dialog h2{font-size:15px;font-weight:600;margin-bottom:16px}
 
 <div id="login">
   <div class="login-box">
-    <h1>DQFB 管理后台</h1>
+    <h1>错落雨 管理后台</h1>
     <p class="desc">输入用户名与密码以继续</p>
     <form onsubmit="doLogin();return false">
       <label for="user">用户名</label>
@@ -224,7 +224,7 @@ dialog h2{font-size:15px;font-weight:600;margin-bottom:16px}
     <div class="brand">
       <div class="brand-mark"><svg class="ic ic-16"><use href="#i-grid"/></svg></div>
       <div>
-        <div class="brand-name">DQFB</div>
+        <div class="brand-name">错落雨</div>
         <div class="brand-sub">管理后台</div>
       </div>
     </div>
@@ -343,7 +343,7 @@ dialog h2{font-size:15px;font-weight:600;margin-bottom:16px}
       </div>
       <div class="card">
         <div class="card-head"><h2>欢迎语</h2></div>
-        <div class="hint">在 /start 时显示。支持占位符 <code>{昵称}</code> 与 HTML 标签 <code>&lt;b&gt;加粗&lt;/b&gt;</code>。示例 <code>你好，{昵称}！欢迎使用 &lt;b&gt;大晴分包机器人&lt;/b&gt;</code></div>
+        <div class="hint">在 /start 时显示。支持占位符 <code>{昵称}</code> 与 HTML 标签 <code>&lt;b&gt;加粗&lt;/b&gt;</code>。示例 <code>你好，{昵称}！欢迎使用 &lt;b&gt;错落雨分包机器人&lt;/b&gt;</code></div>
         <textarea id="welcome_text" style="min-height:150px"></textarea>
         <div class="row"><button onclick="save('welcome_text')">保存</button><button class="ghost" onclick="reset('welcome_text')">重置默认</button></div>
       </div>
@@ -515,7 +515,7 @@ function go(p){
   document.querySelectorAll('.rail a[data-p]').forEach(a=>a.classList.toggle('on',a.dataset.p===p));
   document.querySelectorAll('.page').forEach(s=>s.style.display='none');
   $('p-'+p).style.display='block';
-  document.title='DQFB · '+(PAGE_META[p]||'管理后台');
+  document.title='错落雨 · '+(PAGE_META[p]||'管理后台');
   if(p==='members')loadMembers();
   if(p==='site')loadSite();
   if(p==='botprofile')loadBotProfile();
