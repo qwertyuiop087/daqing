@@ -1,125 +1,160 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DQFB 管理后台</title>
+<title>DQFB · 管理后台</title>
 <style>
-/* ==========================================================
-   洛可可档案后台 · 参考 Trianon
-   淡蓝紫底 · 撕边纸 · 档案抬头 · 手撕标签索引 · 银色线描小物
-   ========================================================== */
+/* ============================================================
+   DQFB · Bureau — 洛可可档案纸后台（参考 Trianon）
+   吊牌导航 + 撕边档案纸 + 手撕标签 + 银线小物 + 全站动效
+   ============================================================ */
 :root{
-  --bg-0:#E2E7F6;--bg-1:#D3DAEE;--bg-2:#C7CFE6;
-  --paper:#FBF9F4;--paper-w:#FFFDF8;--paper-2:#F8F5ED;
-  --ink:#1E2748;--ink-2:#2E3A63;--ink-3:#3F4B72;--muted:rgba(30,39,72,.46);
-  --silver:#8B97B8;--silver-2:#B9C3DC;--silver-3:#DCE2F1;
-  --line:rgba(102,113,143,.20);--line-2:rgba(102,113,143,.34);
-  --blue:#5F7099;
-  --sage:#5E8B6A;--bad:#A85A5A;
-  --serif:"Cormorant Garamond",Georgia,"Songti SC","STSong","SimSun",serif;
+  --paper:#FCFAF5;--paper-w:#FFFFFF;--paper-2:#F7F3EA;--paper-3:#F1ECDF;
+  --ink:#18203C;--ink-2:#26304F;--ink-3:#3C476B;--muted:rgba(24,32,60,.46);
+  --silver:#8593B6;--silver-2:#B4BFD8;--silver-3:#DCE2F1;
+  --blue:#4C5F8F;--blue-2:#6C7FAF;
+  --sage:#4E7D5C;--bad:#A25353;
   --cn:"Songti SC","STSong","SimSun","Noto Serif SC",serif;
   --latin:Georgia,"Times New Roman","Songti SC",serif;
   --e:cubic-bezier(.22,1,.36,1);
+  --e2:cubic-bezier(.34,1.56,.64,1);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 body{
   font-family:var(--cn);font-size:13.5px;line-height:1.85;color:var(--ink);min-height:100vh;
-  background:linear-gradient(165deg,#DEE4F4 0%,#C9D3EA 52%,#BAC6E2 100%);
+  background:linear-gradient(168deg,#CFD8EE 0%,#BEC9E3 46%,#AFBCDA 100%);
   background-attachment:fixed;
 }
-/* 底纹：细颗粒 + 极淡的暗角 */
 body::before{
-  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.35;mix-blend-mode:multiply;
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.32;mix-blend-mode:multiply;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.92' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 }
 body::after{
   content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
-  background:radial-gradient(120% 90% at 50% 0%,transparent 55%,rgba(74,90,134,.12) 100%);
+  background:radial-gradient(120% 92% at 50% -6%,rgba(255,255,255,.35),transparent 58%),
+             radial-gradient(130% 100% at 50% 110%,rgba(72,88,132,.22),transparent 62%);
 }
 #login,#app{position:relative;z-index:1}
 a{color:var(--ink-3);text-decoration:none}
-::selection{background:rgba(155,170,200,.45)}
+::selection{background:rgba(140,158,196,.42)}
 
-/* ================= 登录：请柬 ================= */
+/* ======================= 动效 ======================= */
+@keyframes pageIn{from{opacity:0;transform:translateY(16px);filter:blur(3.5px)}to{opacity:1;transform:none;filter:none}}
+@keyframes riseIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+@keyframes tagDrop{from{opacity:0;transform:translateY(-24px) rotate(-6deg)}to{opacity:1;transform:none}}
+@keyframes tagIn{from{opacity:0;transform:translateY(-14px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes sway{from{transform:rotate(-3.2deg)}to{transform:rotate(-1deg)}}
+@keyframes sway2{from{transform:rotate(-1.3deg) translateX(3px)}to{transform:rotate(-.2deg) translateX(3px)}}
+@keyframes unfold{from{opacity:0;transform:perspective(900px) rotateX(-9deg) translateY(22px) scale(.98);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
+@keyframes sealDrop{
+  0%{opacity:0;transform:translateX(-50%) translateY(-32px) rotate(-20deg) scale(.8)}
+  56%{opacity:1;transform:translateX(-50%) translateY(3px) rotate(-1deg) scale(1.07)}
+  100%{opacity:1;transform:translateX(-50%) translateY(0) rotate(-3deg) scale(1)}
+}
+@keyframes shine{0%{transform:translateX(-150%) rotate(14deg)}55%,100%{transform:translateX(280%) rotate(14deg)}}
+@keyframes toastIn{from{opacity:0;transform:translateX(30px) rotate(1.8deg)}to{opacity:1;transform:none}}
+@keyframes drift{0%,100%{transform:translate3d(0,0,0)}50%{transform:translate3d(0,-7px,0)}}
+@keyframes twinkle{0%,100%{opacity:.16}50%{opacity:.5}}
+@keyframes cordDraw{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes inkIn{from{opacity:0;letter-spacing:.6em;filter:blur(6px)}to{opacity:1;filter:none}}
+
+/* 页面转场 */
+.page{animation:pageIn .58s var(--e) backwards}
+.page>*{animation:riseIn .66s var(--e) backwards}
+.page>*:nth-child(1){animation-delay:.03s}
+.page>*:nth-child(2){animation-delay:.09s}
+.page>*:nth-child(3){animation-delay:.15s}
+.page>*:nth-child(4){animation-delay:.21s}
+.page>*:nth-child(5){animation-delay:.27s}
+.page>*:nth-child(6){animation-delay:.32s}
+.page>*:nth-child(7){animation-delay:.37s}
+.page>*:nth-child(8){animation-delay:.42s}
+
+/* ======================= 登录 ======================= */
 #login{position:fixed;inset:0;display:grid;place-items:center;z-index:30;padding:24px}
-.login-box{position:relative;width:min(392px,92vw)}
-/* 撕边纸（独立层，避免文字被位移滤镜扭曲） */
+.login-box{position:relative;width:min(392px,92vw);animation:unfold .92s var(--e) backwards}
 .login-bg{
   position:absolute;inset:0;z-index:0;border-radius:2px;
-  background:linear-gradient(168deg,#FFFFFF 0%,#FDFCF8 46%,#F8F5ED 100%);
+  background:linear-gradient(168deg,#FFFFFF 0%,#FEFDFA 44%,#F8F5ED 100%);
   filter:url(#torn);
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.95);
 }
 .login-box::before{
   content:"";position:absolute;left:10px;right:10px;top:12px;bottom:10px;z-index:-1;
-  background:rgba(46,58,99,.30);filter:blur(20px);border-radius:10px;
+  background:rgba(34,44,80,.36);filter:blur(22px);border-radius:12px;
 }
-.login-inner{position:relative;z-index:1;padding:56px 40px 46px}
+.login-inner{position:relative;z-index:1;padding:58px 40px 46px}
 .login-inner::before{
-  content:"";position:absolute;inset:13px;border:1px dashed rgba(155,170,200,.5);
+  content:"";position:absolute;inset:13px;border:1px dashed rgba(150,166,198,.55);
   pointer-events:none;border-radius:1px;
 }
-/* 银色徽章 */
 .medal{
-  position:absolute;left:50%;top:-27px;transform:translateX(-50%) rotate(-3deg);z-index:3;
-  width:56px;height:56px;border-radius:50%;display:grid;place-items:center;
-  font-family:var(--latin);font-size:20px;font-weight:600;color:#46547A;
-  background:radial-gradient(circle at 32% 24%,#FFFFFF 0%,#EEF2FA 30%,#CBD4E8 64%,#A3B2D0 100%);
+  position:absolute;left:50%;top:-28px;transform:translateX(-50%) rotate(-3deg);z-index:3;overflow:hidden;
+  width:58px;height:58px;border-radius:50%;display:grid;place-items:center;
+  font-family:var(--latin);font-size:21px;font-weight:600;color:#3E4C74;
+  background:radial-gradient(circle at 32% 24%,#FFFFFF 0%,#EEF2FA 30%,#C7D0E6 64%,#9DADC9 100%);
   box-shadow:
     inset 0 2px 3px rgba(255,255,255,.98),
-    inset 0 -3px 6px rgba(74,90,134,.36),
-    0 0 0 3px #FDFCF8,
-    0 0 0 4px rgba(139,151,184,.55),
-    0 12px 22px -8px rgba(30,39,72,.45);
+    inset 0 -3px 7px rgba(64,80,120,.40),
+    0 0 0 3px #FEFDFA,
+    0 0 0 4px rgba(133,147,182,.6),
+    0 14px 26px -8px rgba(24,32,60,.50);
   transition:transform .7s var(--e);
+  animation:sealDrop 1.05s var(--e) .2s backwards;
 }
-.medal::before{
-  content:"";position:absolute;inset:6px;border-radius:50%;
-  border:1px dashed rgba(74,90,134,.32);
+.medal::after{
+  content:"";position:absolute;top:-40%;left:0;width:34%;height:180%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.9),transparent);
+  animation:shine 6s ease-in-out 2s infinite;
 }
+.medal::before{content:"";position:absolute;inset:6px;border-radius:50%;border:1px dashed rgba(64,80,120,.34)}
 .login-inner:hover .medal{transform:translateX(-50%) rotate(3deg)}
 .login-box h1{
-  font-family:var(--cn);font-size:25px;font-weight:700;letter-spacing:.34em;
+  font-family:var(--cn);font-size:26px;font-weight:700;letter-spacing:.34em;
   text-indent:.34em;text-align:center;color:var(--ink);line-height:1.3;
+  animation:inkIn .9s var(--e) .35s backwards;
 }
 .login-box .fr{
   display:block;text-align:center;font-family:var(--latin);font-style:italic;
-  font-size:15px;color:var(--blue);letter-spacing:.04em;margin-top:4px;
+  font-size:15px;color:var(--blue);letter-spacing:.04em;margin-top:5px;
+  animation:riseIn .8s var(--e) .5s backwards;
 }
 .login-box .rule{
-  position:relative;height:1px;margin:22px auto 24px;width:70%;
-  background:linear-gradient(90deg,transparent,rgba(139,151,184,.85),transparent);
+  position:relative;height:1px;margin:22px auto 24px;width:72%;
+  background:linear-gradient(90deg,transparent,rgba(133,147,182,.9),transparent);
 }
 .login-box .rule::after{
   content:"❦";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-  background:#FDFCF8;padding:0 9px;font-size:10px;color:var(--silver);line-height:1;
+  background:#FEFDFA;padding:0 10px;font-size:10px;color:var(--silver);line-height:1;
 }
 label.tag{display:block;font-size:9px;letter-spacing:.3em;color:var(--muted);text-transform:uppercase;margin:0 0 6px}
 #err{color:var(--bad);font-size:11.5px;letter-spacing:.08em;margin-top:14px;min-height:18px;text-align:center}
-/* 邮戳 */
 .postmark{
-  position:absolute;right:-6px;bottom:30px;width:68px;height:68px;border-radius:50%;`n  border:1px dashed rgba(30,39,72,.34);transform:rotate(-13deg);display:grid;place-items:center;
-  font-family:var(--latin);font-size:7.5px;letter-spacing:.22em;color:rgba(30,39,72,.48);
+  position:absolute;right:-8px;bottom:30px;width:70px;height:70px;border-radius:50%;
+  border:1px dashed rgba(24,32,60,.34);transform:rotate(-13deg);display:grid;place-items:center;
+  font-family:var(--latin);font-size:7.5px;letter-spacing:.22em;color:rgba(24,32,60,.5);
   pointer-events:none;z-index:2;
 }
-.postmark::before{content:"";position:absolute;inset:6px;border-radius:50%;border:1px solid rgba(30,39,72,.13)}
+.postmark::before{content:"";position:absolute;inset:6px;border-radius:50%;border:1px solid rgba(24,32,60,.16)}
 .postmark::after{
-  content:"";position:absolute;left:-32px;top:30px;width:26px;height:1px;background:rgba(30,39,72,.15);
-  box-shadow:0 3.5px 0 rgba(30,39,72,.10),0 -3.5px 0 rgba(30,39,72,.10);
+  content:"";position:absolute;left:-34px;top:32px;width:28px;height:1px;background:rgba(24,32,60,.18);
+  box-shadow:0 4px 0 rgba(24,32,60,.12),0 -4px 0 rgba(24,32,60,.12);
 }
 
-/* ================= 表单元素 ================= */
+/* ======================= 控件 ======================= */
 input,textarea{
   width:100%;background:var(--paper-w);border:0;border-radius:1px;color:var(--ink);
   padding:11px 13px;font-size:13px;font-family:var(--cn);outline:none;
-  box-shadow:inset 0 0 0 .6px rgba(102,113,143,.30),inset 0 1px 1.5px rgba(30,39,72,.05);
-  transition:box-shadow .24s var(--e);
+  box-shadow:inset 0 0 0 .7px rgba(96,110,146,.34),inset 0 1.5px 2px rgba(24,32,60,.06);
+  transition:box-shadow .24s var(--e),background .24s var(--e);
 }
-input::placeholder,textarea::placeholder{color:rgba(30,39,72,.26);letter-spacing:.04em}
+input::placeholder,textarea::placeholder{color:rgba(24,32,60,.26);letter-spacing:.04em}
+input:hover,textarea:hover{box-shadow:inset 0 0 0 .7px rgba(96,110,146,.5),inset 0 1.5px 2px rgba(24,32,60,.06)}
 input:focus,textarea:focus{
-  box-shadow:inset 0 0 0 1px rgba(139,158,196,.9),0 0 0 3px rgba(198,206,228,.40);
+  box-shadow:inset 0 0 0 1px rgba(110,128,170,.95),0 0 0 3px rgba(180,191,216,.45);
+  background:#FFFEFA;
 }
 textarea{min-height:116px;resize:vertical;line-height:1.8}
 label{
@@ -127,68 +162,146 @@ label{
   text-transform:uppercase;margin:18px 0 6px;
 }
 button{
+  position:relative;overflow:hidden;
   font-family:var(--cn);font-size:12.5px;font-weight:600;letter-spacing:.16em;
-  padding:10px 23px;border:0;border-radius:1px;cursor:pointer;color:#FBF9F4;
-  background:linear-gradient(180deg,#4E5F88 0%,#3E4E74 58%,#364468 100%);
+  padding:11px 24px;border:0;border-radius:1px;cursor:pointer;color:#FCFAF5;
+  background:linear-gradient(180deg,#54658F 0%,#41527B 56%,#364469 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.18),
-    0 1px 2px rgba(30,39,72,.22),
-    0 10px 20px -10px rgba(30,39,72,.52);
+    inset 0 1px 0 rgba(255,255,255,.20),
+    0 1px 2px rgba(24,32,60,.26),
+    0 10px 22px -10px rgba(24,32,60,.58);
   transition:transform .3s var(--e),box-shadow .3s var(--e),filter .3s var(--e);
 }
+/* 按钮扫光 */
+button::after{
+  content:"";position:absolute;top:-50%;left:0;width:26%;height:200%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);
+  transform:translateX(-180%) rotate(14deg);
+  transition:transform .7s var(--e);
+}
+button:hover::after{transform:translateX(420%) rotate(14deg)}
 button:hover{
-  transform:translateY(-1.5px);filter:brightness(1.08);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 2px 3px rgba(30,39,72,.2),0 16px 28px -12px rgba(30,39,72,.55);
+  transform:translateY(-1.5px);filter:brightness(1.07);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.26),0 2px 3px rgba(24,32,60,.22),0 16px 30px -12px rgba(24,32,60,.6);
 }
-button:active{transform:translateY(0);filter:brightness(.97)}
+button:active{transform:translateY(1px) scale(.994);filter:brightness(.97)}
 button.ghost{
-  background:linear-gradient(180deg,#FFFDF8,#F8F5ED);color:var(--ink-2);
-  box-shadow:inset 0 0 0 .6px rgba(102,113,143,.34),0 1px 2px rgba(30,39,72,.07);
+  background:linear-gradient(180deg,#FFFFFF,#F7F3EA);color:var(--ink-2);
+  box-shadow:inset 0 0 0 .7px rgba(96,110,146,.36),0 1px 2px rgba(24,32,60,.08);
 }
-button.ghost:hover{background:#FFFFFF;color:var(--ink);box-shadow:inset 0 0 0 .7px rgba(139,158,196,.8),0 8px 16px -9px rgba(30,39,72,.3)}
-button.danger{background:linear-gradient(180deg,#A86666,#8B4A4A)}
+button.ghost::after{background:linear-gradient(90deg,transparent,rgba(140,158,196,.28),transparent)}
+button.ghost:hover{background:#FFFFFF;color:var(--ink);box-shadow:inset 0 0 0 .8px rgba(110,128,170,.85),0 8px 18px -9px rgba(24,32,60,.32)}
 
-/* ================= 舞台与纸 ================= */
+/* ======================= 吊牌导航栏 ======================= */
 #app{display:none}
-.stage{display:flex;justify-content:center;padding:40px 26px 90px;min-height:100vh}
-.sheet{position:relative;width:100%;max-width:1120px;isolation:isolate}
-/* 纸的投影（独立层，避免被撕边滤镜裁掉） */
+.rail{
+  position:fixed;left:0;top:0;bottom:0;width:86px;z-index:20;
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding:20px 0 18px;overflow-y:auto;overflow-x:hidden;
+  background:linear-gradient(180deg,rgba(255,255,255,.62),rgba(255,255,255,.18));
+  box-shadow:inset -1px 0 0 rgba(255,255,255,.7),6px 0 30px -20px rgba(24,32,60,.4);
+  backdrop-filter:blur(7px);
+}
+.rail::before{
+  content:"";position:absolute;left:50%;top:58px;bottom:54px;width:1px;
+  transform-origin:50% 0;transform:translateX(-.5px);
+  background:linear-gradient(180deg,transparent,#B4BFD8 5%,#DCE2F1 34%,#C6CEE4 66%,#B4BFD8 95%,transparent);
+  box-shadow:0 0 7px rgba(220,226,241,.95);
+  animation:cordDraw .9s var(--e) .1s backwards;
+}
+.rail-brand{
+  position:relative;z-index:2;width:44px;height:44px;flex:none;border-radius:50%;
+  display:grid;place-items:center;font-size:17px;color:#42507A;
+  background:radial-gradient(circle at 34% 26%,#FFFFFF,#E9EEF8 34%,#C7D0E6 70%,#A2B1CD 100%);
+  box-shadow:inset 0 2px 3px rgba(255,255,255,.96),inset 0 -2px 5px rgba(64,80,120,.34),
+    0 0 0 2.5px rgba(255,255,255,.85),0 8px 16px -6px rgba(24,32,60,.42);
+  animation:sealDrop 1s var(--e) .15s backwards;
+}
+.rail a[data-p]{
+  position:relative;z-index:2;width:62px;min-height:60px;flex:none;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  padding:11px 3px 7px;cursor:pointer;
+  background:linear-gradient(180deg,#FFFFFF 0%,#FAF7EF 100%);
+  clip-path:polygon(0 0,100% 0,100% 100%,88% 92%,76% 100%,64% 92%,52% 100%,40% 92%,28% 100%,16% 92%,0 100%);
+  filter:drop-shadow(0 1px .8px rgba(24,32,60,.22)) drop-shadow(0 4px 7px rgba(24,32,60,.16));
+  transition:transform .42s var(--e),filter .42s var(--e),background .3s var(--e);
+  animation:tagIn .6s var(--e) backwards;
+}
+/* 挂孔 */
+.rail a[data-p]::before{
+  content:"";position:absolute;top:5px;left:50%;transform:translateX(-50%);
+  width:7px;height:7px;border-radius:50%;
+  background:rgba(24,32,60,.14);
+  box-shadow:inset 0 1px 1.5px rgba(24,32,60,.45),0 1px 0 rgba(255,255,255,1);
+}
+.rail a[data-p] .ti{font-size:15px;line-height:1;margin-top:3px}
+.rail a[data-p] .tl{
+  font-size:8px;letter-spacing:.06em;color:var(--ink-3);line-height:1.25;
+  text-align:center;margin-top:2px;
+}
+.rail a[data-p]:hover{transform:translateY(-2px) rotate(-2.5deg);filter:drop-shadow(0 2px 1.5px rgba(24,32,60,.22)) drop-shadow(0 10px 16px rgba(24,32,60,.24))}
+.rail a[data-p].on{
+  background:linear-gradient(180deg,#FFFFFF 0%,#EDF2FD 60%,#E1EAFB 100%);
+  filter:drop-shadow(0 2px 2px rgba(24,32,60,.26)) drop-shadow(0 12px 20px rgba(50,66,110,.3));
+  animation:tagIn .6s var(--e) backwards, sway 6.5s ease-in-out 1.6s infinite alternate;
+}
+.rail a[data-p].on .tl{color:var(--ink);font-weight:600}
+.rail a[data-p].on::before{background:rgba(24,32,60,.2);box-shadow:inset 0 1px 2px rgba(24,32,60,.5),0 0 6px rgba(180,191,216,.9)}
+.rail a[data-p]:nth-of-type(1){animation-delay:.06s}
+.rail a[data-p]:nth-of-type(2){animation-delay:.11s}
+.rail a[data-p]:nth-of-type(3){animation-delay:.16s}
+.rail a[data-p]:nth-of-type(4){animation-delay:.21s}
+.rail a[data-p]:nth-of-type(5){animation-delay:.26s}
+.rail a[data-p]:nth-of-type(6){animation-delay:.31s}
+.rail a[data-p]:nth-of-type(7){animation-delay:.36s}
+.rail a[data-p]:nth-of-type(8){animation-delay:.41s}
+.rail a[data-p]:nth-of-type(9){animation-delay:.46s}
+.rail .gap{flex:1;min-height:8px}
+.rail a[data-act]{
+  position:relative;z-index:2;width:56px;padding:7px 2px;text-align:center;
+  font-size:8.5px;letter-spacing:.08em;color:var(--muted);border-radius:2px;
+  transition:color .2s,background .2s;
+}
+.rail a[data-act]:hover{color:var(--ink-2);background:rgba(255,255,255,.6)}
+
+/* ======================= 舞台 / 纸 ======================= */
+.stage{display:flex;justify-content:center;padding:44px 30px 96px 116px;min-height:100vh}
+.sheet{position:relative;width:100%;max-width:1080px;isolation:isolate}
 .sheet::before{
-  content:"";position:absolute;left:10px;right:10px;top:14px;bottom:-10px;z-index:-2;
-  background:rgba(38,50,90,.34);filter:blur(26px);border-radius:10px;
+  content:"";position:absolute;left:12px;right:12px;top:16px;bottom:-12px;z-index:-2;
+  background:rgba(28,38,70,.42);filter:blur(30px);border-radius:12px;
 }
-/* 叠在下面、略微错位的一张纸 */
 .sheet-bg2{
-  position:absolute;inset:7px 5px 9px;z-index:-1;
-  background:linear-gradient(168deg,#FBF9F3 0%,#F2EEE4 100%);
-  filter:url(#torn);
-  transform:rotate(.6deg);
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.75);
+  position:absolute;inset:8px 6px 10px;z-index:-1;
+  background:linear-gradient(168deg,#FBF9F3,#F0ECDF);
+  filter:url(#torn);transform:rotate(.65deg);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.8);
 }
-/* 撕边纸：白色纸面 + 噪声位移滤镜 */
 .sheet-bg{
   position:absolute;inset:0;z-index:0;
-  background:linear-gradient(168deg,#FFFFFF 0%,#FEFDFA 40%,#FBF9F4 78%,#F7F4ED 100%);
+  background:linear-gradient(168deg,#FFFFFF 0%,#FEFDFA 38%,#FAF8F2 74%,#F6F3EC 100%);
   filter:url(#torn);
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.95);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.96);
 }
-.sheet-inner{position:relative;z-index:1;padding:50px 54px 58px}
+.sheet-inner{position:relative;z-index:1;padding:52px 56px 40px}
 
 /* ---------- 档案抬头 ---------- */
 .dossier{
   display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;
-  padding-bottom:16px;border-bottom:1px solid rgba(139,151,184,.45);
+  padding-bottom:16px;border-bottom:1px solid rgba(133,147,182,.5);
 }
-.dossier-title{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.dossier-title{display:flex;align-items:baseline;gap:15px;flex-wrap:wrap}
 .dossier-no{
   font-family:var(--latin);font-size:10px;letter-spacing:.24em;color:var(--muted);
-  align-self:flex-start;padding-top:8px;
+  align-self:flex-start;padding-top:9px;white-space:nowrap;
 }
 .dossier h1{
-  font-family:var(--cn);font-size:38px;font-weight:700;letter-spacing:.12em;`n  line-height:1.14;color:var(--ink);text-indent:.12em;
+  font-family:var(--cn);font-size:40px;font-weight:700;letter-spacing:.1em;
+  line-height:1.12;color:var(--ink);text-indent:.1em;
+  animation:inkIn .8s var(--e) .05s backwards;
 }
 .dossier em{
-  font-family:var(--latin);font-style:italic;font-size:24px;letter-spacing:.02em;
+  font-family:var(--latin);font-style:italic;font-size:26px;letter-spacing:.02em;
   color:var(--blue);line-height:1;
 }
 .dossier-meta{
@@ -196,153 +309,104 @@ button.danger{background:linear-gradient(180deg,#A86666,#8B4A4A)}
   color:var(--muted);line-height:2.1;text-transform:uppercase;white-space:nowrap;flex:none;
 }
 .dossier-meta b{font-weight:600;color:var(--ink-3);letter-spacing:.16em}
+/* 抬头下的双线 */
+.dossier::after{
+  content:"";position:absolute;left:56px;right:56px;margin-top:3px;
+  border-top:1px solid rgba(133,147,182,.28);
+}
 
-/* ---------- 两栏 ---------- */
-.body-grid{display:grid;grid-template-columns:200px minmax(0,1fr);gap:34px;align-items:start;padding-top:34px}
-main{min-width:0}
-
-/* ---------- 索引：手撕标签 ---------- */
-aside.index{position:relative}
-.index-h{
-  font-family:var(--latin);font-style:italic;font-size:19px;color:var(--ink-2);
-  letter-spacing:.02em;margin-bottom:14px;display:flex;align-items:baseline;gap:7px;
-}
-.index-h em{font-family:var(--cn);font-style:normal;font-size:10px;letter-spacing:.3em;color:var(--muted)}
-aside.index a{
-  position:relative;display:grid;grid-template-columns:19px 1fr;column-gap:6px;row-gap:0;
-  align-items:center;padding:8px 12px 8px 13px;margin-bottom:8px;cursor:pointer;
-  background:linear-gradient(180deg,#F8F4EA 0%,#F1ECDF 100%);
-  clip-path:polygon(
-    0 3%,7% 0.5%,21% 2%,36% 0,52% 2.5%,68% 0,83% 2%,94% 0.5%,100% 2%,
-    99% 20%,100% 40%,98.5% 58%,100% 76%,98.8% 100%,
-    86% 98.5%,70% 100%,54% 98%,38% 100%,22% 98.5%,9% 100%,0 98%,
-    1.4% 78%,0 58%,1.5% 38%,0 18%);
-  /* clip-path 会剪掉 box-shadow，所以投影用 filter:drop-shadow（跟随轮廓） */
-  filter:drop-shadow(0 1px .8px rgba(30,39,72,.18)) drop-shadow(0 5px 7px rgba(30,39,72,.14));
-  transition:transform .38s var(--e),filter .38s var(--e),background .3s var(--e);
-}
-aside.index a:nth-child(odd){transform:rotate(-.5deg)}
-aside.index a:nth-child(even){transform:rotate(.4deg)}
-aside.index a i{
-  font-family:var(--latin);font-style:italic;font-size:11px;color:#A3B0C9;
-  letter-spacing:.02em;text-align:right;
-}
-aside.index a b{
-  grid-column:2;font-family:var(--cn);font-size:12.5px;font-weight:600;
-  letter-spacing:.1em;color:var(--ink-2);line-height:1.5;
-}
-aside.index a small{
-  grid-column:2;font-family:var(--latin);font-size:7.5px;letter-spacing:.18em;
-  color:rgba(30,39,72,.30);text-transform:uppercase;line-height:1.3;
-}
-aside.index a:hover{
-  transform:rotate(0deg) translateX(2px);
-  filter:drop-shadow(0 2px 1.5px rgba(30,39,72,.18)) drop-shadow(0 10px 14px rgba(30,39,72,.20));
-}
-aside.index a.on{
-  transform:rotate(-.9deg) translateX(3px);
-  background:linear-gradient(180deg,#FFFFFF,#EFF4FD 58%,#E3EBFA);
-  filter:drop-shadow(0 2px 2px rgba(30,39,72,.22)) drop-shadow(0 12px 18px rgba(58,76,124,.26));
-}
-aside.index a.on b{color:var(--ink)}
-aside.index a.on i{color:var(--blue)}
-/* 选中项挂的小坠子 */
-aside.index a.on::after{
-  content:"";position:absolute;right:-7px;top:50%;transform:translateY(-50%);
-  width:7px;height:7px;border-radius:50%;
-  background:radial-gradient(circle at 35% 30%,#FFFFFF,#DCE2F1 55%,#A9B8D4 100%);
-  box-shadow:inset 0 0 0 .6px rgba(102,113,143,.5),0 0 8px rgba(169,184,212,.9);
-}
-aside.index .idx-foot{margin-top:22px;display:flex;flex-direction:column;gap:2px}
-aside.index .idx-foot a{
-  display:block;padding:5px 8px;background:none;clip-path:none;box-shadow:none;
-  transform:none!important;font-size:10.5px;letter-spacing:.1em;color:var(--muted);
-  border-bottom:1px solid transparent;transition:color .2s,border-color .2s;
-}
-aside.index .idx-foot a:hover{color:var(--ink-3);border-bottom-color:rgba(139,151,184,.45)}
-
-/* ---------- 卡片 ---------- */
+main{padding-top:32px;min-width:0}
 .page>.sub{
-  color:var(--muted);font-size:11px;letter-spacing:.1em;margin:0 0 26px;
-  font-style:italic;
+  color:var(--muted);font-size:11px;letter-spacing:.1em;margin:0 0 26px;font-style:italic;
 }
 .page>.sub::before{content:"❦ ";color:var(--silver-2);font-style:normal;letter-spacing:0}
 
+/* ---------- 卡片 ---------- */
 .card{
-  position:relative;margin-bottom:22px;padding:26px 27px 22px;border-radius:1px;
+  position:relative;margin-bottom:22px;padding:28px 28px 24px;border-radius:1px;
   background:linear-gradient(180deg,#FFFFFF 0%,#FDFBF6 58%,#F9F6EF 100%);
   box-shadow:
-    inset 0 0 0 .7px rgba(102,113,143,.24),
-    0 1px 2px rgba(30,39,72,.07),
-    0 16px 34px -22px rgba(30,39,72,.32);
+    inset 0 0 0 .7px rgba(96,110,146,.26),
+    0 1px 2px rgba(24,32,60,.08),
+    0 18px 36px -24px rgba(24,32,60,.38);
   transition:box-shadow .45s var(--e),transform .45s var(--e);
 }
 .card::before{
-  content:"";position:absolute;inset:7px;border:1px dashed rgba(155,170,200,.46);
+  content:"";position:absolute;inset:7px;border:1px dashed rgba(150,166,198,.5);
   pointer-events:none;border-radius:1px;
 }
+.card::after{
+  content:"";position:absolute;inset:13px;pointer-events:none;--fl:rgba(133,147,182,.6);
+  background:
+    linear-gradient(var(--fl),var(--fl)) 0 0/15px 1px no-repeat,
+    linear-gradient(var(--fl),var(--fl)) 0 0/1px 15px no-repeat,
+    linear-gradient(var(--fl),var(--fl)) 100% 0/15px 1px no-repeat,
+    linear-gradient(var(--fl),var(--fl)) 100% 0/1px 15px no-repeat,
+    linear-gradient(var(--fl),var(--fl)) 0 100%/15px 1px no-repeat,
+    linear-gradient(var(--fl),var(--fl)) 0 100%/1px 15px no-repeat,
+    linear-gradient(var(--fl),var(--fl)) 100% 100%/15px 1px no-repeat,
+    linear-gradient(var(--fl),var(--fl)) 100% 100%/1px 15px no-repeat;
+}
 .card:hover{
-  transform:translateY(-1px);
+  transform:translateY(-1.5px);
   box-shadow:
-    inset 0 0 0 .7px rgba(102,113,143,.30),
-    0 2px 3px rgba(30,39,72,.08),
-    0 24px 44px -24px rgba(30,39,72,.36);
+    inset 0 0 0 .7px rgba(96,110,146,.34),
+    0 2px 3px rgba(24,32,60,.09),
+    0 26px 46px -26px rgba(24,32,60,.44);
 }
 .card h3{
-  position:relative;font-family:var(--cn);font-size:14px;font-weight:700;
-  letter-spacing:.14em;color:var(--ink);margin-bottom:9px;padding-bottom:10px;
+  position:relative;font-family:var(--cn);font-size:14.5px;font-weight:700;
+  letter-spacing:.14em;color:var(--ink);margin-bottom:9px;padding-bottom:11px;
 }
-.card h3::before{
-  content:"";position:absolute;left:0;bottom:0;width:34px;height:1px;
-  background:linear-gradient(90deg,rgba(139,151,184,.9),transparent);
+.card h3::after{
+  content:"";position:absolute;left:0;bottom:0;width:36px;height:1px;
+  background:linear-gradient(90deg,rgba(133,147,182,.95),transparent);
 }
 .hint{
   font-size:11.5px;color:var(--ink-3);line-height:1.95;letter-spacing:.02em;
-  background:rgba(220,226,241,.34);
-  box-shadow:inset 0 0 0 .6px rgba(155,170,200,.38);
-  padding:12px 14px;margin:11px 0;border-radius:1px;
+  background:rgba(214,222,240,.36);
+  box-shadow:inset 0 0 0 .7px rgba(150,166,198,.42);
+  padding:13px 15px;margin:11px 0;border-radius:1px;
 }
 .hint code{
-  font-family:Consolas,Monaco,monospace;font-size:11px;color:#8B4A4A;
-  background:rgba(139,74,74,.06);padding:1px 5px;letter-spacing:0;
+  font-family:Consolas,Monaco,monospace;font-size:11px;color:#8B4343;
+  background:rgba(139,67,67,.07);padding:1px 5px;letter-spacing:0;
 }
-.row{display:flex;gap:11px;margin-top:17px;align-items:center;flex-wrap:wrap}
+.row{display:flex;gap:11px;margin-top:18px;align-items:center;flex-wrap:wrap}
 .row input{width:228px}
 
-/* ---------- 概览：吊牌（顶部缺口） ---------- */
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:17px;margin-bottom:28px}
+/* ---------- 概览：票根 ---------- */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(166px,1fr));gap:16px;margin-bottom:28px}
 .stat{
-  position:relative;padding:26px 20px 24px;border-radius:1px;
-  background:linear-gradient(180deg,#FFFFFF 0%,#FCFAF4 60%,#F7F4EC 100%);
+  position:relative;padding:27px 20px 25px;border-radius:1px;
+  background:linear-gradient(180deg,#FFFFFF 0%,#FCFAF4 58%,#F6F3EA 100%);
   box-shadow:
-    inset 0 0 0 .7px rgba(102,113,143,.24),
-    0 1px 2px rgba(30,39,72,.08),
-    0 14px 28px -18px rgba(30,39,72,.34);
+    inset 0 0 0 .7px rgba(96,110,146,.26),
+    0 1px 2px rgba(24,32,60,.09),
+    0 16px 30px -20px rgba(24,32,60,.4);
   transition:transform .45s var(--e),box-shadow .45s var(--e);
 }
-/* 顶部细亮线 + 底部虚线（票根感） */
-.stat::before{
-  content:"";position:absolute;left:12px;right:12px;top:0;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(139,151,184,.8),transparent);
+.stat::before,.stat::after{
+  content:"";position:absolute;left:11px;right:11px;height:1px;
+  background:repeating-linear-gradient(90deg,rgba(150,166,198,.9) 0 3px,transparent 3px 8px);
 }
-.stat::after{
-  content:"";position:absolute;left:12px;right:12px;bottom:10px;
-  border-bottom:1px dashed rgba(155,170,200,.55);
-}
+.stat::before{top:8px}
+.stat::after{bottom:8px}
 .stat b{
-  display:block;font-family:var(--latin);font-size:31px;font-weight:600;
-  letter-spacing:.01em;line-height:1.12;color:var(--ink);
+  display:block;font-family:var(--latin);font-size:32px;font-weight:600;
+  letter-spacing:.01em;line-height:1.1;color:var(--ink);
+  font-variant-numeric:tabular-nums;
 }
 .stat span{
   display:block;margin-top:8px;font-family:var(--latin);font-size:8.5px;
   letter-spacing:.26em;color:var(--muted);text-transform:uppercase;
 }
 .stat:hover{
-  transform:translateY(-2.5px);
+  transform:translateY(-3px);
   box-shadow:
-    inset 0 0 0 .7px rgba(102,113,143,.30),
-    0 2px 4px rgba(30,39,72,.09),
-    0 22px 38px -18px rgba(30,39,72,.38);
+    inset 0 0 0 .7px rgba(96,110,146,.36),
+    0 2px 4px rgba(24,32,60,.1),
+    0 24px 40px -18px rgba(24,32,60,.46);
 }
 
 /* ---------- 表格 ---------- */
@@ -350,100 +414,99 @@ table{width:100%;border-collapse:collapse;font-size:12px}
 th{
   text-align:left;padding:9px 11px 8px;color:var(--muted);font-weight:600;
   font-family:var(--latin);font-size:8.5px;letter-spacing:.22em;text-transform:uppercase;
-  border-bottom:1px solid rgba(139,151,184,.45);
+  border-bottom:1px solid rgba(133,147,182,.5);
 }
-td{padding:11px;color:var(--ink-3);border-bottom:1px solid rgba(198,206,228,.5)}
-tbody tr{transition:background .26s var(--e)}
-tbody tr:hover td{background:rgba(220,226,241,.34)}
+td{padding:11px;color:var(--ink-3);border-bottom:1px solid rgba(190,200,222,.55)}
+tbody tr{transition:background .26s var(--e),transform .26s var(--e)}
+tbody tr:hover td{background:rgba(214,222,240,.4)}
 tbody tr:last-child td{border-bottom:0}
 td .tag{
   padding:1px 9px;border-radius:999px;font-size:9.5px;letter-spacing:.12em;
-  box-shadow:inset 0 0 0 .6px currentColor;font-family:var(--latin);
+  box-shadow:inset 0 0 0 .7px currentColor;font-family:var(--latin);
 }
-.tag.ordinary{color:#4A5578;background:rgba(169,184,212,.14)}
-.tag.premium{color:#8B4A4A;background:rgba(139,74,74,.07)}
-.tag.redeem{color:var(--sage);background:rgba(94,139,106,.08)}
+.tag.ordinary{color:#44507A;background:rgba(150,166,198,.16)}
+.tag.premium{color:#8B4343;background:rgba(139,67,67,.07)}
+.tag.redeem{color:var(--sage);background:rgba(78,125,92,.09)}
 
 /* ---------- 通知 ---------- */
 #toast{position:fixed;top:26px;right:26px;z-index:99;display:flex;flex-direction:column;gap:9px}
 #toast div{
-  position:relative;padding:12px 18px 12px 21px;border-radius:1px;
-  background:linear-gradient(180deg,#FFFDF8,#FAF6EC);color:var(--ink-2);
+  position:relative;padding:13px 19px 13px 22px;border-radius:1px;
+  background:linear-gradient(180deg,#FFFFFF,#FAF6EC);color:var(--ink-2);
   font-size:11.5px;letter-spacing:.06em;
   box-shadow:
-    inset 0 0 0 .6px rgba(102,113,143,.24),
-    0 2px 4px rgba(30,39,72,.09),
-    0 18px 36px -18px rgba(30,39,72,.40);
-  animation:fade .38s var(--e);
+    inset 0 0 0 .7px rgba(96,110,146,.3),
+    0 2px 4px rgba(24,32,60,.1),
+    0 20px 40px -20px rgba(24,32,60,.46);
+  animation:toastIn .46s var(--e) backwards;
 }
 #toast div::before{
   content:"";position:absolute;left:0;top:0;bottom:0;width:2.5px;background:var(--sage);
 }
 #toast .bad::before{background:var(--bad)}
 #toast .bad{color:var(--bad)}
-@keyframes fade{from{opacity:0;transform:translateY(-8px) scale(.985)}}
 
 /* ---------- 弹窗 ---------- */
 dialog{
-  border:0;border-radius:2px;padding:32px 30px 26px;color:var(--ink);
-  background:linear-gradient(172deg,#FFFDF8,#FAF6EC 62%,#F6F2E7);
-  width:min(440px,92vw);position:relative;
+  border:0;border-radius:2px;padding:34px 32px 28px;color:var(--ink);
+  background:linear-gradient(172deg,#FFFFFF,#FAF6EC 62%,#F6F2E7);
+  width:min(448px,92vw);position:relative;
   box-shadow:
-    inset 0 0 0 .6px rgba(102,113,143,.24),
-    0 34px 80px -34px rgba(30,39,72,.55),
-    0 0 0 6px rgba(255,255,255,.55);
+    inset 0 0 0 .7px rgba(96,110,146,.3),
+    0 40px 90px -38px rgba(24,32,60,.62),
+    0 0 0 6px rgba(255,255,255,.6);
+  animation:unfold .5s var(--e) backwards;
 }
-dialog::before{
-  content:"";position:absolute;inset:10px;border:1px dashed rgba(155,170,200,.5);pointer-events:none;
-}
-dialog::backdrop{background:rgba(30,39,72,.34);backdrop-filter:blur(2px)}
-dialog h3{font-family:var(--cn);font-size:16px;font-weight:700;letter-spacing:.12em;margin-bottom:2px}
-dialog .row{margin-top:22px}
+dialog::before{content:"";position:absolute;inset:10px;border:1px dashed rgba(150,166,198,.55);pointer-events:none}
+dialog::backdrop{background:rgba(24,32,60,.38);backdrop-filter:blur(2.5px)}
+dialog h3{font-family:var(--cn);font-size:17px;font-weight:700;letter-spacing:.12em;margin-bottom:2px}
+dialog .row{margin-top:24px}
 
-/* ---------- 角落线描小物 ---------- */
+/* ---------- 小物 ---------- */
 .orn-layer{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:hidden}
-.orn-layer svg{position:absolute;opacity:.55}
-.orn-a{left:-6px;bottom:-4px;width:132px;height:132px}
-.orn-b{right:6px;top:8px;width:96px;height:96px;opacity:.4!important}
-.orn-c{left:44%;top:-8px;width:52px;height:52px;opacity:.35!important}
-/* 大朵淡窗花水印 */
-.orn-w{right:-70px;bottom:-90px;width:430px;height:430px;opacity:.11!important}
+.orn-layer svg{position:absolute}
+.orn-a{left:-8px;bottom:-6px;width:150px;height:150px;opacity:.6;animation:drift 12s ease-in-out infinite}
+.orn-b{right:4px;top:6px;width:104px;height:104px;opacity:.42;animation:drift 15s ease-in-out 1.4s infinite reverse}
+.orn-c{left:45%;top:-10px;width:54px;height:54px;opacity:.3;animation:twinkle 7s ease-in-out infinite}
+.orn-w{right:-80px;bottom:-100px;width:440px;height:440px;opacity:.09}
 
 /* ---------- 页脚 ---------- */
 .sheet-foot{
-  display:flex;align-items:center;gap:14px;margin-top:38px;
+  display:flex;align-items:center;gap:14px;margin-top:34px;
   font-family:var(--latin);font-size:8px;letter-spacing:.24em;
-  color:rgba(30,39,72,.32);text-transform:uppercase;
+  color:rgba(24,32,60,.34);text-transform:uppercase;
 }
 .sheet-foot::before,.sheet-foot::after{content:"";flex:1;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(139,151,184,.55))}
-.sheet-foot::after{background:linear-gradient(90deg,rgba(139,151,184,.55),transparent)}
+  background:linear-gradient(90deg,transparent,rgba(133,147,182,.6))}
+.sheet-foot::after{background:linear-gradient(90deg,rgba(133,147,182,.6),transparent)}
 .sheet-foot em{font-style:normal}
 
 /* ---------- 响应式 ---------- */
-@media(max-width:940px){
-  .stage{padding:18px 12px 60px}
-  .sheet-inner{padding:30px 22px 40px}
-  .dossier h1{font-size:26px}
+@media(max-width:1080px){.stage{padding:30px 20px 70px 106px}.sheet-inner{padding:34px 28px 32px}}
+@media(max-width:820px){
+  .rail{position:static;width:auto;flex-direction:row;flex-wrap:wrap;gap:7px;padding:12px;
+    box-shadow:inset 0 -1px 0 rgba(255,255,255,.7)}
+  .rail::before,.rail-brand{display:none}
+  .rail a[data-p]{width:auto;min-height:auto;padding:7px 11px;flex-direction:row;gap:5px;
+    clip-path:none;border-radius:2px}
+  .rail a[data-p]::before{display:none}
+  .rail a[data-p] .tl{font-size:11px;margin-top:0}
+  .rail .gap{display:none}
+  .stage{padding:16px 12px 60px;display:block}
+  .sheet-inner{padding:26px 18px 28px}
+  .dossier h1{font-size:27px}
   .dossier em{font-size:19px}
-  .body-grid{grid-template-columns:1fr;gap:22px;padding-top:24px}
-  aside.index{display:flex;flex-wrap:wrap;gap:7px}
-  .index-h{width:100%;margin-bottom:2px}
-  aside.index a{margin-bottom:0;padding:7px 10px}
-  aside.index a b{font-size:11.5px}
-  aside.index a small{display:none}
-  aside.index .idx-foot{width:100%;flex-direction:row;gap:10px;margin-top:8px}
+  .dossier::after{left:18px;right:18px}
   .orn-layer{display:none}
 }
-@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 
-<!-- 撕边滤镜 -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <filter id="torn" x="-3%" y="-3%" width="106%" height="106%">
-    <feTurbulence type="fractalNoise" baseFrequency="0.012 0.026" numOctaves="4" seed="9" result="n"/>
+    <feTurbulence type="fractalNoise" baseFrequency="0.013 0.027" numOctaves="4" seed="9" result="n"/>
     <feDisplacementMap in="SourceGraphic" in2="n" scale="8" xChannelSelector="R" yChannelSelector="G"/>
   </filter>
 </svg>
@@ -468,32 +531,44 @@ dialog .row{margin-top:22px}
 </div>
 
 <div id="app">
+  <aside class="rail">
+    <div class="rail-brand">❦</div>
+    <a data-p="overview" class="on" onclick="go('overview')"><span class="ti">📊</span><span class="tl">概览</span></a>
+    <a data-p="members" onclick="go('members')"><span class="ti">👥</span><span class="tl">成员</span></a>
+    <a data-p="lottery" onclick="go('lottery')"><span class="ti">🎰</span><span class="tl">抽奖</span></a>
+    <a data-p="template" onclick="go('template')"><span class="ti">📣</span><span class="tl">模板</span></a>
+    <a data-p="member" onclick="go('member')"><span class="ti">💎</span><span class="tl">会员</span></a>
+    <a data-p="wash" onclick="go('wash')"><span class="ti">🧼</span><span class="tl">洗数据</span></a>
+    <a data-p="site" onclick="go('site')"><span class="ti">🌐</span><span class="tl">网站</span></a>
+    <a data-p="botprofile" onclick="go('botprofile')"><span class="ti">🤖</span><span class="tl">资料</span></a>
+    <a data-p="audit" onclick="go('audit')"><span class="ti">📜</span><span class="tl">日志</span></a>
+    <div class="gap"></div>
+    <a data-act="home" href="/" target="_blank">介绍页</a>
+    <a data-act="out" onclick="doLogout()">退出</a>
+  </aside>
+
   <div class="stage">
     <div class="sheet">
       <div class="sheet-bg2"></div>
       <div class="sheet-bg"></div>
       <div class="orn-layer" aria-hidden="true">
-        <!-- 月牙 + 星 -->
-        <svg class="orn-a" viewBox="0 0 100 100" fill="none" stroke="#8B97B8" stroke-width=".9" stroke-linecap="round">
+        <svg class="orn-a" viewBox="0 0 100 100" fill="none" stroke="#8593B6" stroke-width=".9" stroke-linecap="round">
           <path d="M64 14c-14 2-25 13-27 27-2 16 9 30 25 33 5 .8 10 .3 14-1-8 6-19 8-29 5-16-4-27-20-23-36C28 26 44 15 60 14h4z"/>
           <path d="M74 26l2.4 5.6L82 34l-5.6 2.4L74 42l-2.4-5.6L66 34l5.6-2.4L74 26z" stroke-width=".7"/>
-          <circle cx="84" cy="52" r="1.4" fill="#8B97B8" stroke="none"/>
-          <circle cx="70" cy="10" r="1" fill="#8B97B8" stroke="none"/>
+          <circle cx="84" cy="52" r="1.4" fill="#8593B6" stroke="none"/>
+          <circle cx="70" cy="10" r="1" fill="#8593B6" stroke="none"/>
         </svg>
-        <!-- 枝叶 -->
-        <svg class="orn-b" viewBox="0 0 100 100" fill="none" stroke="#8B97B8" stroke-width=".85" stroke-linecap="round">
+        <svg class="orn-b" viewBox="0 0 100 100" fill="none" stroke="#8593B6" stroke-width=".85" stroke-linecap="round">
           <path d="M50 92C50 66 52 44 60 26"/>
           <path d="M56 58c-9-1-16-8-16-18 8 0 15 6 16 18z"/>
           <path d="M58 42c8-2 13-9 12-19-8 1-13 8-12 19z"/>
           <path d="M62 30c-8-1-13-7-13-16 7 0 12 6 13 16z"/>
           <circle cx="60" cy="22" r="2.6"/>
         </svg>
-        <!-- 小星 -->
-        <svg class="orn-c" viewBox="0 0 40 40" fill="none" stroke="#8B97B8" stroke-width=".9">
+        <svg class="orn-c" viewBox="0 0 40 40" fill="none" stroke="#8593B6" stroke-width=".9">
           <path d="M20 4v32M4 20h32M9 9l22 22M31 9L9 31"/>
         </svg>
-        <!-- 淡窗花水印 -->
-        <svg class="orn-w" viewBox="0 0 200 200" fill="none" stroke="#8B97B8" stroke-width=".5">
+        <svg class="orn-w" viewBox="0 0 200 200" fill="none" stroke="#8593B6" stroke-width=".5">
           <circle cx="100" cy="100" r="94"/><circle cx="100" cy="100" r="76"/>
           <circle cx="100" cy="100" r="54"/><circle cx="100" cy="100" r="28"/>
           <path d="M100 6v188M6 100h188M34 34l132 132M166 34L34 166"/>
@@ -514,204 +589,185 @@ dialog .row{margin-top:22px}
           </div>
         </header>
 
-        <div class="body-grid">
-          <aside class="index">
-            <div class="index-h">Index <em>目录</em></div>
-            <a data-p="overview" class="on" onclick="go('overview')"><i>i.</i><b>概览</b><small>Sommaire</small></a>
-            <a data-p="members" onclick="go('members')"><i>ii.</i><b>成员管理</b><small>Membres</small></a>
-            <a data-p="lottery" onclick="go('lottery')"><i>iii.</i><b>抽奖设置</b><small>Loterie</small></a>
-            <a data-p="template" onclick="go('template')"><i>iv.</i><b>通知模板</b><small>Modèles</small></a>
-            <a data-p="member" onclick="go('member')"><i>v.</i><b>会员设置</b><small>Adhésion</small></a>
-            <a data-p="wash" onclick="go('wash')"><i>vi.</i><b>洗数据设置</b><small>Tarifs</small></a>
-            <a data-p="site" onclick="go('site')"><i>vii.</i><b>网站设置</b><small>Site</small></a>
-            <a data-p="botprofile" onclick="go('botprofile')"><i>viii.</i><b>机器人资料</b><small>Profil</small></a>
-            <a data-p="audit" onclick="go('audit')"><i>ix.</i><b>操作记录</b><small>Journal</small></a>
-            <div class="idx-foot">
-              <a href="/" target="_blank">🌐 查看介绍页</a>
-              <a onclick="doLogout()">🚪 退出登录</a>
+        <main>
+          <section id="p-overview" class="page">
+            <div class="sub">机器人实时数据 · 与机器人共用数据库</div>
+            <div class="grid">
+              <div class="stat"><b id="s-users">-</b><span>注册用户</span></div>
+              <div class="stat"><b id="s-members">-</b><span>有效会员</span></div>
+              <div class="stat"><b id="s-lottery">-</b><span>累计抽奖</span></div>
+              <div class="stat"><b id="s-lottery-today">-</b><span>今日抽奖</span></div>
+              <div class="stat"><b id="s-washed">-</b><span>已洗数据（行）</span></div>
             </div>
-          </aside>
+            <div class="card">
+              <h3>最近抽奖 / 兑换记录</h3>
+              <table><thead><tr><th>时间</th><th>用户</th><th>来源</th><th>奖品</th></tr></thead><tbody id="records"></tbody></table>
+            </div>
+          </section>
 
-          <main>
-            <section id="p-overview" class="page">
-              <div class="sub">机器人实时数据 · 与机器人共用数据库</div>
-              <div class="grid">
-                <div class="stat"><b id="s-users">-</b><span>注册用户</span></div>
-                <div class="stat"><b id="s-members">-</b><span>有效会员</span></div>
-                <div class="stat"><b id="s-lottery">-</b><span>累计抽奖</span></div>
-                <div class="stat"><b id="s-lottery-today">-</b><span>今日抽奖</span></div>
-                <div class="stat"><b id="s-washed">-</b><span>已洗数据（行）</span></div>
+          <section id="p-members" class="page" style="display:none">
+            <div class="sub">查看会员剩余天数、洗数据余额、高级券 · 可直接加 / 扣</div>
+            <div class="card">
+              <div class="row" style="margin-bottom:18px">
+                <input id="member-q" placeholder="搜索 ID / 用户名 / 昵称" style="flex:1" onkeydown="if(event.key==='Enter')loadMembers()">
+                <button onclick="loadMembers()">搜索</button>
+                <button class="ghost" onclick="document.getElementById('member-q').value='';loadMembers()">显示全部</button>
               </div>
-              <div class="card">
-                <h3>最近抽奖 / 兑换记录</h3>
-                <table><thead><tr><th>时间</th><th>用户</th><th>来源</th><th>奖品</th></tr></thead><tbody id="records"></tbody></table>
-              </div>
-            </section>
+              <table><thead><tr><th>ID</th><th>用户</th><th>会员</th><th>洗数据余额</th><th>高级券</th><th>操作</th></tr></thead>
+              <tbody id="member-rows"><tr><td colspan="6" style="color:var(--muted)">加载中…</td></tr></tbody></table>
+            </div>
+          </section>
 
-            <section id="p-members" class="page" style="display:none">
-              <div class="sub">查看会员剩余天数、洗数据余额、高级券 · 可直接加 / 扣</div>
-              <div class="card">
-                <div class="row" style="margin-bottom:18px">
-                  <input id="member-q" placeholder="搜索 ID / 用户名 / 昵称" style="flex:1" onkeydown="if(event.key==='Enter')loadMembers()">
-                  <button onclick="loadMembers()">🔍 搜索</button>
-                  <button class="ghost" onclick="document.getElementById('member-q').value='';loadMembers()">显示全部</button>
-                </div>
-                <table><thead><tr><th>ID</th><th>用户</th><th>会员</th><th>洗数据余额</th><th>高级券</th><th>操作</th></tr></thead>
-                <tbody id="member-rows"><tr><td colspan="6" style="color:var(--muted)">加载中…</td></tr></tbody></table>
-              </div>
-            </section>
+          <section id="p-lottery" class="page" style="display:none">
+            <div class="sub">保存后机器人立即生效 · 概率总和 ≤100%，差额自动为「谢谢参与」</div>
+            <div class="card">
+              <h3>普通抽奖奖品池</h3>
+              <div class="hint">格式：<code>类型:数值:概率</code>，逗号分隔。<br>类型：<code>天</code>=会员天数，<code>余额</code>=洗数据余额（元），<code>高级券</code>=高级抽奖次数<br>例：<code>天:1:40,天:3:30,余额:5:5,高级券:1:3</code></div>
+              <textarea id="lottery_prizes"></textarea>
+              <div class="row"><button onclick="save('lottery_prizes')">保存</button><button class="ghost" onclick="reset('lottery_prizes')">重置默认</button></div>
+            </div>
+            <div class="card">
+              <h3>高级抽奖奖品池</h3>
+              <div class="hint">消耗 1 次高级券抽取。格式同普通抽奖（不支持高级券）。<br>例：<code>天:30:45,天:90:30,天:365:15,余额:50:10</code></div>
+              <textarea id="lottery_premium_prizes"></textarea>
+              <div class="row"><button onclick="save('lottery_premium_prizes')">保存</button><button class="ghost" onclick="reset('lottery_premium_prizes')">重置默认</button></div>
+            </div>
+            <div class="card">
+              <h3>兑换价目表</h3>
+              <div class="hint">格式：<code>券数:类型:数值</code>，逗号分隔。<br>例：<code>1:天:10,2:余额:20</code>（1 券换 10 天会员 / 2 券换 20 元余额）</div>
+              <textarea id="lottery_redeem"></textarea>
+              <div class="row"><button onclick="save('lottery_redeem')">保存</button><button class="ghost" onclick="reset('lottery_redeem')">重置默认</button></div>
+            </div>
+          </section>
 
-            <section id="p-lottery" class="page" style="display:none">
-              <div class="sub">保存后机器人立即生效 · 概率总和 ≤100%，差额自动为「谢谢参与」</div>
-              <div class="card">
-                <h3>普通抽奖奖品池</h3>
-                <div class="hint">格式：<code>类型:数值:概率</code>，逗号分隔。<br>类型：<code>天</code>=会员天数，<code>余额</code>=洗数据余额（元），<code>高级券</code>=高级抽奖次数<br>例：<code>天:1:40,天:3:30,余额:5:5,高级券:1:3</code></div>
-                <textarea id="lottery_prizes"></textarea>
-                <div class="row"><button onclick="save('lottery_prizes')">保存</button><button class="ghost" onclick="reset('lottery_prizes')">重置默认</button></div>
+          <section id="p-template" class="page" style="display:none">
+            <div class="sub">抽奖 / 兑换到账后，自动发到已绑定的通知群</div>
+            <div class="card">
+              <h3>抽奖到账通知模板</h3>
+              <div class="hint">可用占位符（会替换成真实内容）：<br>
+                <code>{username}</code> — 用户名字（Telegram 昵称，自动打码，如 张* / 王*二）<br>
+                <code>{user_id}</code> — 用户 Telegram ID<br>
+                <code>{source}</code> — 来源（普通抽奖 / 高级抽奖 / 兑换）<br>
+                <code>{prize}</code> — 奖品（如「3 天会员」）
               </div>
-              <div class="card">
-                <h3>高级抽奖奖品池</h3>
-                <div class="hint">消耗 1 次高级券抽取。格式同普通抽奖（不支持高级券）。<br>例：<code>天:30:45,天:90:30,天:365:15,余额:50:10</code></div>
-                <textarea id="lottery_premium_prizes"></textarea>
-                <div class="row"><button onclick="save('lottery_premium_prizes')">保存</button><button class="ghost" onclick="reset('lottery_premium_prizes')">重置默认</button></div>
-              </div>
-              <div class="card">
-                <h3>兑换价目表</h3>
-                <div class="hint">格式：<code>券数:类型:数值</code>，逗号分隔。<br>例：<code>1:天:10,2:余额:20</code>（1 券换 10 天会员 / 2 券换 20 元余额）</div>
-                <textarea id="lottery_redeem"></textarea>
-                <div class="row"><button onclick="save('lottery_redeem')">保存</button><button class="ghost" onclick="reset('lottery_redeem')">重置默认</button></div>
-              </div>
-            </section>
+              <textarea id="lottery_notify_template" style="min-height:160px"></textarea>
+              <div class="row"><button onclick="save('lottery_notify_template')">保存</button><button class="ghost" onclick="reset('lottery_notify_template')">重置默认</button></div>
+            </div>
+          </section>
 
-            <section id="p-template" class="page" style="display:none">
-              <div class="sub">抽奖 / 兑换到账后，自动发到已绑定的通知群</div>
-              <div class="card">
-                <h3>抽奖到账通知模板</h3>
-                <div class="hint">可用占位符（会替换成真实内容）：<br>
-                  <code>{username}</code> — 用户名字（Telegram 昵称，自动打码，如 张* / 王*二）<br>
-                  <code>{user_id}</code> — 用户 Telegram ID<br>
-                  <code>{source}</code> — 来源（普通抽奖 / 高级抽奖 / 兑换）<br>
-                  <code>{prize}</code> — 奖品（如「3 天会员」）
-                </div>
-                <textarea id="lottery_notify_template" style="min-height:160px"></textarea>
-                <div class="row"><button onclick="save('lottery_notify_template')">保存</button><button class="ghost" onclick="reset('lottery_notify_template')">重置默认</button></div>
-              </div>
-            </section>
+          <section id="p-member" class="page" style="display:none">
+            <div class="sub">套餐与欢迎语，保存后机器人立即生效</div>
+            <div class="card">
+              <h3>会员套餐（购买页）</h3>
+              <div class="hint">格式：<code>天数:价格(USDT)</code>，逗号分隔。<br>例：<code>7:1,30:3,90:8,365:25</code></div>
+              <textarea id="plans"></textarea>
+              <div class="row"><button onclick="save('plans')">保存</button><button class="ghost" onclick="reset('plans')">重置默认</button></div>
+            </div>
+            <div class="card">
+              <h3>欢迎语（/start 显示）</h3>
+              <div class="hint">支持占位符 <code>{昵称}</code>（替换成用户名字，让每个用户看到自己的名字）。<br>
+              支持 HTML：<code>&lt;b&gt;加粗&lt;/b&gt;</code>。例：<code>你好，{昵称}！欢迎使用 &lt;b&gt;大晴分包机器人&lt;/b&gt;</code></div>
+              <textarea id="welcome_text" style="min-height:150px"></textarea>
+              <div class="row"><button onclick="save('welcome_text')">保存</button><button class="ghost" onclick="reset('welcome_text')">重置默认</button></div>
+            </div>
+          </section>
 
-            <section id="p-member" class="page" style="display:none">
-              <div class="sub">套餐与欢迎语，保存后机器人立即生效</div>
-              <div class="card">
-                <h3>会员套餐（购买页）</h3>
-                <div class="hint">格式：<code>天数:价格(USDT)</code>，逗号分隔。<br>例：<code>7:1,30:3,90:8,365:25</code></div>
-                <textarea id="plans"></textarea>
-                <div class="row"><button onclick="save('plans')">保存</button><button class="ghost" onclick="reset('plans')">重置默认</button></div>
-              </div>
-              <div class="card">
-                <h3>欢迎语（/start 显示）</h3>
-                <div class="hint">支持占位符 <code>{昵称}</code>（替换成用户名字，让每个用户看到自己的名字）。<br>
-                支持 HTML：<code>&lt;b&gt;加粗&lt;/b&gt;</code>。例：<code>你好，{昵称}！欢迎使用 &lt;b&gt;大晴分包机器人&lt;/b&gt;</code></div>
-                <textarea id="welcome_text" style="min-height:150px"></textarea>
-                <div class="row"><button onclick="save('welcome_text')">保存</button><button class="ghost" onclick="reset('welcome_text')">重置默认</button></div>
-              </div>
-            </section>
+          <section id="p-wash" class="page" style="display:none">
+            <div class="sub">定价与配额，保存后机器人立即生效</div>
+            <div class="card">
+              <h3>阶梯定价（每行价格）</h3>
+              <div class="hint">格式：<code>行数:单价(元)</code>，逗号分隔。<br>例：<code>0:0.0013,100000:0.0010</code></div>
+              <textarea id="wash_prices"></textarea>
+              <div class="row"><button onclick="save('wash_prices')">保存</button><button class="ghost" onclick="reset('wash_prices')">重置默认</button></div>
+            </div>
+            <div class="card">
+              <h3>价格下限（元/行）</h3>
+              <label>所有档位单价不得低于此值</label>
+              <input id="wash_price_floor" type="text">
+              <div class="row"><button onclick="save('wash_price_floor')">保存</button><button class="ghost" onclick="reset('wash_price_floor')">重置默认</button></div>
+            </div>
+            <div class="card">
+              <h3>累计洗数据配额（行）</h3>
+              <label>达到后不再接受新任务；0 = 不限制</label>
+              <input id="wash_quota" type="text">
+              <div class="row"><button onclick="save('wash_quota')">保存</button><button class="ghost" onclick="reset('wash_quota')">重置默认</button></div>
+            </div>
+            <div class="card">
+              <h3>USDT 固定汇率（兜底）</h3>
+              <label>实时汇率获取失败时使用；留空 = 用内置默认 6.8</label>
+              <input id="usdt_rate" type="text" placeholder="6.8">
+              <div class="row"><button onclick="save('usdt_rate')">保存</button><button class="ghost" onclick="reset('usdt_rate')">清空</button></div>
+            </div>
+          </section>
 
-            <section id="p-wash" class="page" style="display:none">
-              <div class="sub">定价与配额，保存后机器人立即生效</div>
-              <div class="card">
-                <h3>阶梯定价（每行价格）</h3>
-                <div class="hint">格式：<code>行数:单价(元)</code>，逗号分隔。<br>例：<code>0:0.0013,100000:0.0010</code></div>
-                <textarea id="wash_prices"></textarea>
-                <div class="row"><button onclick="save('wash_prices')">保存</button><button class="ghost" onclick="reset('wash_prices')">重置默认</button></div>
-              </div>
-              <div class="card">
-                <h3>价格下限（元/行）</h3>
-                <label>所有档位单价不得低于此值</label>
-                <input id="wash_price_floor" type="text">
-                <div class="row"><button onclick="save('wash_price_floor')">保存</button><button class="ghost" onclick="reset('wash_price_floor')">重置默认</button></div>
-              </div>
-              <div class="card">
-                <h3>累计洗数据配额（行）</h3>
-                <label>达到后不再接受新任务；0 = 不限制</label>
-                <input id="wash_quota" type="text">
-                <div class="row"><button onclick="save('wash_quota')">保存</button><button class="ghost" onclick="reset('wash_quota')">重置默认</button></div>
-              </div>
-              <div class="card">
-                <h3>USDT 固定汇率（兜底）</h3>
-                <label>实时汇率获取失败时使用；留空 = 用内置默认 6.8</label>
-                <input id="usdt_rate" type="text" placeholder="6.8">
-                <div class="row"><button onclick="save('usdt_rate')">保存</button><button class="ghost" onclick="reset('usdt_rate')">清空</button></div>
-              </div>
-            </section>
+          <section id="p-site" class="page" style="display:none">
+            <div class="sub">配置落地页的标题、品牌、主色、联系方式 · 保存后刷新网站即生效</div>
+            <div class="card">
+              <label>网站标题（浏览器标签栏）</label>
+              <input id="site_title">
+              <label>品牌名（左上角）</label>
+              <input id="brand">
+              <label>Logo 图标（emoji，如 🃏）</label>
+              <input id="logo_icon">
+              <label>Logo 后缀（如 DQFB，留空则不显示）</label>
+              <input id="logo_suffix">
+              <label>主标题渐变词</label>
+              <input id="hero_highlight">
+              <label>副标题</label>
+              <textarea id="hero_subtitle"></textarea>
+              <label>主色（十六进制色值）</label>
+              <input id="accent" type="text">
+              <label>联系方式一 · 显示名称</label>
+              <input id="contact1_label">
+              <label>联系方式一 · @用户名</label>
+              <input id="contact1">
+              <label>联系方式二 · 显示名称</label>
+              <input id="contact2_label">
+              <label>联系方式二 · @用户名</label>
+              <input id="contact2">
+              <label>机器人链接</label>
+              <input id="bot_link">
+              <label>首屏演示卡 · 名字</label>
+              <input id="mock_name">
+              <label>首屏演示卡 · 在线状态</label>
+              <input id="mock_status">
+              <label>首屏演示卡 · 浮动标签一</label>
+              <input id="mock_chip1">
+              <label>首屏演示卡 · 浮动标签二</label>
+              <input id="mock_chip2">
+              <label>中奖通知 · 动词</label>
+              <input id="toast_prefix">
+              <label>中奖通知 · 底部文字</label>
+              <input id="toast_footer">
+              <label>页脚 · 版权文字</label>
+              <input id="footer_text">
+              <label>页脚 · 底部说明</label>
+              <input id="footer_note">
+              <div class="row"><button onclick="saveSite()">保存网站设置</button></div>
+            </div>
+          </section>
 
-            <section id="p-site" class="page" style="display:none">
-              <div class="sub">配置落地页的标题、品牌、主色、联系方式 · 保存后刷新网站即生效</div>
-              <div class="card">
-                <label>网站标题（浏览器标签栏）</label>
-                <input id="site_title">
-                <label>品牌名（左上角）</label>
-                <input id="brand">
-                <label>Logo 图标（emoji，如 🃏）</label>
-                <input id="logo_icon">
-                <label>Logo 后缀（如 DQFB，留空则不显示）</label>
-                <input id="logo_suffix">
-                <label>主标题渐变词</label>
-                <input id="hero_highlight">
-                <label>副标题</label>
-                <textarea id="hero_subtitle"></textarea>
-                <label>主色（十六进制色值）</label>
-                <input id="accent" type="text">
-                <label>联系方式一 · 显示名称</label>
-                <input id="contact1_label">
-                <label>联系方式一 · @用户名</label>
-                <input id="contact1">
-                <label>联系方式二 · 显示名称</label>
-                <input id="contact2_label">
-                <label>联系方式二 · @用户名</label>
-                <input id="contact2">
-                <label>机器人链接</label>
-                <input id="bot_link">
-                <label>首屏演示卡 · 名字</label>
-                <input id="mock_name">
-                <label>首屏演示卡 · 在线状态</label>
-                <input id="mock_status">
-                <label>首屏演示卡 · 浮动标签一</label>
-                <input id="mock_chip1">
-                <label>首屏演示卡 · 浮动标签二</label>
-                <input id="mock_chip2">
-                <label>中奖通知 · 动词</label>
-                <input id="toast_prefix">
-                <label>中奖通知 · 底部文字</label>
-                <input id="toast_footer">
-                <label>页脚 · 版权文字</label>
-                <input id="footer_text">
-                <label>页脚 · 底部说明</label>
-                <input id="footer_note">
-                <div class="row"><button onclick="saveSite()">💾 保存网站设置</button></div>
-              </div>
-            </section>
+          <section id="p-botprofile" class="page" style="display:none">
+            <div class="sub">修改机器人在 Telegram 里显示的名字和简介 · 保存后立即生效</div>
+            <div class="card">
+              <label>显示名称（1~64 字）</label>
+              <input id="bot_name">
+              <label>简介（0~512 字，用户打开机器人时看到）</label>
+              <textarea id="bot_description"></textarea>
+              <label>简短说明（0~120 字，资料页顶部那一行）</label>
+              <textarea id="bot_short_description"></textarea>
+              <div class="row"><button onclick="saveBotProfile()">保存机器人资料</button></div>
+            </div>
+          </section>
 
-            <section id="p-botprofile" class="page" style="display:none">
-              <div class="sub">修改机器人在 Telegram 里显示的名字和简介 · 保存后立即生效</div>
-              <div class="card">
-                <label>显示名称（1~64 字）</label>
-                <input id="bot_name">
-                <label>简介（0~512 字，用户打开机器人时看到）</label>
-                <textarea id="bot_description"></textarea>
-                <label>简短说明（0~120 字，资料页顶部那一行）</label>
-                <textarea id="bot_short_description"></textarea>
-                <div class="row"><button onclick="saveBotProfile()">💾 保存机器人资料</button></div>
-              </div>
-            </section>
-
-            <section id="p-audit" class="page" style="display:none">
-              <div class="sub">谁在什么时候改了配置 / 成员 / 机器人资料 · 最近 100 条</div>
-              <div class="card">
-                <table><thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>详情</th></tr></thead>
-                <tbody id="audit-rows"><tr><td colspan="4" style="color:var(--muted)">加载中…</td></tr></tbody></table>
-              </div>
-            </section>
-          </main>
-        </div>
+          <section id="p-audit" class="page" style="display:none">
+            <div class="sub">谁在什么时候改了配置 / 成员 / 机器人资料 · 最近 100 条</div>
+            <div class="card">
+              <table><thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>详情</th></tr></thead>
+              <tbody id="audit-rows"><tr><td colspan="4" style="color:var(--muted)">加载中…</td></tr></tbody></table>
+            </div>
+          </section>
+        </main>
 
         <footer class="sheet-foot"><em>❦ · DQFB · le dossier des préférences · N° 01 — 09 ·</em></footer>
       </div>
@@ -737,7 +793,6 @@ dialog .row{margin-top:22px}
 const $=id=>document.getElementById(id);
 let CONFIG={};
 
-/* 档案抬头：每页的中文标题 / 法文副题 / 编号 */
 const PAGE_META={
   overview:   ['概览','Sommaire','N° 01'],
   members:    ['成员管理','Membres','N° 02'],
@@ -774,10 +829,13 @@ async function doLogout(){try{await api('/api/logout',{method:'POST'})}catch(e){
 function go(p){
   document.querySelectorAll('aside a[data-p]').forEach(a=>a.classList.toggle('on',a.dataset.p===p));
   document.querySelectorAll('.page').forEach(s=>s.style.display='none');
-  $('p-'+p).style.display='block';
+  const sec=$('p-'+p);
+  sec.style.display='block';
+  sec.style.animation='none'; void sec.offsetWidth; sec.style.animation='';
+  sec.querySelectorAll(':scope > *').forEach(c=>{c.style.animation='none';void c.offsetWidth;c.style.animation='';});
   const m=PAGE_META[p];
   if(m){
-    if($('page-title'))$('page-title').textContent=m[0];
+    if($('page-title')){$('page-title').textContent=m[0];const t=$('page-title');t.style.animation='none';void t.offsetWidth;t.style.animation='';}
     if($('page-fr'))$('page-fr').textContent=m[1];
     if($('page-no'))$('page-no').textContent=m[2];
   }
@@ -786,6 +844,21 @@ function go(p){
   if(p==='site')loadSite();
   if(p==='botprofile')loadBotProfile();
   if(p==='audit')loadAudit();
+}
+
+/* 数字滚动 */
+function countUp(el,to){
+  if(!el)return;
+  const n=Number(to)||0;
+  if(!n){el.textContent=n.toLocaleString();return;}
+  const t0=performance.now(),dur=880;
+  const step=now=>{
+    const p=Math.min(1,(now-t0)/dur);
+    const e=1-Math.pow(1-p,3);
+    el.textContent=Math.round(n*e).toLocaleString();
+    if(p<1)requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 const KEY_TO_EL={
@@ -806,11 +879,11 @@ async function loadAll(){
     CONFIG=await api('/api/config');
     Object.entries(KEY_TO_EL).forEach(([k,el])=>{$(el).value=CONFIG[k]??'';});
     const st=await api('/api/stats');
-    $('s-users').textContent=st.total_users;
-    $('s-members').textContent=st.members;
-    $('s-lottery').textContent=st.lottery_total;
-    $('s-lottery-today').textContent=st.lottery_today;
-    $('s-washed').textContent=st.washed_charged.toLocaleString();
+    countUp($('s-users'),st.total_users);
+    countUp($('s-members'),st.members);
+    countUp($('s-lottery'),st.lottery_total);
+    countUp($('s-lottery-today'),st.lottery_today);
+    countUp($('s-washed'),st.washed_charged);
     const tags={ordinary:['普通抽奖','ordinary'],premium:['高级抽奖','premium'],redeem:['兑换','redeem']};
     $('records').innerHTML=st.records.map(r=>{
       const [t,cls]=tags[r.source]||[r.source,'ordinary'];
@@ -826,7 +899,6 @@ async function save(key){
   try{
     await api('/api/config/'+key,{method:'POST',body:JSON.stringify({value:el.value})});
     toast('✅ 已保存：'+key);
-    if(key==='welcome_text'){} // 无需额外处理
   }catch(e){toast('❌ '+e.message,false);}
 }
 async function reset(key){
@@ -834,7 +906,6 @@ async function reset(key){
   catch(e){toast('❌ '+e.message,false);}
 }
 
-/* ---- 成员管理 ---- */
 const esc=t=>String(t??'').replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
 let adjustUserId=null;
 
@@ -877,7 +948,6 @@ async function doAdjust(){
   }catch(e){toast('❌ '+e.message,false);}
 }
 
-/* ---- 网站设置 ---- */
 const SITE_FIELDS=['site_title','brand','hero_highlight','hero_subtitle','accent','contact1','contact2','contact1_label','contact2_label','bot_link','mock_name','mock_status','mock_chip1','mock_chip2','toast_prefix','toast_footer','footer_text','footer_note','logo_icon','logo_suffix'];
 async function loadSite(){
   try{
@@ -894,7 +964,6 @@ async function saveSite(){
   }catch(e){toast('❌ '+e.message,false);}
 }
 
-/* ---- 机器人资料 ---- */
 async function loadBotProfile(){
   try{
     const d=await api('/api/bot/profile');
@@ -911,7 +980,6 @@ async function saveBotProfile(){
   }catch(e){toast('❌ '+e.message,false);}
 }
 
-/* ---- 操作记录 ---- */
 const ACTION_NAMES={login:'后台登录',config_save:'修改配置',config_reset:'重置配置',member_adjust:'调整成员',site_save:'修改网站设置',bot_profile:'修改机器人资料'};
 async function loadAudit(){
   try{
@@ -928,5 +996,3 @@ async function loadAudit(){
 </script>
 </body>
 </html>
-
-
