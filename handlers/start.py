@@ -53,16 +53,28 @@ def get_home_text(user_name: str = "") -> tuple[str, list | None]:
         if placeholder not in text:
             return text, get_home_entities()
 
-    # 计算替换后文本和 entities 的偏移量（用 UTF-16 长度，Telegram 标准）
-    new_text = text.replace(placeholder, user_name)
+    # 无 entities 时走 HTML 模式，用户昵称先转义，防止注入格式标签
+    safe_name = user_name
+    if not entities_raw:
+        import html as _html
+        safe_name = _html.escape(user_name)
+
+    # 计算替换后文本和 entities 的偏移量（用 UTF-16 长度，Telegram 标准）。
+    # 占位符可能出现多次：逐次累计偏移，并修正覆盖占位符的 entity 长度。
+    new_text = text.replace(placeholder, safe_name)
     old_len = utf16_len(placeholder)
-    new_len = utf16_len(user_name)
-    offset_diff = new_len - old_len
-    placeholder_pos = utf16_len(text[:text.find(placeholder)])
+    new_len = utf16_len(safe_name)
+    diff = new_len - old_len
+
+    positions: list[int] = []
+    idx = text.find(placeholder)
+    while idx != -1:
+        positions.append(utf16_len(text[:idx]))
+        idx = text.find(placeholder, idx + 1)
 
     # 解析 entities 并调整偏移量
     entities = None
-    if entities_raw:
+    if entities_raw and positions:
         import json
         from aiogram.types import MessageEntity
         try:
@@ -71,9 +83,13 @@ def get_home_text(user_name: str = "") -> tuple[str, list | None]:
             for item in data:
                 offset = item["offset"]
                 length = item["length"]
-                # 如果占位符在这个 entity 前面，调整 offset
-                if offset > placeholder_pos:
-                    offset += offset_diff
+                for pos in positions:
+                    if pos < offset:
+                        # 占位符整体在 entity 之前：entity 整体后移
+                        offset += diff
+                    elif pos < offset + length:
+                        # 占位符落在 entity 内部：entity 长度随之变化
+                        length += diff
                 entities.append(MessageEntity(
                     type=item["type"],
                     offset=offset,
