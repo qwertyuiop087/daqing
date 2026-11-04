@@ -59,13 +59,14 @@ class Settings:
     PORT: int = int(os.getenv("PORT", "8080"))
 
     # ---------------- 功能限制（可按需调整） ----------------
-    MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE_MB", "100")) * 1024 * 1024   # 单个上传文件大小上限
+    # Telegram 机器人 API 实际只能下载 ≤20MB 的文件，所以默认上限统一为 20MB
+    MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE_MB", "20")) * 1024 * 1024   # 单个上传文件大小上限
     MAX_SPLIT_FILES: int = int(os.getenv("MAX_SPLIT_FILES", "500"))                # 单次切割最大份数
     MAX_SPLIT_LINES: int = int(os.getenv("MAX_SPLIT_LINES", "200000"))             # 每份最大行数
     MAX_BATCH_FILES: int = int(os.getenv("MAX_BATCH_FILES", "10"))                 # 每次批量发送文件数（Telegram 媒体组上限 10）
     MAX_PHONES: int = int(os.getenv("MAX_PHONES", "50000"))                       # 单次最多处理/插入手机号数
     MAX_UPLOAD_FILES: int = int(os.getenv("MAX_UPLOAD_FILES", "100"))             # 合并/重命名最多上传文件数
-    MAX_ZIP_SIZE: int = int(os.getenv("MAX_ZIP_SIZE_MB", "100")) * 1024 * 1024     # ZIP 文件大小上限
+    MAX_ZIP_SIZE: int = int(os.getenv("MAX_ZIP_SIZE_MB", "20")) * 1024 * 1024      # ZIP 文件大小上限
     MAX_ZIP_TXT_FILES: int = int(os.getenv("MAX_ZIP_TXT_FILES", "500"))           # ZIP 内最多提取 TXT 数量
 
     # ---------------- 空号检测配置 ----------------
@@ -85,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.35"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.36"))
 
 
 settings = Settings()
