@@ -100,6 +100,7 @@ dialog .row{margin-top:18px}
     <a data-p="wash" onclick="go('wash')">🧼 洗数据设置</a>
     <a data-p="site" onclick="go('site')">🌐 网站设置</a>
     <a data-p="botprofile" onclick="go('botprofile')">🤖 机器人资料</a>
+    <a data-p="audit" onclick="go('audit')">📜 操作记录</a>
     <div style="flex:1"></div>
     <a href="/" target="_blank" style="color:var(--cyan)">🌐 查看介绍页</a>
     <a onclick="doLogout()">🚪 退出登录</a>
@@ -293,6 +294,15 @@ dialog .row{margin-top:18px}
         <div class="row"><button onclick="saveBotProfile()">💾 保存机器人资料</button></div>
       </div>
     </section>
+
+    <section id="p-audit" class="page" style="display:none">
+      <h2>📜 操作记录</h2>
+      <div class="sub">谁在什么时候改了配置 / 成员 / 机器人资料（最近 100 条）</div>
+      <div class="card">
+        <table><thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>详情</th></tr></thead>
+        <tbody id="audit-rows"><tr><td colspan="4" style="color:var(--muted)">加载中…</td></tr></tbody></table>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -342,6 +352,7 @@ function go(p){
   if(p==='members')loadMembers();
   if(p==='site')loadSite();
   if(p==='botprofile')loadBotProfile();
+  if(p==='audit')loadAudit();
 }
 
 const KEY_TO_EL={
@@ -464,6 +475,21 @@ async function saveBotProfile(){
   try{
     const d=await api('/api/bot/profile',{method:'POST',body:JSON.stringify(body)});
     toast('✅ 已更新：'+((d.updated||[]).join('、')||'无变化'));
+  }catch(e){toast('❌ '+e.message,false);}
+}
+
+/* ---- 操作记录 ---- */
+const ACTION_NAMES={login:'后台登录',config_save:'修改配置',config_reset:'重置配置',member_adjust:'调整成员',site_save:'修改网站设置',bot_profile:'修改机器人资料'};
+async function loadAudit(){
+  try{
+    const d=await api('/api/audit');
+    const rows=(d.items||[]).map(l=>`<tr>
+      <td>${esc(l.time)}</td>
+      <td>${esc(l.admin)}</td>
+      <td>${esc(ACTION_NAMES[l.action]||l.action)}</td>
+      <td>${esc(l.detail)}</td>
+    </tr>`).join('');
+    $('audit-rows').innerHTML=rows||'<tr><td colspan="4" style="color:var(--muted)">暂无记录</td></tr>';
   }catch(e){toast('❌ '+e.message,false);}
 }
 </script>
