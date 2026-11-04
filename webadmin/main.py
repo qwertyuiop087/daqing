@@ -1,4 +1,4 @@
-"""DQFB 管理后台（FastAPI）：连机器人同一个数据库，网页配置抽奖/套餐/洗数据/欢迎语。
+﻿"""错落雨 管理后台（FastAPI）：连机器人同一个数据库，网页配置抽奖/套餐/洗数据/欢迎语。
 
 部署要求：
 - 环境变量 DATABASE_URL 指向机器人在用的同一个 Postgres
@@ -35,7 +35,7 @@ if not ADMIN_PASSWORD:
 # 确保表存在（与机器人一致；幂等）
 database.init_db()
 
-app = FastAPI(title="DQFB Admin")
+app = FastAPI(title="Cuoluoyu Admin")
 
 
 # ---------------- 登录令牌（HMAC 签名 cookie，无额外依赖） ----------------
