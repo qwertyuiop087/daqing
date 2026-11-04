@@ -340,7 +340,7 @@ footer a{color:var(--cyan)}
 
 <nav id="nav">
   <div class="wrap">
-    <a class="logo" href="#"><span class="mark">🃏</span><span id="brandText">大晴分包</span><em> DQFB</em></a>
+    <a class="logo" href="#"><span class="mark" id="logoIcon">🃏</span><span id="brandText">大晴分包</span><em id="logoSuffix"> DQFB</em></a>
     <div class="nav-links">
       <a href="#features">功能</a><a href="#lottery">抽奖系统</a><a href="#plans">会员套餐</a><a href="#faq">常见问题</a>
     </div>
@@ -693,6 +693,8 @@ async function loadSiteConfig(){
     SITE_CFG=s;
     if(s.site_title) document.title=s.site_title;
     if(s.brand){const e=document.getElementById('brandText'); if(e)e.textContent=s.brand;}
+    if(s.logo_icon){const e=document.getElementById('logoIcon'); if(e)e.textContent=s.logo_icon;}
+    if(s.logo_suffix){const e=document.getElementById('logoSuffix'); if(e)e.textContent=s.logo_suffix;}
     if(s.hero_highlight){const e=document.getElementById('heroHighlight'); if(e)e.textContent=s.hero_highlight;}
     if(s.hero_subtitle){const e=document.getElementById('heroSubtitle'); if(e)e.textContent=s.hero_subtitle;}
     if(s.accent) document.documentElement.style.setProperty('--violet',s.accent);
