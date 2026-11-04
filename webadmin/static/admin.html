@@ -1,445 +1,722 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DQFB 管理后台</title>
 <style>
-/* ===== 洛可可后台 · 雾蓝 / 银蓝 / 奶白 · 信笺与票根 ===== */
+/* ==========================================================
+   洛可可档案后台 · 参考 Trianon
+   淡蓝紫底 · 撕边纸 · 档案抬头 · 手撕标签索引 · 银色线描小物
+   ========================================================== */
 :root{
-  --cream:#FBF9F4;--cream-2:#F5F1E8;--paper:#FFFDF8;
-  --mist:#A9B8D4;--silver:#BFC8E0;--silver-2:#DCE2F1;--silver-3:#E9EEF8;
-  --ink:#2E3A63;--ink-soft:#4A5578;--muted:#8A93AE;
-  --line:#E6E9F2;--line-2:#CDD5E7;
-  --wax:#8B4A4A;--ok:#5E8B6A;--bad:#A85A5A;
-  --serif:Georgia,"Songti SC","STSong","SimSun","Times New Roman",serif;
-  --sans:"Songti SC","STSong",Georgia,serif;
+  --bg-0:#E2E7F6;--bg-1:#D3DAEE;--bg-2:#C7CFE6;
+  --paper:#FBF9F4;--paper-w:#FFFDF8;--paper-2:#F8F5ED;
+  --ink:#1E2748;--ink-2:#2E3A63;--ink-3:#3F4B72;--muted:rgba(30,39,72,.46);
+  --silver:#8B97B8;--silver-2:#B9C3DC;--silver-3:#DCE2F1;
+  --line:rgba(102,113,143,.20);--line-2:rgba(102,113,143,.34);
+  --blue:#5F7099;
+  --sage:#5E8B6A;--bad:#A85A5A;
+  --serif:"Cormorant Garamond",Georgia,"Songti SC","STSong","SimSun",serif;
+  --cn:"Songti SC","STSong","SimSun","Noto Serif SC",serif;
+  --latin:Georgia,"Times New Roman","Songti SC",serif;
+  --e:cubic-bezier(.22,1,.36,1);
 }
 *{margin:0;padding:0;box-sizing:border-box}
-html{-webkit-font-smoothing:antialiased}
+html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 body{
-  font-family:var(--sans);font-size:14px;line-height:1.75;color:var(--ink);min-height:100vh;
-  background:
-    radial-gradient(1100px 680px at 88% -12%,rgba(191,200,224,.42),transparent 62%),
-    radial-gradient(900px 620px at 4% 108%,rgba(220,226,241,.55),transparent 66%),
-    linear-gradient(168deg,#FBF9F4 0%,#F6F2E9 55%,#F1F3FA 100%);
+  font-family:var(--cn);font-size:13.5px;line-height:1.85;color:var(--ink);min-height:100vh;
+  background:linear-gradient(165deg,#DEE4F4 0%,#C9D3EA 52%,#BAC6E2 100%);
   background-attachment:fixed;
 }
-/* 纸纹 */
+/* 底纹：细颗粒 + 极淡的暗角 */
 body::before{
-  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.28;mix-blend-mode:multiply;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='0.42'/%3E%3C/svg%3E");
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.35;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.92' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='260' height='260' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 }
-a{color:var(--ink-soft);text-decoration:none}
-::selection{background:rgba(191,200,224,.55)}
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(120% 90% at 50% 0%,transparent 55%,rgba(74,90,134,.12) 100%);
+}
 #login,#app{position:relative;z-index:1}
+a{color:var(--ink-3);text-decoration:none}
+::selection{background:rgba(155,170,200,.45)}
 
-/* ---------- 登录：请柬 ---------- */
-#login{position:fixed;inset:0;display:grid;place-items:center;z-index:20}
-.login-box{
-  width:min(400px,92vw);padding:46px 38px 34px;position:relative;border-radius:6px;
-  background:linear-gradient(180deg,#FFFDF8,#FAF6EC);
-  border:1px solid var(--line-2);
-  box-shadow:0 34px 90px rgba(74,90,134,.20),0 1px 0 #fff inset;
+/* ================= 登录：请柬 ================= */
+#login{position:fixed;inset:0;display:grid;place-items:center;z-index:30;padding:24px}
+.login-box{position:relative;width:min(392px,92vw)}
+/* 撕边纸（独立层，避免文字被位移滤镜扭曲） */
+.login-bg{
+  position:absolute;inset:0;z-index:0;border-radius:2px;
+  background:linear-gradient(168deg,#FFFFFF 0%,#FDFCF8 46%,#F8F5ED 100%);
+  filter:url(#torn);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.95);
 }
-.login-box::before{content:"";position:absolute;inset:8px;border:1px solid rgba(191,200,224,.65);border-radius:3px;pointer-events:none}
-.login-box::after{
-  content:"❦";position:absolute;top:-15px;left:50%;transform:translateX(-50%);
-  width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:15px;color:#FBEFE6;
-  background:radial-gradient(circle at 34% 28%,#B57272,#8B4A4A 72%);
-  box-shadow:0 5px 14px rgba(139,74,74,.42),0 1px 0 rgba(255,255,255,.35) inset;
+.login-box::before{
+  content:"";position:absolute;left:10px;right:10px;top:12px;bottom:10px;z-index:-1;
+  background:rgba(46,58,99,.30);filter:blur(20px);border-radius:10px;
 }
-.login-box h1{font-family:var(--serif);font-size:22px;font-weight:600;letter-spacing:.08em;text-align:center}
-.login-box p{text-align:center;color:var(--muted);font-size:12.5px;letter-spacing:.1em;margin:8px 0 26px}
-#err{color:var(--bad);font-size:12.5px;margin-top:14px;min-height:18px;text-align:center}
+.login-inner{position:relative;z-index:1;padding:56px 40px 46px}
+.login-inner::before{
+  content:"";position:absolute;inset:13px;border:1px dashed rgba(155,170,200,.5);
+  pointer-events:none;border-radius:1px;
+}
+/* 银色徽章 */
+.medal{
+  position:absolute;left:50%;top:-27px;transform:translateX(-50%) rotate(-3deg);z-index:3;
+  width:56px;height:56px;border-radius:50%;display:grid;place-items:center;
+  font-family:var(--latin);font-size:20px;font-weight:600;color:#46547A;
+  background:radial-gradient(circle at 32% 24%,#FFFFFF 0%,#EEF2FA 30%,#CBD4E8 64%,#A3B2D0 100%);
+  box-shadow:
+    inset 0 2px 3px rgba(255,255,255,.98),
+    inset 0 -3px 6px rgba(74,90,134,.36),
+    0 0 0 3px #FDFCF8,
+    0 0 0 4px rgba(139,151,184,.55),
+    0 12px 22px -8px rgba(30,39,72,.45);
+  transition:transform .7s var(--e);
+}
+.medal::before{
+  content:"";position:absolute;inset:6px;border-radius:50%;
+  border:1px dashed rgba(74,90,134,.32);
+}
+.login-inner:hover .medal{transform:translateX(-50%) rotate(3deg)}
+.login-box h1{
+  font-family:var(--cn);font-size:25px;font-weight:700;letter-spacing:.34em;
+  text-indent:.34em;text-align:center;color:var(--ink);line-height:1.3;
+}
+.login-box .fr{
+  display:block;text-align:center;font-family:var(--latin);font-style:italic;
+  font-size:15px;color:var(--blue);letter-spacing:.04em;margin-top:4px;
+}
+.login-box .rule{
+  position:relative;height:1px;margin:22px auto 24px;width:70%;
+  background:linear-gradient(90deg,transparent,rgba(139,151,184,.85),transparent);
+}
+.login-box .rule::after{
+  content:"❦";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  background:#FDFCF8;padding:0 9px;font-size:10px;color:var(--silver);line-height:1;
+}
+label.tag{display:block;font-size:9px;letter-spacing:.3em;color:var(--muted);text-transform:uppercase;margin:0 0 6px}
+#err{color:var(--bad);font-size:11.5px;letter-spacing:.08em;margin-top:14px;min-height:18px;text-align:center}
+/* 邮戳 */
+.postmark{
+  position:absolute;right:-6px;bottom:30px;width:68px;height:68px;border-radius:50%;`n  border:1px dashed rgba(30,39,72,.34);transform:rotate(-13deg);display:grid;place-items:center;
+  font-family:var(--latin);font-size:7.5px;letter-spacing:.22em;color:rgba(30,39,72,.48);
+  pointer-events:none;z-index:2;
+}
+.postmark::before{content:"";position:absolute;inset:6px;border-radius:50%;border:1px solid rgba(30,39,72,.13)}
+.postmark::after{
+  content:"";position:absolute;left:-32px;top:30px;width:26px;height:1px;background:rgba(30,39,72,.15);
+  box-shadow:0 3.5px 0 rgba(30,39,72,.10),0 -3.5px 0 rgba(30,39,72,.10);
+}
 
-/* ---------- 表单元素 ---------- */
+/* ================= 表单元素 ================= */
 input,textarea{
-  width:100%;background:#FFFDF8;border:1px solid var(--line-2);border-radius:4px;color:var(--ink);
-  padding:10px 12px;font-size:13.5px;font-family:inherit;outline:none;transition:.18s;
+  width:100%;background:var(--paper-w);border:0;border-radius:1px;color:var(--ink);
+  padding:11px 13px;font-size:13px;font-family:var(--cn);outline:none;
+  box-shadow:inset 0 0 0 .6px rgba(102,113,143,.30),inset 0 1px 1.5px rgba(30,39,72,.05);
+  transition:box-shadow .24s var(--e);
 }
-input::placeholder,textarea::placeholder{color:#B3BACD;font-size:12.5px}
-input:focus,textarea:focus{border-color:var(--mist);box-shadow:0 0 0 3px rgba(191,200,224,.28)}
-textarea{min-height:120px;resize:vertical;line-height:1.7}
-label{display:block;font-size:12px;color:var(--muted);letter-spacing:.1em;margin:16px 0 6px}
+input::placeholder,textarea::placeholder{color:rgba(30,39,72,.26);letter-spacing:.04em}
+input:focus,textarea:focus{
+  box-shadow:inset 0 0 0 1px rgba(139,158,196,.9),0 0 0 3px rgba(198,206,228,.40);
+}
+textarea{min-height:116px;resize:vertical;line-height:1.8}
+label{
+  display:block;font-size:9px;letter-spacing:.3em;color:var(--muted);
+  text-transform:uppercase;margin:18px 0 6px;
+}
 button{
-  background:linear-gradient(180deg,#5C6D95,#4A5A80);border:1px solid #44527A;color:#FBF9F4;
-  font-family:inherit;font-weight:600;font-size:13.5px;letter-spacing:.06em;
-  padding:10px 21px;border-radius:4px;cursor:pointer;transition:.18s;
-  box-shadow:0 2px 9px rgba(74,90,134,.26),0 1px 0 rgba(255,255,255,.18) inset;
+  font-family:var(--cn);font-size:12.5px;font-weight:600;letter-spacing:.16em;
+  padding:10px 23px;border:0;border-radius:1px;cursor:pointer;color:#FBF9F4;
+  background:linear-gradient(180deg,#4E5F88 0%,#3E4E74 58%,#364468 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.18),
+    0 1px 2px rgba(30,39,72,.22),
+    0 10px 20px -10px rgba(30,39,72,.52);
+  transition:transform .3s var(--e),box-shadow .3s var(--e),filter .3s var(--e);
 }
-button:hover{filter:brightness(1.08);transform:translateY(-1px)}
-button:active{transform:translateY(0)}
-button.ghost{background:#FFFDF8;border:1px solid var(--line-2);color:var(--ink-soft);box-shadow:none}
-button.ghost:hover{background:#F7F3EA;border-color:var(--silver);color:var(--ink)}
-button.danger{background:linear-gradient(180deg,#A86666,#8B4A4A);border-color:#7C4141}
+button:hover{
+  transform:translateY(-1.5px);filter:brightness(1.08);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 2px 3px rgba(30,39,72,.2),0 16px 28px -12px rgba(30,39,72,.55);
+}
+button:active{transform:translateY(0);filter:brightness(.97)}
+button.ghost{
+  background:linear-gradient(180deg,#FFFDF8,#F8F5ED);color:var(--ink-2);
+  box-shadow:inset 0 0 0 .6px rgba(102,113,143,.34),0 1px 2px rgba(30,39,72,.07);
+}
+button.ghost:hover{background:#FFFFFF;color:var(--ink);box-shadow:inset 0 0 0 .7px rgba(139,158,196,.8),0 8px 16px -9px rgba(30,39,72,.3)}
+button.danger{background:linear-gradient(180deg,#A86666,#8B4A4A)}
 
-/* ---------- 布局 ---------- */
+/* ================= 舞台与纸 ================= */
 #app{display:none}
-aside{
-  position:fixed;left:0;top:0;bottom:0;width:216px;z-index:5;
-  background:linear-gradient(180deg,rgba(255,253,248,.94),rgba(245,241,232,.96));
-  border-right:1px solid var(--line-2);padding:24px 14px;
-  display:flex;flex-direction:column;gap:5px;overflow-y:auto;
-  box-shadow:1px 0 22px rgba(74,90,134,.06);
+.stage{display:flex;justify-content:center;padding:40px 26px 90px;min-height:100vh}
+.sheet{position:relative;width:100%;max-width:1120px;isolation:isolate}
+/* 纸的投影（独立层，避免被撕边滤镜裁掉） */
+.sheet::before{
+  content:"";position:absolute;left:10px;right:10px;top:14px;bottom:-10px;z-index:-2;
+  background:rgba(38,50,90,.34);filter:blur(26px);border-radius:10px;
 }
-/* 吊绳 */
-aside::before{
-  content:"";position:absolute;left:7px;top:26px;bottom:26px;width:1px;pointer-events:none;
-  background:linear-gradient(180deg,transparent,rgba(191,200,224,.95) 8%,rgba(220,226,241,.9) 50%,rgba(191,200,224,.95) 92%,transparent);
+/* 叠在下面、略微错位的一张纸 */
+.sheet-bg2{
+  position:absolute;inset:7px 5px 9px;z-index:-1;
+  background:linear-gradient(168deg,#FBF9F3 0%,#F2EEE4 100%);
+  filter:url(#torn);
+  transform:rotate(.6deg);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.75);
 }
-aside .brand{
-  font-family:var(--serif);font-size:16px;letter-spacing:.12em;color:var(--ink);
-  padding:2px 12px 17px;position:relative;
+/* 撕边纸：白色纸面 + 噪声位移滤镜 */
+.sheet-bg{
+  position:absolute;inset:0;z-index:0;
+  background:linear-gradient(168deg,#FFFFFF 0%,#FEFDFA 40%,#FBF9F4 78%,#F7F4ED 100%);
+  filter:url(#torn);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.95);
 }
-aside .brand span{color:var(--mist);letter-spacing:.16em;font-size:13px}
-aside .brand::after{
-  content:"";position:absolute;left:12px;right:12px;bottom:7px;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(191,200,224,.95),transparent);
-}
-aside a{
-  padding:9px 13px;border-radius:4px;color:var(--ink-soft);cursor:pointer;font-size:13.5px;
-  letter-spacing:.04em;border:1px solid transparent;transition:.18s;position:relative;
-}
-aside a:hover{background:rgba(255,255,255,.78);border-color:var(--line-2);color:var(--ink)}
-aside a.on{
-  background:linear-gradient(180deg,#FFFDF8,#F3F6FD);
-  border-color:var(--silver);color:var(--ink);
-  box-shadow:0 3px 12px rgba(74,90,134,.13),0 1px 0 #fff inset;
-}
-aside a.on::after{
-  content:"";position:absolute;right:9px;top:50%;transform:translateY(-50%);
-  width:5px;height:5px;border-radius:50%;background:var(--mist);
-  box-shadow:0 0 0 3px rgba(191,200,224,.35);
-}
-main{margin-left:216px;padding:40px 46px 70px;max-width:1000px}
-h2{font-family:var(--serif);font-size:24px;font-weight:600;letter-spacing:.06em;color:var(--ink)}
-h2::after{
-  content:"";display:block;width:56px;height:1px;margin-top:11px;
-  background:linear-gradient(90deg,var(--mist),rgba(191,200,224,0));
-}
-.sub{color:var(--muted);font-size:12.5px;letter-spacing:.05em;margin:12px 0 28px}
+.sheet-inner{position:relative;z-index:1;padding:50px 54px 58px}
 
-/* ---------- 信笺卡片 ---------- */
+/* ---------- 档案抬头 ---------- */
+.dossier{
+  display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;
+  padding-bottom:16px;border-bottom:1px solid rgba(139,151,184,.45);
+}
+.dossier-title{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.dossier-no{
+  font-family:var(--latin);font-size:10px;letter-spacing:.24em;color:var(--muted);
+  align-self:flex-start;padding-top:8px;
+}
+.dossier h1{
+  font-family:var(--cn);font-size:38px;font-weight:700;letter-spacing:.12em;`n  line-height:1.14;color:var(--ink);text-indent:.12em;
+}
+.dossier em{
+  font-family:var(--latin);font-style:italic;font-size:24px;letter-spacing:.02em;
+  color:var(--blue);line-height:1;
+}
+.dossier-meta{
+  text-align:right;font-family:var(--latin);font-size:8.5px;letter-spacing:.18em;
+  color:var(--muted);line-height:2.1;text-transform:uppercase;white-space:nowrap;flex:none;
+}
+.dossier-meta b{font-weight:600;color:var(--ink-3);letter-spacing:.16em}
+
+/* ---------- 两栏 ---------- */
+.body-grid{display:grid;grid-template-columns:200px minmax(0,1fr);gap:34px;align-items:start;padding-top:34px}
+main{min-width:0}
+
+/* ---------- 索引：手撕标签 ---------- */
+aside.index{position:relative}
+.index-h{
+  font-family:var(--latin);font-style:italic;font-size:19px;color:var(--ink-2);
+  letter-spacing:.02em;margin-bottom:14px;display:flex;align-items:baseline;gap:7px;
+}
+.index-h em{font-family:var(--cn);font-style:normal;font-size:10px;letter-spacing:.3em;color:var(--muted)}
+aside.index a{
+  position:relative;display:grid;grid-template-columns:19px 1fr;column-gap:6px;row-gap:0;
+  align-items:center;padding:8px 12px 8px 13px;margin-bottom:8px;cursor:pointer;
+  background:linear-gradient(180deg,#F8F4EA 0%,#F1ECDF 100%);
+  clip-path:polygon(
+    0 3%,7% 0.5%,21% 2%,36% 0,52% 2.5%,68% 0,83% 2%,94% 0.5%,100% 2%,
+    99% 20%,100% 40%,98.5% 58%,100% 76%,98.8% 100%,
+    86% 98.5%,70% 100%,54% 98%,38% 100%,22% 98.5%,9% 100%,0 98%,
+    1.4% 78%,0 58%,1.5% 38%,0 18%);
+  /* clip-path 会剪掉 box-shadow，所以投影用 filter:drop-shadow（跟随轮廓） */
+  filter:drop-shadow(0 1px .8px rgba(30,39,72,.18)) drop-shadow(0 5px 7px rgba(30,39,72,.14));
+  transition:transform .38s var(--e),filter .38s var(--e),background .3s var(--e);
+}
+aside.index a:nth-child(odd){transform:rotate(-.5deg)}
+aside.index a:nth-child(even){transform:rotate(.4deg)}
+aside.index a i{
+  font-family:var(--latin);font-style:italic;font-size:11px;color:#A3B0C9;
+  letter-spacing:.02em;text-align:right;
+}
+aside.index a b{
+  grid-column:2;font-family:var(--cn);font-size:12.5px;font-weight:600;
+  letter-spacing:.1em;color:var(--ink-2);line-height:1.5;
+}
+aside.index a small{
+  grid-column:2;font-family:var(--latin);font-size:7.5px;letter-spacing:.18em;
+  color:rgba(30,39,72,.30);text-transform:uppercase;line-height:1.3;
+}
+aside.index a:hover{
+  transform:rotate(0deg) translateX(2px);
+  filter:drop-shadow(0 2px 1.5px rgba(30,39,72,.18)) drop-shadow(0 10px 14px rgba(30,39,72,.20));
+}
+aside.index a.on{
+  transform:rotate(-.9deg) translateX(3px);
+  background:linear-gradient(180deg,#FFFFFF,#EFF4FD 58%,#E3EBFA);
+  filter:drop-shadow(0 2px 2px rgba(30,39,72,.22)) drop-shadow(0 12px 18px rgba(58,76,124,.26));
+}
+aside.index a.on b{color:var(--ink)}
+aside.index a.on i{color:var(--blue)}
+/* 选中项挂的小坠子 */
+aside.index a.on::after{
+  content:"";position:absolute;right:-7px;top:50%;transform:translateY(-50%);
+  width:7px;height:7px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#FFFFFF,#DCE2F1 55%,#A9B8D4 100%);
+  box-shadow:inset 0 0 0 .6px rgba(102,113,143,.5),0 0 8px rgba(169,184,212,.9);
+}
+aside.index .idx-foot{margin-top:22px;display:flex;flex-direction:column;gap:2px}
+aside.index .idx-foot a{
+  display:block;padding:5px 8px;background:none;clip-path:none;box-shadow:none;
+  transform:none!important;font-size:10.5px;letter-spacing:.1em;color:var(--muted);
+  border-bottom:1px solid transparent;transition:color .2s,border-color .2s;
+}
+aside.index .idx-foot a:hover{color:var(--ink-3);border-bottom-color:rgba(139,151,184,.45)}
+
+/* ---------- 卡片 ---------- */
+.page>.sub{
+  color:var(--muted);font-size:11px;letter-spacing:.1em;margin:0 0 26px;
+  font-style:italic;
+}
+.page>.sub::before{content:"❦ ";color:var(--silver-2);font-style:normal;letter-spacing:0}
+
 .card{
-  position:relative;background:linear-gradient(180deg,#FFFDF8,#FBF7EE);
-  border:1px solid var(--line-2);border-radius:6px;padding:27px 26px 23px;margin-bottom:22px;
-  box-shadow:0 12px 32px rgba(74,90,134,.07),0 1px 0 #fff inset;
+  position:relative;margin-bottom:22px;padding:26px 27px 22px;border-radius:1px;
+  background:linear-gradient(180deg,#FFFFFF 0%,#FDFBF6 58%,#F9F6EF 100%);
+  box-shadow:
+    inset 0 0 0 .7px rgba(102,113,143,.24),
+    0 1px 2px rgba(30,39,72,.07),
+    0 16px 34px -22px rgba(30,39,72,.32);
+  transition:box-shadow .45s var(--e),transform .45s var(--e);
 }
-.card::before{content:"";position:absolute;inset:5px;border:1px solid rgba(191,200,224,.55);border-radius:3px;pointer-events:none}
-.card::after{
-  content:"✦";position:absolute;top:-9px;left:50%;transform:translateX(-50%);
-  background:var(--paper);padding:0 9px;color:var(--mist);font-size:11px;line-height:1;
+.card::before{
+  content:"";position:absolute;inset:7px;border:1px dashed rgba(155,170,200,.46);
+  pointer-events:none;border-radius:1px;
 }
-.card h3{font-family:var(--serif);font-size:15px;font-weight:600;letter-spacing:.06em;margin-bottom:8px;color:var(--ink)}
+.card:hover{
+  transform:translateY(-1px);
+  box-shadow:
+    inset 0 0 0 .7px rgba(102,113,143,.30),
+    0 2px 3px rgba(30,39,72,.08),
+    0 24px 44px -24px rgba(30,39,72,.36);
+}
+.card h3{
+  position:relative;font-family:var(--cn);font-size:14px;font-weight:700;
+  letter-spacing:.14em;color:var(--ink);margin-bottom:9px;padding-bottom:10px;
+}
+.card h3::before{
+  content:"";position:absolute;left:0;bottom:0;width:34px;height:1px;
+  background:linear-gradient(90deg,rgba(139,151,184,.9),transparent);
+}
 .hint{
-  font-size:12.5px;color:var(--ink-soft);background:rgba(233,238,248,.5);
-  border:1px dashed rgba(169,184,212,.65);border-radius:4px;padding:11px 13px;margin:11px 0;line-height:1.85;
+  font-size:11.5px;color:var(--ink-3);line-height:1.95;letter-spacing:.02em;
+  background:rgba(220,226,241,.34);
+  box-shadow:inset 0 0 0 .6px rgba(155,170,200,.38);
+  padding:12px 14px;margin:11px 0;border-radius:1px;
 }
 .hint code{
-  font-family:Consolas,Monaco,monospace;font-size:12px;color:var(--wax);
-  background:rgba(139,74,74,.07);padding:1px 5px;border-radius:3px;
+  font-family:Consolas,Monaco,monospace;font-size:11px;color:#8B4A4A;
+  background:rgba(139,74,74,.06);padding:1px 5px;letter-spacing:0;
 }
-.row{display:flex;gap:12px;margin-top:16px;align-items:center;flex-wrap:wrap}
-.row input{width:230px}
+.row{display:flex;gap:11px;margin-top:17px;align-items:center;flex-wrap:wrap}
+.row input{width:228px}
 
-/* ---------- 概览：票根 ---------- */
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:15px;margin-bottom:26px}
+/* ---------- 概览：吊牌（顶部缺口） ---------- */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:17px;margin-bottom:28px}
 .stat{
-  position:relative;background:linear-gradient(180deg,#FFFDF8,#F7F3EA);
-  border:1px solid var(--line-2);border-radius:5px;padding:20px 18px 18px;overflow:hidden;
-  box-shadow:0 4px 16px rgba(74,90,134,.06);
+  position:relative;padding:26px 20px 24px;border-radius:1px;
+  background:linear-gradient(180deg,#FFFFFF 0%,#FCFAF4 60%,#F7F4EC 100%);
+  box-shadow:
+    inset 0 0 0 .7px rgba(102,113,143,.24),
+    0 1px 2px rgba(30,39,72,.08),
+    0 14px 28px -18px rgba(30,39,72,.34);
+  transition:transform .45s var(--e),box-shadow .45s var(--e);
 }
-.stat::before,.stat::after{
-  content:"";position:absolute;left:12px;right:12px;border-top:1px dashed rgba(169,184,212,.7);
+/* 顶部细亮线 + 底部虚线（票根感） */
+.stat::before{
+  content:"";position:absolute;left:12px;right:12px;top:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(139,151,184,.8),transparent);
 }
-.stat::before{top:7px}
-.stat::after{bottom:7px;border-top:none;border-bottom:1px dashed rgba(169,184,212,.7)}
+.stat::after{
+  content:"";position:absolute;left:12px;right:12px;bottom:10px;
+  border-bottom:1px dashed rgba(155,170,200,.55);
+}
 .stat b{
-  display:block;font-family:var(--serif);font-size:28px;font-weight:600;letter-spacing:.01em;
-  color:var(--ink);line-height:1.25;
+  display:block;font-family:var(--latin);font-size:31px;font-weight:600;
+  letter-spacing:.01em;line-height:1.12;color:var(--ink);
 }
-.stat span{font-size:11.5px;color:var(--muted);letter-spacing:.12em}
+.stat span{
+  display:block;margin-top:8px;font-family:var(--latin);font-size:8.5px;
+  letter-spacing:.26em;color:var(--muted);text-transform:uppercase;
+}
+.stat:hover{
+  transform:translateY(-2.5px);
+  box-shadow:
+    inset 0 0 0 .7px rgba(102,113,143,.30),
+    0 2px 4px rgba(30,39,72,.09),
+    0 22px 38px -18px rgba(30,39,72,.38);
+}
 
 /* ---------- 表格 ---------- */
-table{width:100%;border-collapse:collapse;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:12px}
 th{
-  text-align:left;padding:9px 12px;color:var(--muted);font-weight:600;font-size:11.5px;
-  letter-spacing:.14em;border-bottom:1px solid var(--line-2);
+  text-align:left;padding:9px 11px 8px;color:var(--muted);font-weight:600;
+  font-family:var(--latin);font-size:8.5px;letter-spacing:.22em;text-transform:uppercase;
+  border-bottom:1px solid rgba(139,151,184,.45);
 }
-td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);color:var(--ink-soft)}
-tbody tr:hover td{background:rgba(233,238,248,.42)}
-td .tag{padding:2px 10px;border-radius:999px;font-size:11.5px;letter-spacing:.05em;border:1px solid transparent}
-.tag.ordinary{background:rgba(169,184,212,.2);color:#4A5578;border-color:rgba(169,184,212,.5)}
-.tag.premium{background:rgba(139,74,74,.1);color:var(--wax);border-color:rgba(139,74,74,.28)}
-.tag.redeem{background:rgba(94,139,106,.12);color:var(--ok);border-color:rgba(94,139,106,.3)}
+td{padding:11px;color:var(--ink-3);border-bottom:1px solid rgba(198,206,228,.5)}
+tbody tr{transition:background .26s var(--e)}
+tbody tr:hover td{background:rgba(220,226,241,.34)}
+tbody tr:last-child td{border-bottom:0}
+td .tag{
+  padding:1px 9px;border-radius:999px;font-size:9.5px;letter-spacing:.12em;
+  box-shadow:inset 0 0 0 .6px currentColor;font-family:var(--latin);
+}
+.tag.ordinary{color:#4A5578;background:rgba(169,184,212,.14)}
+.tag.premium{color:#8B4A4A;background:rgba(139,74,74,.07)}
+.tag.redeem{color:var(--sage);background:rgba(94,139,106,.08)}
 
 /* ---------- 通知 ---------- */
-#toast{position:fixed;top:26px;right:26px;z-index:99;display:flex;flex-direction:column;gap:10px}
+#toast{position:fixed;top:26px;right:26px;z-index:99;display:flex;flex-direction:column;gap:9px}
 #toast div{
-  padding:12px 18px;border-radius:4px;background:#FFFDF8;border:1px solid var(--line-2);
-  color:var(--ink);font-size:13px;letter-spacing:.03em;
-  box-shadow:0 14px 34px rgba(74,90,134,.18);animation:fade .3s;
+  position:relative;padding:12px 18px 12px 21px;border-radius:1px;
+  background:linear-gradient(180deg,#FFFDF8,#FAF6EC);color:var(--ink-2);
+  font-size:11.5px;letter-spacing:.06em;
+  box-shadow:
+    inset 0 0 0 .6px rgba(102,113,143,.24),
+    0 2px 4px rgba(30,39,72,.09),
+    0 18px 36px -18px rgba(30,39,72,.40);
+  animation:fade .38s var(--e);
 }
-#toast .ok{border-left:3px solid var(--ok)}
-#toast .bad{border-left:3px solid var(--bad);color:var(--bad)}
-@keyframes fade{from{opacity:0;transform:translateY(-8px)}}
+#toast div::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:2.5px;background:var(--sage);
+}
+#toast .bad::before{background:var(--bad)}
+#toast .bad{color:var(--bad)}
+@keyframes fade{from{opacity:0;transform:translateY(-8px) scale(.985)}}
 
 /* ---------- 弹窗 ---------- */
 dialog{
-  border:1px solid var(--line-2);border-radius:6px;padding:32px 30px 26px;
-  background:linear-gradient(180deg,#FFFDF8,#FAF6EC);color:var(--ink);
-  width:min(440px,92vw);box-shadow:0 34px 90px rgba(74,90,134,.26);position:relative;
+  border:0;border-radius:2px;padding:32px 30px 26px;color:var(--ink);
+  background:linear-gradient(172deg,#FFFDF8,#FAF6EC 62%,#F6F2E7);
+  width:min(440px,92vw);position:relative;
+  box-shadow:
+    inset 0 0 0 .6px rgba(102,113,143,.24),
+    0 34px 80px -34px rgba(30,39,72,.55),
+    0 0 0 6px rgba(255,255,255,.55);
 }
-dialog::before{content:"";position:absolute;inset:7px;border:1px solid rgba(191,200,224,.6);border-radius:3px;pointer-events:none}
-dialog::backdrop{background:rgba(46,58,99,.34)}
-dialog h3{font-family:var(--serif);font-size:17px;font-weight:600;letter-spacing:.05em;margin-bottom:6px}
-dialog label{display:block;font-size:12px;color:var(--muted);letter-spacing:.1em;margin:14px 0 6px}
+dialog::before{
+  content:"";position:absolute;inset:10px;border:1px dashed rgba(155,170,200,.5);pointer-events:none;
+}
+dialog::backdrop{background:rgba(30,39,72,.34);backdrop-filter:blur(2px)}
+dialog h3{font-family:var(--cn);font-size:16px;font-weight:700;letter-spacing:.12em;margin-bottom:2px}
 dialog .row{margin-top:22px}
 
+/* ---------- 角落线描小物 ---------- */
+.orn-layer{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.orn-layer svg{position:absolute;opacity:.55}
+.orn-a{left:-6px;bottom:-4px;width:132px;height:132px}
+.orn-b{right:6px;top:8px;width:96px;height:96px;opacity:.4!important}
+.orn-c{left:44%;top:-8px;width:52px;height:52px;opacity:.35!important}
+/* 大朵淡窗花水印 */
+.orn-w{right:-70px;bottom:-90px;width:430px;height:430px;opacity:.11!important}
+
+/* ---------- 页脚 ---------- */
+.sheet-foot{
+  display:flex;align-items:center;gap:14px;margin-top:38px;
+  font-family:var(--latin);font-size:8px;letter-spacing:.24em;
+  color:rgba(30,39,72,.32);text-transform:uppercase;
+}
+.sheet-foot::before,.sheet-foot::after{content:"";flex:1;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(139,151,184,.55))}
+.sheet-foot::after{background:linear-gradient(90deg,rgba(139,151,184,.55),transparent)}
+.sheet-foot em{font-style:normal}
+
 /* ---------- 响应式 ---------- */
-@media(max-width:920px){
-  aside{position:static;width:auto;border-right:none;border-bottom:1px solid var(--line-2);
-    flex-direction:row;flex-wrap:wrap;padding:14px;gap:6px}
-  aside::before,aside .brand::after{display:none}
-  aside .brand{width:100%;padding-bottom:10px}
-  aside a{padding:7px 11px;font-size:12.5px}
-  aside a.on::after{display:none}
-  main{margin-left:0;padding:26px 18px 60px}
+@media(max-width:940px){
+  .stage{padding:18px 12px 60px}
+  .sheet-inner{padding:30px 22px 40px}
+  .dossier h1{font-size:26px}
+  .dossier em{font-size:19px}
+  .body-grid{grid-template-columns:1fr;gap:22px;padding-top:24px}
+  aside.index{display:flex;flex-wrap:wrap;gap:7px}
+  .index-h{width:100%;margin-bottom:2px}
+  aside.index a{margin-bottom:0;padding:7px 10px}
+  aside.index a b{font-size:11.5px}
+  aside.index a small{display:none}
+  aside.index .idx-foot{width:100%;flex-direction:row;gap:10px;margin-top:8px}
+  .orn-layer{display:none}
 }
-@media(prefers-reduced-motion:reduce){
-  *{transition:none!important;animation:none!important}
-}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
 
+<!-- 撕边滤镜 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="torn" x="-3%" y="-3%" width="106%" height="106%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.012 0.026" numOctaves="4" seed="9" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="8" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+
 <div id="login">
   <div class="login-box">
-    <h1>DQFB 管理后台</h1>
-    <p>请输入用户名与密码</p>
-    <input type="text" id="user" placeholder="用户名" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
-    <input type="password" id="pwd" placeholder="密码" autocomplete="current-password" style="margin-top:10px" onkeydown="if(event.key==='Enter')doLogin()">
-    <div class="row" style="justify-content:center;margin-top:22px"><button onclick="doLogin()">登 录</button></div>
-    <div id="err"></div>
+    <div class="login-bg"></div>
+    <div class="login-inner">
+      <div class="medal">D</div>
+      <h1>管理后台</h1>
+      <span class="fr">Bureau d'administration</span>
+      <div class="rule"></div>
+      <label class="tag">Compte · 用户名</label>
+      <input type="text" id="user" placeholder="用户名" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
+      <label class="tag">Mot de passe · 密码</label>
+      <input type="password" id="pwd" placeholder="密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+      <div class="row" style="justify-content:center;margin-top:24px"><button onclick="doLogin()">登 录</button></div>
+      <div id="err"></div>
+    </div>
+    <div class="postmark">POSTE</div>
   </div>
 </div>
 
 <div id="app">
-  <aside>
-    <div class="brand">🃏 大晴分包 <span>DQFB</span></div>
-    <a data-p="overview" class="on" onclick="go('overview')">📊 概览</a>
-    <a data-p="members" onclick="go('members')">👥 成员管理</a>
-    <a data-p="lottery" onclick="go('lottery')">🎰 抽奖设置</a>
-    <a data-p="template" onclick="go('template')">📣 通知模板</a>
-    <a data-p="member" onclick="go('member')">💎 会员设置</a>
-    <a data-p="wash" onclick="go('wash')">🧼 洗数据设置</a>
-    <a data-p="site" onclick="go('site')">🌐 网站设置</a>
-    <a data-p="botprofile" onclick="go('botprofile')">🤖 机器人资料</a>
-    <a data-p="audit" onclick="go('audit')">📜 操作记录</a>
-    <div style="flex:1"></div>
-    <a href="/" target="_blank">🌐 查看介绍页</a>
-    <a onclick="doLogout()">🚪 退出登录</a>
-  </aside>
-
-  <main>
-    <section id="p-overview" class="page">
-      <h2>概览</h2>
-      <div class="sub">机器人实时数据 · 与机器人共用数据库</div>
-      <div class="grid">
-        <div class="stat"><b id="s-users">-</b><span>注册用户</span></div>
-        <div class="stat"><b id="s-members">-</b><span>有效会员</span></div>
-        <div class="stat"><b id="s-lottery">-</b><span>累计抽奖</span></div>
-        <div class="stat"><b id="s-lottery-today">-</b><span>今日抽奖</span></div>
-        <div class="stat"><b id="s-washed">-</b><span>已洗数据（行）</span></div>
+  <div class="stage">
+    <div class="sheet">
+      <div class="sheet-bg2"></div>
+      <div class="sheet-bg"></div>
+      <div class="orn-layer" aria-hidden="true">
+        <!-- 月牙 + 星 -->
+        <svg class="orn-a" viewBox="0 0 100 100" fill="none" stroke="#8B97B8" stroke-width=".9" stroke-linecap="round">
+          <path d="M64 14c-14 2-25 13-27 27-2 16 9 30 25 33 5 .8 10 .3 14-1-8 6-19 8-29 5-16-4-27-20-23-36C28 26 44 15 60 14h4z"/>
+          <path d="M74 26l2.4 5.6L82 34l-5.6 2.4L74 42l-2.4-5.6L66 34l5.6-2.4L74 26z" stroke-width=".7"/>
+          <circle cx="84" cy="52" r="1.4" fill="#8B97B8" stroke="none"/>
+          <circle cx="70" cy="10" r="1" fill="#8B97B8" stroke="none"/>
+        </svg>
+        <!-- 枝叶 -->
+        <svg class="orn-b" viewBox="0 0 100 100" fill="none" stroke="#8B97B8" stroke-width=".85" stroke-linecap="round">
+          <path d="M50 92C50 66 52 44 60 26"/>
+          <path d="M56 58c-9-1-16-8-16-18 8 0 15 6 16 18z"/>
+          <path d="M58 42c8-2 13-9 12-19-8 1-13 8-12 19z"/>
+          <path d="M62 30c-8-1-13-7-13-16 7 0 12 6 13 16z"/>
+          <circle cx="60" cy="22" r="2.6"/>
+        </svg>
+        <!-- 小星 -->
+        <svg class="orn-c" viewBox="0 0 40 40" fill="none" stroke="#8B97B8" stroke-width=".9">
+          <path d="M20 4v32M4 20h32M9 9l22 22M31 9L9 31"/>
+        </svg>
+        <!-- 淡窗花水印 -->
+        <svg class="orn-w" viewBox="0 0 200 200" fill="none" stroke="#8B97B8" stroke-width=".5">
+          <circle cx="100" cy="100" r="94"/><circle cx="100" cy="100" r="76"/>
+          <circle cx="100" cy="100" r="54"/><circle cx="100" cy="100" r="28"/>
+          <path d="M100 6v188M6 100h188M34 34l132 132M166 34L34 166"/>
+          <path d="M100 46c14 0 26 12 26 26M100 154c-14 0-26-12-26-26M46 100c0-14 12-26 26-26M154 100c0 14-12 26-26 26"/>
+        </svg>
       </div>
-      <div class="card">
-        <h3>最近抽奖 / 兑换记录</h3>
-        <table><thead><tr><th>时间</th><th>用户</th><th>来源</th><th>奖品</th></tr></thead><tbody id="records"></tbody></table>
-      </div>
-    </section>
 
-    <section id="p-members" class="page" style="display:none">
-      <h2>成员管理</h2>
-      <div class="sub">查看会员剩余天数、洗数据余额、高级券；可直接加 / 扣（正数增加、负数扣减）</div>
-      <div class="card">
-        <div class="row" style="margin-bottom:16px">
-          <input id="member-q" placeholder="搜索 ID / 用户名 / 昵称" style="flex:1" onkeydown="if(event.key==='Enter')loadMembers()">
-          <button onclick="loadMembers()">🔍 搜索</button>
-          <button class="ghost" onclick="document.getElementById('member-q').value='';loadMembers()">显示全部</button>
+      <div class="sheet-inner">
+        <header class="dossier">
+          <div class="dossier-title">
+            <span class="dossier-no" id="page-no">N° 01</span>
+            <h1 id="page-title">概览</h1>
+            <em id="page-fr">Sommaire</em>
+          </div>
+          <div class="dossier-meta">
+            <div>le dossier des préférences</div>
+            <div><b>DQFB</b> · 机器人管理后台</div>
+          </div>
+        </header>
+
+        <div class="body-grid">
+          <aside class="index">
+            <div class="index-h">Index <em>目录</em></div>
+            <a data-p="overview" class="on" onclick="go('overview')"><i>i.</i><b>概览</b><small>Sommaire</small></a>
+            <a data-p="members" onclick="go('members')"><i>ii.</i><b>成员管理</b><small>Membres</small></a>
+            <a data-p="lottery" onclick="go('lottery')"><i>iii.</i><b>抽奖设置</b><small>Loterie</small></a>
+            <a data-p="template" onclick="go('template')"><i>iv.</i><b>通知模板</b><small>Modèles</small></a>
+            <a data-p="member" onclick="go('member')"><i>v.</i><b>会员设置</b><small>Adhésion</small></a>
+            <a data-p="wash" onclick="go('wash')"><i>vi.</i><b>洗数据设置</b><small>Tarifs</small></a>
+            <a data-p="site" onclick="go('site')"><i>vii.</i><b>网站设置</b><small>Site</small></a>
+            <a data-p="botprofile" onclick="go('botprofile')"><i>viii.</i><b>机器人资料</b><small>Profil</small></a>
+            <a data-p="audit" onclick="go('audit')"><i>ix.</i><b>操作记录</b><small>Journal</small></a>
+            <div class="idx-foot">
+              <a href="/" target="_blank">🌐 查看介绍页</a>
+              <a onclick="doLogout()">🚪 退出登录</a>
+            </div>
+          </aside>
+
+          <main>
+            <section id="p-overview" class="page">
+              <div class="sub">机器人实时数据 · 与机器人共用数据库</div>
+              <div class="grid">
+                <div class="stat"><b id="s-users">-</b><span>注册用户</span></div>
+                <div class="stat"><b id="s-members">-</b><span>有效会员</span></div>
+                <div class="stat"><b id="s-lottery">-</b><span>累计抽奖</span></div>
+                <div class="stat"><b id="s-lottery-today">-</b><span>今日抽奖</span></div>
+                <div class="stat"><b id="s-washed">-</b><span>已洗数据（行）</span></div>
+              </div>
+              <div class="card">
+                <h3>最近抽奖 / 兑换记录</h3>
+                <table><thead><tr><th>时间</th><th>用户</th><th>来源</th><th>奖品</th></tr></thead><tbody id="records"></tbody></table>
+              </div>
+            </section>
+
+            <section id="p-members" class="page" style="display:none">
+              <div class="sub">查看会员剩余天数、洗数据余额、高级券 · 可直接加 / 扣</div>
+              <div class="card">
+                <div class="row" style="margin-bottom:18px">
+                  <input id="member-q" placeholder="搜索 ID / 用户名 / 昵称" style="flex:1" onkeydown="if(event.key==='Enter')loadMembers()">
+                  <button onclick="loadMembers()">🔍 搜索</button>
+                  <button class="ghost" onclick="document.getElementById('member-q').value='';loadMembers()">显示全部</button>
+                </div>
+                <table><thead><tr><th>ID</th><th>用户</th><th>会员</th><th>洗数据余额</th><th>高级券</th><th>操作</th></tr></thead>
+                <tbody id="member-rows"><tr><td colspan="6" style="color:var(--muted)">加载中…</td></tr></tbody></table>
+              </div>
+            </section>
+
+            <section id="p-lottery" class="page" style="display:none">
+              <div class="sub">保存后机器人立即生效 · 概率总和 ≤100%，差额自动为「谢谢参与」</div>
+              <div class="card">
+                <h3>普通抽奖奖品池</h3>
+                <div class="hint">格式：<code>类型:数值:概率</code>，逗号分隔。<br>类型：<code>天</code>=会员天数，<code>余额</code>=洗数据余额（元），<code>高级券</code>=高级抽奖次数<br>例：<code>天:1:40,天:3:30,余额:5:5,高级券:1:3</code></div>
+                <textarea id="lottery_prizes"></textarea>
+                <div class="row"><button onclick="save('lottery_prizes')">保存</button><button class="ghost" onclick="reset('lottery_prizes')">重置默认</button></div>
+              </div>
+              <div class="card">
+                <h3>高级抽奖奖品池</h3>
+                <div class="hint">消耗 1 次高级券抽取。格式同普通抽奖（不支持高级券）。<br>例：<code>天:30:45,天:90:30,天:365:15,余额:50:10</code></div>
+                <textarea id="lottery_premium_prizes"></textarea>
+                <div class="row"><button onclick="save('lottery_premium_prizes')">保存</button><button class="ghost" onclick="reset('lottery_premium_prizes')">重置默认</button></div>
+              </div>
+              <div class="card">
+                <h3>兑换价目表</h3>
+                <div class="hint">格式：<code>券数:类型:数值</code>，逗号分隔。<br>例：<code>1:天:10,2:余额:20</code>（1 券换 10 天会员 / 2 券换 20 元余额）</div>
+                <textarea id="lottery_redeem"></textarea>
+                <div class="row"><button onclick="save('lottery_redeem')">保存</button><button class="ghost" onclick="reset('lottery_redeem')">重置默认</button></div>
+              </div>
+            </section>
+
+            <section id="p-template" class="page" style="display:none">
+              <div class="sub">抽奖 / 兑换到账后，自动发到已绑定的通知群</div>
+              <div class="card">
+                <h3>抽奖到账通知模板</h3>
+                <div class="hint">可用占位符（会替换成真实内容）：<br>
+                  <code>{username}</code> — 用户名字（Telegram 昵称，自动打码，如 张* / 王*二）<br>
+                  <code>{user_id}</code> — 用户 Telegram ID<br>
+                  <code>{source}</code> — 来源（普通抽奖 / 高级抽奖 / 兑换）<br>
+                  <code>{prize}</code> — 奖品（如「3 天会员」）
+                </div>
+                <textarea id="lottery_notify_template" style="min-height:160px"></textarea>
+                <div class="row"><button onclick="save('lottery_notify_template')">保存</button><button class="ghost" onclick="reset('lottery_notify_template')">重置默认</button></div>
+              </div>
+            </section>
+
+            <section id="p-member" class="page" style="display:none">
+              <div class="sub">套餐与欢迎语，保存后机器人立即生效</div>
+              <div class="card">
+                <h3>会员套餐（购买页）</h3>
+                <div class="hint">格式：<code>天数:价格(USDT)</code>，逗号分隔。<br>例：<code>7:1,30:3,90:8,365:25</code></div>
+                <textarea id="plans"></textarea>
+                <div class="row"><button onclick="save('plans')">保存</button><button class="ghost" onclick="reset('plans')">重置默认</button></div>
+              </div>
+              <div class="card">
+                <h3>欢迎语（/start 显示）</h3>
+                <div class="hint">支持占位符 <code>{昵称}</code>（替换成用户名字，让每个用户看到自己的名字）。<br>
+                支持 HTML：<code>&lt;b&gt;加粗&lt;/b&gt;</code>。例：<code>你好，{昵称}！欢迎使用 &lt;b&gt;大晴分包机器人&lt;/b&gt;</code></div>
+                <textarea id="welcome_text" style="min-height:150px"></textarea>
+                <div class="row"><button onclick="save('welcome_text')">保存</button><button class="ghost" onclick="reset('welcome_text')">重置默认</button></div>
+              </div>
+            </section>
+
+            <section id="p-wash" class="page" style="display:none">
+              <div class="sub">定价与配额，保存后机器人立即生效</div>
+              <div class="card">
+                <h3>阶梯定价（每行价格）</h3>
+                <div class="hint">格式：<code>行数:单价(元)</code>，逗号分隔。<br>例：<code>0:0.0013,100000:0.0010</code></div>
+                <textarea id="wash_prices"></textarea>
+                <div class="row"><button onclick="save('wash_prices')">保存</button><button class="ghost" onclick="reset('wash_prices')">重置默认</button></div>
+              </div>
+              <div class="card">
+                <h3>价格下限（元/行）</h3>
+                <label>所有档位单价不得低于此值</label>
+                <input id="wash_price_floor" type="text">
+                <div class="row"><button onclick="save('wash_price_floor')">保存</button><button class="ghost" onclick="reset('wash_price_floor')">重置默认</button></div>
+              </div>
+              <div class="card">
+                <h3>累计洗数据配额（行）</h3>
+                <label>达到后不再接受新任务；0 = 不限制</label>
+                <input id="wash_quota" type="text">
+                <div class="row"><button onclick="save('wash_quota')">保存</button><button class="ghost" onclick="reset('wash_quota')">重置默认</button></div>
+              </div>
+              <div class="card">
+                <h3>USDT 固定汇率（兜底）</h3>
+                <label>实时汇率获取失败时使用；留空 = 用内置默认 6.8</label>
+                <input id="usdt_rate" type="text" placeholder="6.8">
+                <div class="row"><button onclick="save('usdt_rate')">保存</button><button class="ghost" onclick="reset('usdt_rate')">清空</button></div>
+              </div>
+            </section>
+
+            <section id="p-site" class="page" style="display:none">
+              <div class="sub">配置落地页的标题、品牌、主色、联系方式 · 保存后刷新网站即生效</div>
+              <div class="card">
+                <label>网站标题（浏览器标签栏）</label>
+                <input id="site_title">
+                <label>品牌名（左上角）</label>
+                <input id="brand">
+                <label>Logo 图标（emoji，如 🃏）</label>
+                <input id="logo_icon">
+                <label>Logo 后缀（如 DQFB，留空则不显示）</label>
+                <input id="logo_suffix">
+                <label>主标题渐变词</label>
+                <input id="hero_highlight">
+                <label>副标题</label>
+                <textarea id="hero_subtitle"></textarea>
+                <label>主色（十六进制色值）</label>
+                <input id="accent" type="text">
+                <label>联系方式一 · 显示名称</label>
+                <input id="contact1_label">
+                <label>联系方式一 · @用户名</label>
+                <input id="contact1">
+                <label>联系方式二 · 显示名称</label>
+                <input id="contact2_label">
+                <label>联系方式二 · @用户名</label>
+                <input id="contact2">
+                <label>机器人链接</label>
+                <input id="bot_link">
+                <label>首屏演示卡 · 名字</label>
+                <input id="mock_name">
+                <label>首屏演示卡 · 在线状态</label>
+                <input id="mock_status">
+                <label>首屏演示卡 · 浮动标签一</label>
+                <input id="mock_chip1">
+                <label>首屏演示卡 · 浮动标签二</label>
+                <input id="mock_chip2">
+                <label>中奖通知 · 动词</label>
+                <input id="toast_prefix">
+                <label>中奖通知 · 底部文字</label>
+                <input id="toast_footer">
+                <label>页脚 · 版权文字</label>
+                <input id="footer_text">
+                <label>页脚 · 底部说明</label>
+                <input id="footer_note">
+                <div class="row"><button onclick="saveSite()">💾 保存网站设置</button></div>
+              </div>
+            </section>
+
+            <section id="p-botprofile" class="page" style="display:none">
+              <div class="sub">修改机器人在 Telegram 里显示的名字和简介 · 保存后立即生效</div>
+              <div class="card">
+                <label>显示名称（1~64 字）</label>
+                <input id="bot_name">
+                <label>简介（0~512 字，用户打开机器人时看到）</label>
+                <textarea id="bot_description"></textarea>
+                <label>简短说明（0~120 字，资料页顶部那一行）</label>
+                <textarea id="bot_short_description"></textarea>
+                <div class="row"><button onclick="saveBotProfile()">💾 保存机器人资料</button></div>
+              </div>
+            </section>
+
+            <section id="p-audit" class="page" style="display:none">
+              <div class="sub">谁在什么时候改了配置 / 成员 / 机器人资料 · 最近 100 条</div>
+              <div class="card">
+                <table><thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>详情</th></tr></thead>
+                <tbody id="audit-rows"><tr><td colspan="4" style="color:var(--muted)">加载中…</td></tr></tbody></table>
+              </div>
+            </section>
+          </main>
         </div>
-        <table><thead><tr><th>ID</th><th>用户</th><th>会员</th><th>洗数据余额</th><th>高级券</th><th>操作</th></tr></thead>
-        <tbody id="member-rows"><tr><td colspan="6" style="color:var(--muted)">加载中…</td></tr></tbody></table>
+
+        <footer class="sheet-foot"><em>❦ · DQFB · le dossier des préférences · N° 01 — 09 ·</em></footer>
       </div>
-    </section>
-
-    <section id="p-lottery" class="page" style="display:none">
-      <h2>抽奖设置</h2>
-      <div class="sub">保存后机器人立即生效。概率总和 ≤100%，差额自动为「谢谢参与」。</div>
-
-      <div class="card">
-        <h3>普通抽奖奖品池</h3>
-        <div class="hint">格式：<code>类型:数值:概率</code>，逗号分隔。<br>类型：<code>天</code>=会员天数，<code>余额</code>=洗数据余额（元），<code>高级券</code>=高级抽奖次数<br>例：<code>天:1:40,天:3:30,余额:5:5,高级券:1:3</code></div>
-        <textarea id="lottery_prizes"></textarea>
-        <div class="row"><button onclick="save('lottery_prizes')">保存</button><button class="ghost" onclick="reset('lottery_prizes')">重置默认</button></div>
-      </div>
-
-      <div class="card">
-        <h3>高级抽奖奖品池</h3>
-        <div class="hint">消耗 1 次高级券抽取。格式同普通抽奖（不支持高级券）。<br>例：<code>天:30:45,天:90:30,天:365:15,余额:50:10</code></div>
-        <textarea id="lottery_premium_prizes"></textarea>
-        <div class="row"><button onclick="save('lottery_premium_prizes')">保存</button><button class="ghost" onclick="reset('lottery_premium_prizes')">重置默认</button></div>
-      </div>
-
-      <div class="card">
-        <h3>兑换价目表（高级券直接兑换）</h3>
-        <div class="hint">格式：<code>券数:类型:数值</code>，逗号分隔。<br>例：<code>1:天:10,2:余额:20</code>（1 券换 10 天会员 / 2 券换 20 元余额）</div>
-        <textarea id="lottery_redeem"></textarea>
-        <div class="row"><button onclick="save('lottery_redeem')">保存</button><button class="ghost" onclick="reset('lottery_redeem')">重置默认</button></div>
-      </div>
-    </section>
-
-    <section id="p-template" class="page" style="display:none">
-      <h2>通知模板</h2>
-      <div class="sub">抽奖 / 兑换到账后，自动发到已绑定的通知群</div>
-
-      <div class="card">
-        <h3>抽奖到账通知模板</h3>
-        <div class="hint">可用占位符（会替换成真实内容）：<br>
-          <code>{username}</code> — 用户名字（Telegram 昵称，自动打码，如 张* / 王*二）<br>
-          <code>{user_id}</code> — 用户 Telegram ID<br>
-          <code>{source}</code> — 来源（普通抽奖 / 高级抽奖 / 兑换）<br>
-          <code>{prize}</code> — 奖品（如「3 天会员」）
-        </div>
-        <textarea id="lottery_notify_template" style="min-height:160px"></textarea>
-        <div class="row"><button onclick="save('lottery_notify_template')">保存</button><button class="ghost" onclick="reset('lottery_notify_template')">重置默认</button></div>
-      </div>
-    </section>
-
-    <section id="p-member" class="page" style="display:none">
-      <h2>会员设置</h2>
-      <div class="sub">套餐与欢迎语，保存后机器人立即生效</div>
-
-      <div class="card">
-        <h3>会员套餐（购买页）</h3>
-        <div class="hint">格式：<code>天数:价格(USDT)</code>，逗号分隔。<br>例：<code>7:1,30:3,90:8,365:25</code></div>
-        <textarea id="plans"></textarea>
-        <div class="row"><button onclick="save('plans')">保存</button><button class="ghost" onclick="reset('plans')">重置默认</button></div>
-      </div>
-
-      <div class="card">
-        <h3>欢迎语（/start 显示）</h3>
-        <div class="hint">支持占位符 <code>{昵称}</code>（替换成用户名字，让每个用户看到自己的名字）。<br>
-        支持 HTML：<code>&lt;b&gt;加粗&lt;/b&gt;</code>。例：<code>你好，{昵称}！欢迎使用 &lt;b&gt;大晴分包机器人&lt;/b&gt;</code></div>
-        <textarea id="welcome_text" style="min-height:150px"></textarea>
-        <div class="row"><button onclick="save('welcome_text')">保存</button><button class="ghost" onclick="reset('welcome_text')">重置默认</button></div>
-      </div>
-    </section>
-
-    <section id="p-wash" class="page" style="display:none">
-      <h2>洗数据设置</h2>
-      <div class="sub">定价与配额，保存后机器人立即生效</div>
-
-      <div class="card">
-        <h3>阶梯定价（每行价格）</h3>
-        <div class="hint">格式：<code>行数:单价(元)</code>，逗号分隔。<br>例：<code>0:0.0013,100000:0.0010</code></div>
-        <textarea id="wash_prices"></textarea>
-        <div class="row"><button onclick="save('wash_prices')">保存</button><button class="ghost" onclick="reset('wash_prices')">重置默认</button></div>
-      </div>
-
-      <div class="card">
-        <h3>价格下限（元/行）</h3>
-        <label>所有档位单价不得低于此值</label>
-        <input id="wash_price_floor" type="text">
-        <div class="row"><button onclick="save('wash_price_floor')">保存</button><button class="ghost" onclick="reset('wash_price_floor')">重置默认</button></div>
-      </div>
-
-      <div class="card">
-        <h3>累计洗数据配额（行）</h3>
-        <label>达到后不再接受新任务；0 = 不限制</label>
-        <input id="wash_quota" type="text">
-        <div class="row"><button onclick="save('wash_quota')">保存</button><button class="ghost" onclick="reset('wash_quota')">重置默认</button></div>
-      </div>
-
-      <div class="card">
-        <h3>USDT 固定汇率（兜底）</h3>
-        <label>实时汇率获取失败时使用；留空 = 用内置默认 6.8</label>
-        <input id="usdt_rate" type="text" placeholder="6.8">
-        <div class="row"><button onclick="save('usdt_rate')">保存</button><button class="ghost" onclick="reset('usdt_rate')">清空</button></div>
-      </div>
-    </section>
-
-    <section id="p-site" class="page" style="display:none">
-      <h2>网站设置</h2>
-      <div class="sub">配置落地页的标题、品牌、主色、联系方式，保存后刷新网站即生效</div>
-      <div class="card">
-        <label>网站标题（浏览器标签栏）</label>
-        <input id="site_title">
-        <label>品牌名（左上角）</label>
-        <input id="brand">
-        <label>Logo 图标（emoji，如 🃏）</label>
-        <input id="logo_icon">
-        <label>Logo 后缀（如 DQFB，留空则不显示）</label>
-        <input id="logo_suffix">
-        <label>主标题渐变词</label>
-        <input id="hero_highlight">
-        <label>副标题</label>
-        <textarea id="hero_subtitle"></textarea>
-        <label>主色（十六进制色值，如 #3b82f6）</label>
-        <input id="accent" type="text">
-        <label>联系方式一 · 显示名称（如 大晴）</label>
-        <input id="contact1_label">
-        <label>联系方式一 · @用户名（如 @mmmmg）</label>
-        <input id="contact1">
-        <label>联系方式二 · 显示名称（如 客服）</label>
-        <input id="contact2_label">
-        <label>联系方式二 · @用户名（如 @kefu686）</label>
-        <input id="contact2">
-        <label>机器人链接</label>
-        <input id="bot_link">
-        <label>首屏演示卡 · 名字</label>
-        <input id="mock_name">
-        <label>首屏演示卡 · 在线状态（如 ● 在线 · 秒级响应）</label>
-        <input id="mock_status">
-        <label>首屏演示卡 · 浮动标签一（如 转盘抽奖）</label>
-        <input id="mock_chip1">
-        <label>首屏演示卡 · 浮动标签二（如 秒级处理）</label>
-        <input id="mock_chip2">
-        <label>中奖通知 · 动词（如 抽中）</label>
-        <input id="toast_prefix">
-        <label>中奖通知 · 底部文字（如 刚刚 · 大晴分包机器人）</label>
-        <input id="toast_footer">
-        <label>页脚 · 版权文字（如 © 2026 大晴分包机器人 · DQFB）</label>
-        <input id="footer_text">
-        <label>页脚 · 底部说明（如 本页面为功能演示…）</label>
-        <input id="footer_note">
-        <div class="row"><button onclick="saveSite()">💾 保存网站设置</button></div>
-      </div>
-    </section>
-
-    <section id="p-botprofile" class="page" style="display:none">
-      <h2>机器人资料</h2>
-      <div class="sub">修改机器人在 Telegram 里显示的名字和简介（保存后立即生效，无需重启）</div>
-      <div class="card">
-        <label>显示名称（1~64 字）</label>
-        <input id="bot_name">
-        <label>简介（0~512 字，用户打开机器人时看到）</label>
-        <textarea id="bot_description"></textarea>
-        <label>简短说明（0~120 字，资料页顶部那一行）</label>
-        <textarea id="bot_short_description"></textarea>
-        <div class="row"><button onclick="saveBotProfile()">💾 保存机器人资料</button></div>
-      </div>
-    </section>
-
-    <section id="p-audit" class="page" style="display:none">
-      <h2>操作记录</h2>
-      <div class="sub">谁在什么时候改了配置 / 成员 / 机器人资料（最近 100 条）</div>
-      <div class="card">
-        <table><thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>详情</th></tr></thead>
-        <tbody id="audit-rows"><tr><td colspan="4" style="color:var(--muted)">加载中…</td></tr></tbody></table>
-      </div>
-    </section>
-  </main>
+    </div>
+  </div>
 </div>
 
 <dialog id="adjust-dialog">
@@ -459,6 +736,19 @@ dialog .row{margin-top:22px}
 <script>
 const $=id=>document.getElementById(id);
 let CONFIG={};
+
+/* 档案抬头：每页的中文标题 / 法文副题 / 编号 */
+const PAGE_META={
+  overview:   ['概览','Sommaire','N° 01'],
+  members:    ['成员管理','Membres','N° 02'],
+  lottery:    ['抽奖设置','Loterie','N° 03'],
+  template:   ['通知模板','Modèles','N° 04'],
+  member:     ['会员设置','Adhésion','N° 05'],
+  wash:       ['洗数据设置','Tarifs','N° 06'],
+  site:       ['网站设置','Site','N° 07'],
+  botprofile: ['机器人资料','Profil','N° 08'],
+  audit:      ['操作记录','Journal','N° 09'],
+};
 
 async function api(path,opt={}){
   const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opt});
@@ -485,6 +775,13 @@ function go(p){
   document.querySelectorAll('aside a[data-p]').forEach(a=>a.classList.toggle('on',a.dataset.p===p));
   document.querySelectorAll('.page').forEach(s=>s.style.display='none');
   $('p-'+p).style.display='block';
+  const m=PAGE_META[p];
+  if(m){
+    if($('page-title'))$('page-title').textContent=m[0];
+    if($('page-fr'))$('page-fr').textContent=m[1];
+    if($('page-no'))$('page-no').textContent=m[2];
+  }
+  document.title='DQFB · '+(m?m[0]:'管理后台');
   if(p==='members')loadMembers();
   if(p==='site')loadSite();
   if(p==='botprofile')loadBotProfile();
@@ -550,7 +847,7 @@ async function loadMembers(){
       return `<tr>
         <td>${u.id}</td>
         <td>${esc(name)}</td>
-        <td>${esc(u.member_text)}${u.expires?'<br><span style="color:var(--muted);font-size:12px">至 '+esc(u.expires)+'</span>':''}</td>
+        <td>${esc(u.member_text)}${u.expires?'<br><span style="color:var(--muted);font-size:11px">至 '+esc(u.expires)+'</span>':''}</td>
         <td>¥${u.wash_balance.toFixed(4)}</td>
         <td>${u.lottery_tickets}</td>
         <td><button class="ghost" onclick='openAdjust(${u.id},"${esc(name)}")'>调整</button></td>
@@ -631,3 +928,5 @@ async function loadAudit(){
 </script>
 </body>
 </html>
+
+
