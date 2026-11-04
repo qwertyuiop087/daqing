@@ -1,4 +1,4 @@
-﻿"""内置网站 + 管理后台（aiohttp）：机器人一个服务同时提供网页与后台，免去单独部署。
+"""内置网站 + 管理后台（aiohttp）：机器人一个服务同时提供网页与后台，免去单独部署。
 
 - GET /                 介绍页（website/index.html）
 - GET /admin            管理后台登录页
@@ -9,6 +9,7 @@
 import asyncio
 import hashlib
 import hmac
+import math
 import os
 import time
 from pathlib import Path
@@ -28,13 +29,16 @@ ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")  # 后台登录用户名�
 
 # ---------------- 登录防护（防暴力破解） ----------------
 
-LOGIN_FAIL_WINDOW = 600        # 全局失败统计窗口（秒）
-LOGIN_FAIL_MAX = 15            # 窗口内全局失败次数上限，超过则锁定登录
+LOGIN_FAIL_WINDOW = 600        # 失败统计窗口（秒）
+LOGIN_FAIL_MAX = 15            # 单个 IP 在窗口内失败次数上限，超过则锁定该 IP 登录
+LOGIN_GLOBAL_FAIL_MAX = 100    # 全局兜底：窗口内总失败次数上限（防分布式爆破）
 LOGIN_LOCK_SECONDS = 900       # 锁定时长（15 分钟）
 # 可选：只允许这些 IP 登录（逗号分隔，如 "1.2.3.4,5.6.7.8"；留空 = 不限）
 ADMIN_IP_WHITELIST = [x.strip() for x in os.getenv("ADMIN_IP_WHITELIST", "").split(",") if x.strip()]
 
-_login_fails: list[float] = []
+# 每个 IP 的失败时间戳（用于按 IP 锁定）；全局失败时间戳（用于兜底）
+_ip_failures: dict[str, list[float]] = {}
+_global_failures: list[float] = []
 
 if ADMIN_PASSWORD and len(ADMIN_PASSWORD) < 8:
     print("⚠️ 警告：ADMIN_PASSWORD 少于 8 位，容易被暴力破解，建议改成 12 位以上强密码。")
@@ -53,11 +57,14 @@ _public_cache: dict[str, tuple[float, dict]] = {}
 
 
 def _client_ip(request: web.Request) -> str:
-    """取客户端 IP：优先 Cloudflare / 代理头，回退到直连地址。"""
-    for header in ("CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP"):
-        value = request.headers.get(header)
-        if value:
-            return value.split(",")[0].strip()
+    """取客户端 IP：只信任代理链里最后一跳（Railway 等边缘代理追加的那一段），
+    客户端可以伪造 X-Forwarded-For 前面的部分，但伪造不了最后一跳。"""
+    value = request.headers.get("X-Forwarded-For")
+    if value:
+        return value.split(",")[-1].strip() or (request.remote or "unknown")
+    value = request.headers.get("X-Real-IP")
+    if value:
+        return value.strip()
     return request.remote or "unknown"
 
 
@@ -189,14 +196,19 @@ async def login(request: web.Request):
     except Exception:
         raise web.HTTPBadRequest(text="请求格式错误")
 
-    # 全局失败锁定：不管从哪个 IP 来，窗口内失败次数过多就整体锁定登录
+    # 按 IP 锁定 + 全局兜底：单个 IP 窗口内失败过多就锁该 IP；
+    # 全局失败次数过高（分布式爆破）才整体锁定，避免一人捣乱锁死管理员
     now = time.time()
-    _login_fails[:] = [t for t in _login_fails if now - t < LOGIN_FAIL_WINDOW]
-    if len(_login_fails) >= LOGIN_FAIL_MAX:
+    ip = _client_ip(request)
+    ip_fails = [t for t in _ip_failures.get(ip, []) if now - t < LOGIN_FAIL_WINDOW]
+    if len(ip_fails) >= LOGIN_FAIL_MAX:
+        raise web.HTTPTooManyRequests(text="尝试次数过多，请 15 分钟后再试")
+    _global_failures[:] = [t for t in _global_failures if now - t < LOGIN_FAIL_WINDOW]
+    if len(_global_failures) >= LOGIN_GLOBAL_FAIL_MAX:
         raise web.HTTPTooManyRequests(text="尝试次数过多，请 15 分钟后再试")
 
     # IP 白名单（配置了才生效）
-    if ADMIN_IP_WHITELIST and _client_ip(request) not in ADMIN_IP_WHITELIST:
+    if ADMIN_IP_WHITELIST and ip not in ADMIN_IP_WHITELIST:
         raise web.HTTPForbidden(text="当前网络不在允许登录的白名单内")
 
     # 用户名 + 密码双验证（用户名未配置时默认 admin）
@@ -205,11 +217,16 @@ async def login(request: web.Request):
     ok_user = bool(ADMIN_USERNAME) and hmac.compare_digest(username, ADMIN_USERNAME)
     ok_pass = bool(ADMIN_PASSWORD) and hmac.compare_digest(password, ADMIN_PASSWORD)
     if not (ok_user and ok_pass):
-        _login_fails.append(now)
+        ip_fails.append(now)
+        _ip_failures[ip] = ip_fails
+        _global_failures.append(now)
+        if len(_ip_failures) > 5000:  # 控制字典规模
+            for k in [k for k, v in _ip_failures.items() if not v or now - v[-1] > LOGIN_FAIL_WINDOW]:
+                _ip_failures.pop(k, None)
         await asyncio.sleep(0.5)  # 失败延时，拖慢爆破速度
         raise web.HTTPUnauthorized(text="用户名或密码错误")
     with database.SessionLocal() as session:
-        database.log_audit(session, username, "login", f"后台登录成功（IP: {_client_ip(request)}）")
+        database.log_audit(session, username, "login", f"后台登录成功（IP: {ip}）")
     resp = web.json_response({"ok": True})
     resp.set_cookie(COOKIE_NAME, _make_token(username), max_age=COOKIE_TTL, httponly=True, samesite="lax")
     return resp
@@ -327,6 +344,11 @@ async def members_adjust_api(request: web.Request):
         balance_delta = float(data.get("balance_delta", 0) or 0)
     except (TypeError, ValueError):
         raise web.HTTPBadRequest(text="数值格式错误")
+    # 拒绝 NaN / Infinity：JSON 解析会接受这些值，写库会永久损坏余额
+    if not math.isfinite(balance_delta) or not math.isfinite(float(days_delta)):
+        raise web.HTTPBadRequest(text="数值格式错误")
+    if abs(days_delta) > 365000 or abs(balance_delta) > 1e9:
+        raise web.HTTPBadRequest(text="调整数值超出允许范围")
     if not user_id:
         raise web.HTTPBadRequest(text="缺少用户")
     if not days_delta and not balance_delta:
