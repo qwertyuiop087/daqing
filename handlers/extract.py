@@ -1,4 +1,4 @@
-"""提取手机号：支持 TXT / CSV / XLSX / XLS，可选择是否去除重复。
+﻿"""提取手机号：支持 TXT / CSV / XLSX / XLS，可选择是否去除重复。
 照抄老版本逻辑。"""
 import os
 import zipfile
@@ -62,7 +62,8 @@ async def extract_got_file(message: Message, state: FSMContext, bot: Bot):
 
     data = await state.get_data()
     workdir = data["workdir"]
-    tmp_path = os.path.join(workdir, doc.file_name or "input")
+    from services.file_ops import sanitize_filename
+    tmp_path = os.path.join(workdir, sanitize_filename(doc.file_name or "input"))
 
     progress_msg = await message.answer(f"⏳ 正在下载文件（{(doc.file_size or 0)/1024/1024:.1f}MB）…")
 
