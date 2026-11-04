@@ -1,4 +1,4 @@
-"""内置网站 + 管理后台（aiohttp）：机器人一个服务同时提供网页与后台，免去单独部署。
+﻿"""内置网站 + 管理后台（aiohttp）：机器人一个服务同时提供网页与后台，免去单独部署。
 
 - GET /                 介绍页（website/index.html）
 - GET /admin            管理后台登录页
@@ -139,7 +139,7 @@ def _auth(request: web.Request) -> str:
 _FALLBACK_HTML = """<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>大晴分包机器人 · DQFB</title>
+<title>错落雨分包机器人 · CUOLUOYU</title>
 <style>
 body{margin:0;background:#05060f;color:#eef0fa;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
 display:grid;place-items:center;min-height:100vh;text-align:center;padding:24px}
@@ -150,7 +150,7 @@ background:linear-gradient(120deg,#8b5cf6,#22d3ee);color:#fff;text-decoration:no
 .note{margin-top:28px;font-size:12px;color:#555}
 </style></head>
 <body><div>
-<h1>🃏 大晴分包机器人</h1>
+<h1>错落雨分包机器人</h1>
 <p>号码数据处理 · 抽奖系统 · 会员服务</p>
 <a href="https://t.me/sechou_bot">✈️ 打开机器人</a>
 <p class="note">网站页面文件还未上传（缺少 website/index.html），当前为备用页</p>
