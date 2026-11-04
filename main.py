@@ -5,6 +5,7 @@
 - 网站/管理后台（可选）：webapp.py 存在则同进程提供 /（介绍页）与 /admin（后台）。
 """
 import logging
+import os
 
 import asyncio
 import time
@@ -170,6 +171,49 @@ async def start_auto_credit(bot) -> None:
             logging.warning("⚠️ 自动到账扫描异常：%s", e)
 
 
+# ---------------- 废弃临时目录清理 ----------------
+
+TEMP_CLEANUP_INTERVAL = 3600      # 每小时一次
+TEMP_KEEP_SECONDS = 24 * 3600     # 只清理 24 小时前的
+
+
+def _cleanup_stale_tempdirs() -> None:
+    """删除系统临时目录里 24 小时前的 bot_ 工作目录（用户操作中断留下的）。"""
+    import shutil
+    import tempfile
+
+    root = tempfile.gettempdir()
+    cutoff = time.time() - TEMP_KEEP_SECONDS
+    removed = 0
+    try:
+        for name in os.listdir(root):
+            if not name.startswith("bot_"):
+                continue
+            p = os.path.join(root, name)
+            if not os.path.isdir(p):
+                continue
+            try:
+                if os.path.getmtime(p) < cutoff:
+                    shutil.rmtree(p, ignore_errors=True)
+                    removed += 1
+            except Exception:
+                pass
+    except Exception:
+        pass
+    if removed:
+        logging.info("🧹 已清理 %d 个废弃临时目录", removed)
+
+
+async def start_temp_cleanup() -> None:
+    """每小时清理一次 24 小时前的废弃临时目录。"""
+    while True:
+        await asyncio.sleep(TEMP_CLEANUP_INTERVAL)
+        try:
+            await asyncio.to_thread(_cleanup_stale_tempdirs)
+        except Exception as e:
+            logging.warning("⚠️ 临时目录清理异常：%s", e)
+
+
 # ---------------- 主流程 ----------------
 
 async def main() -> None:
@@ -197,6 +241,33 @@ async def main() -> None:
 
     # 启动支付自动到账轮询（本文件自带，不依赖额外文件）
     asyncio.create_task(start_auto_credit(bot))
+
+    # 启动废弃临时目录清理（每小时一次，删除 24 小时前的）
+    asyncio.create_task(start_temp_cleanup())
+
+    # 全局异常兜底：记录日志并通知管理员（节流：30 分钟最多一条）
+    _err_notify_state = {"ts": 0.0}
+
+    @dp.errors()
+    async def _on_global_error(event):
+        exc = event.exception
+        logging.error("未处理异常：%s", exc, exc_info=(type(exc), exc, exc.__traceback__))
+        now = time.time()
+        if now - _err_notify_state["ts"] < 1800:
+            return
+        _err_notify_state["ts"] = now
+        from utils.roles import admin_id_list
+        for uid in admin_id_list():
+            try:
+                await bot.send_message(
+                    uid,
+                    f"⚠️ <b>机器人出现异常</b>\n\n"
+                    f"类型：{type(exc).__name__}\n"
+                    f"详情：{str(exc)[:300]}",
+                    parse_mode=ParseMode.HTML,
+                )
+            except Exception:
+                pass
 
     # 内置网站 + 管理后台（可选模块：缺失时机器人照常运行，仅网站/后台不启用）
     try:
