@@ -61,7 +61,14 @@ async def dedup_got_file(message: Message, state: FSMContext, bot: Bot):
         return
 
     data = await state.get_data()
-    file_count = data.get("file_count", 0) + 1
+    file_count = data.get("file_count", 0)
+    if file_count >= settings.MAX_UPLOAD_FILES:
+        await message.answer(
+            f"⚠️ 最多上传 {settings.MAX_UPLOAD_FILES} 个文件，请点击「✅ 完成上传，开始去重」。",
+            reply_markup=dedup_finish_kb(),
+        )
+        return
+    file_count += 1
     workdir = data["workdir"]
     tmp = os.path.join(workdir, f"part_{file_count}.txt")
 
@@ -79,7 +86,14 @@ async def dedup_got_file(message: Message, state: FSMContext, bot: Bot):
     text = decode_bytes(read_file(tmp))
     new_lines = text.splitlines()
 
+    data = await state.get_data()
     all_lines = data.get("lines", [])
+    if len(all_lines) + len(new_lines) > settings.MAX_PHONES:
+        await progress_msg.edit_text(
+            f"⚠️ 累计行数超过上限（{settings.MAX_PHONES:,} 行），请先点击「✅ 完成上传，开始去重」。",
+            reply_markup=dedup_finish_kb(),
+        )
+        return
     all_lines.extend(new_lines)
     await state.update_data(lines=all_lines, file_count=file_count)
 
@@ -99,8 +113,21 @@ async def dedup_got_text(message: Message, state: FSMContext):
 
     data = await state.get_data()
     all_lines = data.get("lines", [])
+    file_count = data.get("file_count", 0)
+    if file_count >= settings.MAX_UPLOAD_FILES:
+        await message.answer(
+            f"⚠️ 最多上传 {settings.MAX_UPLOAD_FILES} 批，请点击「✅ 完成上传，开始去重」。",
+            reply_markup=dedup_finish_kb(),
+        )
+        return
+    if len(all_lines) + len(new_lines) > settings.MAX_PHONES:
+        await message.answer(
+            f"⚠️ 累计行数超过上限（{settings.MAX_PHONES:,} 行），请点击「✅ 完成上传，开始去重」。",
+            reply_markup=dedup_finish_kb(),
+        )
+        return
     all_lines.extend(new_lines)
-    file_count = data.get("file_count", 0) + 1
+    file_count += 1
     await state.update_data(lines=all_lines, file_count=file_count)
 
     await message.answer(
