@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.53"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.54"))
 
 
 settings = Settings()
@@ -96,6 +96,18 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.54",
+        [
+            "全面代码审查后修复 30 余处问题（安全/资金/数据）",
+            "会员购买改为服务端定价，防伪造低价订单",
+            "支付超时前最后查单，不再误杀已付款订单",
+            "Excel 16 位以上数字报错提示，不再静默给错数据",
+            "车牌识别支持港澳牌与警学使领尾缀",
+            "后台修复成员昵称注入与配置格式不一致",
+            "洗数据部分发送失败按比例退款、小号未登录立即退款",
+        ],
+    ),
     (
         "2026-10-28.53",
         [
