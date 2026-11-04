@@ -52,7 +52,8 @@ async def add_code_got_file(message: Message, state: FSMContext, bot: Bot):
 
     data = await state.get_data()
     workdir = data["workdir"]
-    tmp_path = os.path.join(workdir, doc.file_name or "input.txt")
+    from services.file_ops import sanitize_filename
+    tmp_path = os.path.join(workdir, sanitize_filename(doc.file_name or "input.txt"))
 
     progress_msg = await message.answer(f"⏳ 正在下载文件（{(doc.file_size or 0)/1024/1024:.1f}MB）…")
 
@@ -75,30 +76,31 @@ async def add_code_got_file(message: Message, state: FSMContext, bot: Bot):
         await cleanup_state(state)
         return
 
-    # 逐行处理，给手机号前面加+86
+    # 逐行处理，给手机号前面加+86（已有 86 前缀的号码不再重复加）
     lines = text.splitlines()
     output_lines = []
     added_count = 0
 
     for line in lines:
-        line = line.strip()
-        if not line:
+        raw = line.strip()
+        if not raw:
             continue
 
-        # 找手机号
-        m = re.search(r"(?<![\d+])(1[3-9]\d{9})(?![\d])", line)
-        if m:
+        new_line = raw
+        changed = False
+        # 逐号替换：一行里每个手机号都处理
+        for m in re.finditer(r"(?<![\d+])(1[3-9]\d{9})(?![\d])", raw):
             phone = m.group(1)
-            # 如果已经有+86就不加
-            if "+86" not in line:
-                new_line = line.replace(phone, f"+86{phone}")
-                output_lines.append(new_line)
-                added_count += 1
-            else:
-                output_lines.append(line)
-        else:
-            # 不是手机号的行，直接保留
-            output_lines.append(line)
+            start = m.start(1)
+            # 判断该号码前面是否已有 86 / +86 前缀（如 "86 138..." 或 "+86138..."）
+            prefix = raw[:start]
+            if prefix.endswith("+86") or prefix.endswith("86") or prefix.endswith("86 "):
+                continue
+            new_line = new_line.replace(phone, f"+86{phone}", 1)
+            changed = True
+        if changed:
+            added_count += 1
+        output_lines.append(new_line)
 
     if added_count == 0:
         await progress_msg.edit_text("⚠️ 文件里没找到需要加区号的手机号（可能已经有+86了）。")
