@@ -150,6 +150,29 @@ class LotteryRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class AuditLog(Base):
+    """后台操作审计：谁在什么时候做了什么。"""
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    admin: Mapped[str] = mapped_column(String(64), default="")  # 操作者（后台登录用户名）
+    action: Mapped[str] = mapped_column(String(64), default="")  # 操作类型
+    detail: Mapped[str] = mapped_column(String(512), default="")  # 详情
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+def log_audit(session, admin: str, action: str, detail: str = "") -> None:
+    """记录一条后台操作审计。"""
+    session.add(AuditLog(admin=str(admin or "")[:64], action=str(action or "")[:64], detail=str(detail or "")[:512]))
+    session.commit()
+
+
+def get_audit_logs(session, limit: int = 50) -> list[AuditLog]:
+    """最近操作记录（新→旧）。"""
+    return list(session.scalars(select(AuditLog).order_by(AuditLog.id.desc()).limit(limit)))
+
+
 def init_db(max_retries: int = 10, retry_interval: float = 3.0) -> None:
     """初始化数据库表，带重试机制（等数据库启动）。"""
     last_err = None
