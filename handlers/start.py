@@ -5,7 +5,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, MessageEntity
 
-from config import settings
+from config import CHANGELOG, settings
 from database import DEFAULT_WELCOME_TEXT, SessionLocal, get_config, get_or_create_user
 from utils.helpers import cleanup_state
 from utils.keyboards import main_menu_keyboard
@@ -16,14 +16,19 @@ router = Router(name="start")
 
 @router.message(Command("version"))
 async def cmd_version(message: Message):
-    """显示当前部署版本，用来确认 Railway 上跑的是不是最新包。"""
+    """显示当前部署版本与该版本的更新内容，用来确认 Railway 上跑的是不是最新包。"""
+    notes = None
+    for ver, items in CHANGELOG:
+        if ver == settings.VERSION:
+            notes = items
+            break
+    if notes is None and CHANGELOG:
+        notes = CHANGELOG[0][1]
+    lines = "\n".join(f"• {x}" for x in (notes or ["本次为常规更新"]))
     await message.answer(
-        "🤖 <b>版本信息</b>\n\n"
+        "<b>版本信息</b>\n\n"
         f"当前版本：<code>{settings.VERSION}</code>\n\n"
-        "本版本修复：\n"
-        "• 洗数据多结果文件（苹果/安卓）全部转发\n"
-        "• 结果提示语不再混入群消息 caption\n"
-        "• 合并文本支持自定义导出文件名",
+        f"本版本更新：\n{lines}",
     )
 
 
