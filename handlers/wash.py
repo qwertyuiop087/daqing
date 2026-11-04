@@ -356,26 +356,35 @@ async def wash_check_order(cq: CallbackQuery):
             await cq.answer("✅ 该订单已到账，请勿重复点击。", show_alert=True)
             return
 
-        # 同步 HTTP 丢线程池，避免卡住事件循环
-        result = await asyncio.to_thread(
-            client.call, "/merchant/checkDeposit", {"userOrder": order_id}
+    # 同步 HTTP 丢线程池，避免卡住事件循环
+    result = await asyncio.to_thread(
+        client.call, "/merchant/checkDeposit", {"userOrder": order_id}
+    )
+    if not result.get("ok"):
+        await cq.answer("查询失败，请稍后再试。", show_alert=True)
+        return
+
+    data = result.get("data", {})
+    statusText = data.get("statusText", "")
+    amount = float(data.get("amount", 0) or 0)
+
+    if statusText != "paid":
+        statusTextCN = data.get("statusTextCN", "")
+        await cq.answer(f"当前状态：{statusTextCN}，请完成支付后再查询。", show_alert=True)
+        return
+
+    # 支付成功：行锁 + 二次确认，与自动到账扫描互斥，防止同一订单被重复入账
+    with SessionLocal() as session:
+        locked = session.scalar(
+            select(PaymentOrder)
+            .where(PaymentOrder.order_id == order_id)
+            .with_for_update()
         )
-        if not result.get("ok"):
-            await cq.answer("查询失败，请稍后再试。", show_alert=True)
+        if locked is None or locked.status == "paid":
+            await cq.answer("该订单已到账。", show_alert=True)
             return
-
-        data = result.get("data", {})
-        statusText = data.get("statusText", "")
-        amount = float(data.get("amount", 0) or 0)
-
-        if statusText != "paid":
-            statusTextCN = data.get("statusTextCN", "")
-            await cq.answer(f"当前状态：{statusTextCN}，请完成支付后再查询。", show_alert=True)
-            return
-
-        # 支付成功：先改订单状态再入账，同一次提交内完成，防止重复到账
-        order.status = "paid"
-        order.txid = data.get("txid", order.txid)
+        locked.status = "paid"
+        locked.txid = data.get("txid", locked.txid)
 
         rate = await get_usdt_rate_async(session)
         rmb_amount = amount * rate
@@ -524,6 +533,21 @@ async def wash_got_file(message: Message, state: FSMContext, bot: Bot):
         await cleanup_state(state)
         return
 
+    # 提交时预扣费用：防止用户同时提交多个任务，把余额透支成负数。
+    # 任务超时未回传时，由 database.get_washed_breakdown 自动退回预扣费用。
+    with SessionLocal() as session:
+        from database import deduct_wash_balance
+        if not deduct_wash_balance(session, message.from_user.id, cost):
+            await progress_msg.edit_text(
+                f"⚠️ 余额不足！\n\n"
+                f"本次费用：¥{cost:.4f} 元\n"
+                f"当前余额：¥{balance:.4f} 元\n\n"
+                "请先充值。",
+                reply_markup=wash_main_kb(balance),
+            )
+            await cleanup_state(state)
+            return
+
     user_id = message.from_user.id
     safe_name = doc.file_name or "input.txt"
 
@@ -532,9 +556,8 @@ async def wash_got_file(message: Message, state: FSMContext, bot: Bot):
     import string
     random_code = ''.join(random.choices(string.ascii_letters + string.digits, k=7))
 
-    # 暂不扣费，洗完收到文件后再扣
-    # 存下来这次的费用和行数，洗完再扣；末尾附提交时间戳，
-    # 超时未回传的任务会由 get_washed_breakdown 自动作废，不再占用配额
+    # 费用已在提交时预扣；这里存下费用和行数供回传时记账，
+    # 末尾附提交时间戳，超时未回传的任务会由 get_washed_breakdown 自动退款作废
     with SessionLocal() as session:
         from database import set_config
         import time
@@ -697,27 +720,26 @@ async def alt_user_reply(message: Message, bot: Bot):
         # 提取原文件名：只取文件名本身，不要把消息 caption（如“蓝号(IOS/imessage/FaceTime)”）拼进去
         original_name = re.sub(r"^[a-zA-Z0-9]{7}_", "", filename).strip() or filename
 
-        # 洗完了，现在扣费
+        # 费用在提交时已预扣，这里只记账（不再扣费，避免并发任务透支余额）
         if pending:
             parts = pending.split(":")
             # 兼容旧格式（3段）与新格式（4段：末尾带提交时间戳）
             if len(parts) >= 3:
                 line_count = int(parts[1])
                 cost = float(parts[2])
-                from database import deduct_wash_balance
                 with SessionLocal() as session:
-                    deduct_wash_balance(session, user_id, cost)
                     # 记录洗数据账单
-                    order = WashOrder(
-                        user_id=user_id,
-                        filename=original_name,
-                        row_count=line_count,
-                        cost=cost,
-                        type="deduct",
+                    session.add(
+                        WashOrder(
+                            user_id=user_id,
+                            filename=original_name,
+                            row_count=line_count,
+                            cost=cost,
+                            type="deduct",
+                        )
                     )
-                    session.add(order)
                     session.commit()
-                # 只删待扣费记录；wash_code 映射必须保留：
+                # 只删待记账记录；wash_code 映射必须保留：
                 # 同一任务的多个结果文件共用随机码，删了后续文件会丢失，
                 # 它的过期清理由 get_washed_breakdown 按时间戳统一处理
                 with SessionLocal() as session:
