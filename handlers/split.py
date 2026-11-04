@@ -175,8 +175,9 @@ async def split_filename_skip(cq: CallbackQuery, state: FSMContext):
 @router.message(SplitStates.waiting_filename, F.text)
 async def split_filename_input(message: Message, state: FSMContext):
     prefix = (message.text or "").strip()
-    # 简单清理非法字符
-    prefix = prefix.replace("/", "_").replace("\\", "_").replace(":", "_")
+    # 完整清理非法字符（Windows 下 * ? " < > | 等会导致写文件失败）
+    from services.file_ops import sanitize_filename
+    prefix = sanitize_filename(prefix)
     await _finish_split_with_prefix(message, state, prefix=prefix)
 
 
@@ -277,14 +278,20 @@ async def split_got_phones(message: Message, state: FSMContext, bot: Bot):
         + ("（超出上限部分已忽略）" if truncated else "")
         + "，开始发送文件："
     )
-    await send_files_in_batches(message, paths)
+    failed = await send_files_in_batches(message, paths)
     if report:
         await message.answer_document(
             FSInputFile(report_path, filename="插入报告.txt"),
             caption="📋 插入报告：每个号码插入的文件与行号",
         )
     await maybe_drop(message, "文件切割")
-    await message.answer("✅ 全部完成！", reply_markup=menu_kb(message.from_user.id))
+    if failed:
+        await message.answer(
+            f"⚠️ 有 <b>{failed}</b> 个文件发送失败，请稍后重试或联系客服。",
+            reply_markup=menu_kb(message.from_user.id),
+        )
+    else:
+        await message.answer("✅ 全部完成！", reply_markup=menu_kb(message.from_user.id))
     await cleanup_state(state)
 
 
