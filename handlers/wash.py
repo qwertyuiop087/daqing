@@ -1,6 +1,7 @@
 """洗数据：单独计费，按行数收费，转发到洗数据群处理。"""
 import asyncio
 import html
+import json
 import os
 import uuid
 
@@ -620,10 +621,16 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
     with SessionLocal() as session:
         from database import set_config
         import time
+        # 批量任务：把每个文件的行数存进 pending（第 5 段 JSON），
+        # 回传时按“收到几个结果结算几份”，一直没回传的部分超时按比例退款
+        batch_map = json.dumps(
+            {"files": [f["lines"] for f in files], "charged": 0.0},
+            ensure_ascii=False,
+        )
         set_config(
             session,
             f"wash_pending:{random_code}",
-            f"{user_id}:{total_lines}:{cost}:{int(time.time())}",
+            f"{user_id}:{total_lines}:{cost}:{int(time.time())}:{batch_map}",
         )
         set_config(
             session,
@@ -787,31 +794,69 @@ async def alt_user_reply(message: Message, bot: Bot):
         # 提取原文件名：只取文件名本身，不要把消息 caption（如“蓝号(IOS/imessage/FaceTime)”）拼进去
         original_name = re.sub(r"^[a-zA-Z0-9]{7}_", "", filename).strip() or filename
 
-        # 费用在提交时已预扣，这里只记账（不再扣费，避免并发任务透支余额）
+        # 费用在提交时已预扣，这里只记账（不再扣费，避免并发任务透支余额）。
+        # 批量任务：每收到一个结果文件就结算一份费用，全部回传才结清；
+        # 一直没回传的部分，超时后由 get_washed_breakdown 按比例退款。
         if pending:
-            parts = pending.split(":")
-            # 兼容旧格式（3段）与新格式（4段：末尾带提交时间戳）
+            parts = pending.split(":", 4)
+            # 兼容旧格式（3段）与新格式（4段/5段：第4段时间戳、第5段批量JSON）
             if len(parts) >= 3:
                 line_count = int(parts[1])
                 cost = float(parts[2])
-                with SessionLocal() as session:
-                    # 记录洗数据账单
-                    session.add(
-                        WashOrder(
-                            user_id=user_id,
-                            filename=original_name,
-                            row_count=line_count,
-                            cost=cost,
-                            type="deduct",
+                file_map = None
+                if len(parts) >= 5:
+                    try:
+                        file_map = json.loads(parts[4])
+                    except Exception:
+                        file_map = None
+
+                settle_cost = cost
+                settle_lines = line_count
+                done = True
+                if file_map and file_map.get("files"):
+                    # 批量：按结果个数结算，每份按该文件行数占总数比例计费
+                    rem = list(file_map["files"])
+                    charged = float(file_map.get("charged", 0.0))
+                    share = rem.pop(0)
+                    if rem:
+                        settle_cost = round(cost * share / line_count, 4)
+                        settle_lines = share
+                        file_map["files"] = rem
+                        file_map["charged"] = round(charged + settle_cost, 4)
+                        done = False
+                    else:
+                        # 最后一个结果：把剩余金额一次结清，避免四舍五入差额
+                        settle_cost = round(cost - charged, 4)
+                        settle_lines = share
+
+                if settle_cost > 0:
+                    with SessionLocal() as session:
+                        # 记录洗数据账单（批量任务每个结果一条，明细更清楚）
+                        session.add(
+                            WashOrder(
+                                user_id=user_id,
+                                filename=original_name,
+                                row_count=settle_lines,
+                                cost=settle_cost,
+                                type="deduct",
+                            )
                         )
-                    )
-                    session.commit()
-                # 只删待记账记录；wash_code 映射必须保留：
+                        session.commit()
+
+                # 只删/更新待记账记录；wash_code 映射必须保留：
                 # 同一任务的多个结果文件共用随机码，删了后续文件会丢失，
                 # 它的过期清理由 get_washed_breakdown 按时间戳统一处理
                 with SessionLocal() as session:
-                    from database import delete_config
-                    delete_config(session, f"wash_pending:{random_code}")
+                    from database import delete_config, set_config
+                    if done:
+                        delete_config(session, f"wash_pending:{random_code}")
+                    elif file_map is not None:
+                        set_config(
+                            session,
+                            f"wash_pending:{random_code}",
+                            f"{user_id}:{line_count}:{cost}:{parts[3]}:"
+                            f"{json.dumps(file_map, ensure_ascii=False)}",
+                        )
 
                 # 洗数据完成，判定隐藏掉落（2%，不限制频率）
                 try:
