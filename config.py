@@ -1,4 +1,4 @@
-﻿"""全局配置：从环境变量 / .env 文件读取。"""
+"""全局配置：从环境变量 / .env 文件读取。"""
 import os
 
 from dotenv import load_dotenv
@@ -86,7 +86,37 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.41"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.42"))
 
 
 settings = Settings()
+
+
+# ---------------- 版本更新说明 ----------------
+# /version 只显示「当前 VERSION 对应的那一条」。
+# 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
+CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.42",
+        [
+            "/version 的更新列表改为随版本自动显示",
+            "后台界面按设计规范重做：线性图标、单一强调色、统一栅格",
+            "品牌统一为「错落雨 / CUOLUOYU」，旧默认值自动迁移",
+        ],
+    ),
+    (
+        "2026-10-28.41",
+        [
+            "后台、介绍页、机器人回退页统一改名为「错落雨 / CUOLUOYU」",
+        ],
+    ),
+    (
+        "2026-10-28.36",
+        [
+            "新增全局报错通知：机器人异常会私聊提醒管理员",
+            "新增后台操作记录：登录、改配置、调成员全部留痕",
+            "新增洗数据小号掉线通知",
+            "上传文件上限统一为 20MB（Telegram 实际限制）",
+        ],
+    ),
+]
