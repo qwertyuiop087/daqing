@@ -1,4 +1,4 @@
-"""webadmin 冒烟测试：登录 → 读配置 → 改抽奖奖品/通知模板 → 概览 → 页面。"""
+﻿"""webadmin 冒烟测试：登录 → 读配置 → 改抽奖奖品/通知模板 → 概览 → 页面。"""
 import os
 import sys
 import tempfile
@@ -42,7 +42,7 @@ def test_flow():
     r = client.post("/api/config/plans", json={"value": "7:1,30:3,365:25"})
     assert r.status_code == 200, r.text
     # 欢迎语（含昵称占位符）
-    r = client.post("/api/config/welcome_text", json={"value": "你好，{昵称}！欢迎使用<b>大晴分包机器人</b>"})
+    r = client.post("/api/config/welcome_text", json={"value": "你好，{昵称}！欢迎使用<b>错落雨分包机器人</b>"})
     assert r.status_code == 200, r.text
     # 洗数据定价 / 配额
     assert client.post("/api/config/wash_prices", json={"value": "0:0.0013,100000:0.0010"}).status_code == 200
