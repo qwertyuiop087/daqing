@@ -320,6 +320,7 @@ SITE_FIELDS = {
     "mock_name", "mock_status", "mock_chip1", "mock_chip2",
     "toast_prefix", "toast_footer",
     "footer_text", "footer_note",
+    "logo_icon", "logo_suffix",
 }
 
 DEFAULT_SITE_CONFIG = {
@@ -341,6 +342,8 @@ DEFAULT_SITE_CONFIG = {
     "toast_footer": "刚刚 · 大晴分包机器人",
     "footer_text": "© 2026 大晴分包机器人 · DQFB",
     "footer_note": "本页面为功能演示，奖品概率与套餐以机器人内实际配置为准。",
+    "logo_icon": "🃏",
+    "logo_suffix": " DQFB",
 }
 
 
