@@ -47,6 +47,35 @@ async def _notify_admins(text: str, force: bool = False) -> None:
             pass
 
 
+async def _notify_phone_check_failed(filename: str, reason: str) -> None:
+    """空号检测提交失败：通知对应用户（按随机码查映射）与管理员，避免用户无限等待。"""
+    import re
+
+    m = re.search(r"([a-zA-Z0-9]{7})_号码检测", filename or "")
+    if not m:
+        return
+    code = m.group(1)
+    with SessionLocal() as session:
+        user_id_str = get_config(session, f"phone_check_code:{code}", "")
+    if not bot_instance:
+        return
+    text = (
+        "⚠️ <b>空号检测没有提交成功</b>\n\n"
+        f"{reason}\n\n"
+        "已自动取消本次检测，请稍后重试；"
+        "若反复失败，请联系管理员。"
+    )
+    if user_id_str:
+        try:
+            await bot_instance.send_message(int(user_id_str), text, parse_mode="HTML")
+        except Exception:
+            pass
+    await _notify_admins(
+        f"⚠️ <b>空号检测提交失败</b>\n\n文件：<code>{filename}</code>\n原因：{reason}",
+        force=True,
+    )
+
+
 def setup_handlers():
     """设置小号的事件处理器（只设置一次）。"""
     # ---------------- 1. 收到我们 bot 发的文件 → 转发到对应处理方 ----------------
@@ -111,6 +140,7 @@ def setup_handlers():
 
                 if not clicked_empty:
                     print("❌ 没找到空号检测按钮")
+                    await _notify_phone_check_failed(filename, "检测机器人界面有变化，未找到空号检测按钮")
                     return
 
                 # 3. 等待下一步，点击「开始空号检测」
@@ -137,10 +167,12 @@ def setup_handlers():
 
                 if not clicked_start:
                     print("❌ 没找到开始空号检测按钮")
+                    await _notify_phone_check_failed(filename, "检测机器人界面有变化，未找到开始按钮")
                     return
 
             except Exception as e:
                 print(f"❌ 空号检测流程失败: {e}")
+                await _notify_phone_check_failed(filename, f"空号检测提交失败：{str(e)[:80]}")
                 import traceback
                 traceback.print_exc()
             return
