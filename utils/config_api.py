@@ -324,26 +324,39 @@ SITE_FIELDS = {
 }
 
 DEFAULT_SITE_CONFIG = {
-    "site_title": "大晴分包机器人 · DQFB",
-    "brand": "大晴分包",
-    "hero_highlight": "大晴分包机器人",
+    "site_title": "错落雨分包机器人 · CUOLUOYU",
+    "brand": "错落雨",
+    "hero_highlight": "错落雨分包机器人",
     "hero_subtitle": "文件切割、号码去重、空号检测、催收分包、洗数据…… 上传即处理，结果秒回。内置抽奖系统与会员体系，运营一步到位。",
     "accent": "#3b82f6",
     "contact1": "@mmmmg",
     "contact2": "@kefu686",
-    "contact1_label": "大晴",
+    "contact1_label": "错落雨",
     "contact2_label": "客服",
     "bot_link": "https://t.me/sechou_bot",
-    "mock_name": "大晴分包机器人",
+    "mock_name": "错落雨分包机器人",
     "mock_status": "● 在线 · 秒级响应",
     "mock_chip1": "转盘抽奖",
     "mock_chip2": "秒级处理",
     "toast_prefix": "抽中",
-    "toast_footer": "刚刚 · 大晴分包机器人",
-    "footer_text": "© 2026 大晴分包机器人 · DQFB",
+    "toast_footer": "刚刚 · 错落雨分包机器人",
+    "footer_text": "© 2026 错落雨分包机器人 · CUOLUOYU",
     "footer_note": "本页面为功能演示，奖品概率与套餐以机器人内实际配置为准。",
     "logo_icon": "🃏",
-    "logo_suffix": " DQFB",
+    "logo_suffix": " CUOLUOYU",
+}
+
+# 品牌改名迁移表：旧默认值 -> 新默认值。
+# 仅在数据库里存的仍是「旧默认值」时才替换；用户自己改过的值一律不动。
+_BRAND_RENAMES = {
+    "site_title": ("大晴分包机器人 · DQFB", "错落雨分包机器人 · CUOLUOYU"),
+    "brand": ("大晴分包", "错落雨"),
+    "hero_highlight": ("大晴分包机器人", "错落雨分包机器人"),
+    "contact1_label": ("大晴", "错落雨"),
+    "mock_name": ("大晴分包机器人", "错落雨分包机器人"),
+    "toast_footer": ("刚刚 · 大晴分包机器人", "刚刚 · 错落雨分包机器人"),
+    "footer_text": ("© 2026 大晴分包机器人 · DQFB", "© 2026 错落雨分包机器人 · CUOLUOYU"),
+    "logo_suffix": (" DQFB", " CUOLUOYU"),
 }
 
 
@@ -357,6 +370,17 @@ def get_site_config(session) -> dict:
             for k in SITE_FIELDS:
                 if k in data:
                     cfg[k] = data[k]
+        except Exception:
+            pass
+    # 品牌改名迁移：只有仍是旧默认值的字段才替换，用户自定义过的保持不动
+    renamed = False
+    for k, (old, new) in _BRAND_RENAMES.items():
+        if k in cfg and cfg[k] == old:
+            cfg[k] = new
+            renamed = True
+    if renamed:
+        try:
+            database.set_config(session, "site_config", json.dumps(cfg, ensure_ascii=False))
         except Exception:
             pass
     return cfg
