@@ -27,12 +27,16 @@ import main as payments  # noqa: E402  （自动到账逻辑内联在 main.py）
 
 
 class FakeClient:
-    def __init__(self):
+    def __init__(self, paid: bool = True):
         self.calls = []
+        self.paid = paid
 
     def call(self, path, payload):
         self.calls.append((path, payload))
-        return {"ok": True, "data": {"statusText": "paid", "txid": "tx1", "amount": "10"}}
+        return {
+            "ok": True,
+            "data": {"statusText": "paid" if self.paid else "pending", "txid": "tx1", "amount": "10"},
+        }
 
 
 class FakeBot:
@@ -93,7 +97,7 @@ class TestAutoCredit(unittest.TestCase):
 
 
     def test_order_timeout(self):
-        """创建超过 5 分钟的未支付订单 → 标记 timeout 并通知用户。"""
+        """创建超过 5 分钟且未支付的订单 → 标记 timeout 并通知用户。"""
         async def run():
             from datetime import timedelta
             with SessionLocal() as s:
@@ -104,13 +108,37 @@ class TestAutoCredit(unittest.TestCase):
                 s.commit()
 
             bot = FakeBot()
-            with mock.patch.object(payments, "get_client", lambda: FakeClient()):
+            with mock.patch.object(payments, "get_client", lambda: FakeClient(paid=False)):
                 await payments._sweep_payments(bot)
 
             with SessionLocal() as s:
                 o2 = s.scalar(select(PaymentOrder).where(PaymentOrder.order_id == "old_1"))
                 self.assertEqual(o2.status, "timeout")
             self.assertTrue(any("订单已超时" in t for _, t in bot.sent))
+
+        asyncio.run(run())
+
+    def test_order_expired_but_paid_gets_credited(self):
+        """超时前最后查单发现已付款 → 照常入账，而不是误杀。"""
+        async def run():
+            from datetime import timedelta
+            with SessionLocal() as s:
+                get_or_create_user(s, 333, "u3", "U")
+                o = PaymentOrder(order_id="late_1", user_id=333, days=30, amount="3", status="pending")
+                o.created_at = utcnow() - timedelta(minutes=6)
+                s.add(o)
+                s.commit()
+
+            bot = FakeBot()
+            with mock.patch.object(payments, "get_client", lambda: FakeClient(paid=True)):
+                await payments._sweep_payments(bot)
+
+            with SessionLocal() as s:
+                o2 = s.scalar(select(PaymentOrder).where(PaymentOrder.order_id == "late_1"))
+                self.assertEqual(o2.status, "paid")
+                u = s.get(User, 333)
+                self.assertIsNotNone(u.membership_expires_at)
+            self.assertTrue(any("会员已自动到账" in t for _, t in bot.sent))
 
         asyncio.run(run())
 
