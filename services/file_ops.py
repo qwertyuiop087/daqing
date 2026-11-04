@@ -16,8 +16,17 @@ def decode_bytes(data: bytes) -> str:
 
     同时剥掉文件开头的 UTF-8 BOM（记事本保存的文件常带 BOM，
     否则首行第一个字段会被 \ufeff 污染而无法识别）。
+    UTF-16 只在带 BOM 时启用（无 BOM 的 UTF-16 与 Big5/日韩等编码的
+    偶数长度字节会互相误判成乱码，且永不报错）。
     """
-    for enc in ("utf-8", "gbk", "gb18030", "utf-16", "latin-1"):
+    # UTF-16 / UTF-32 按 BOM 识别
+    if data.startswith(b"\xff\xfe") or data.startswith(b"\xfe\xff"):
+        for enc in ("utf-16", "utf-16-le", "utf-16-be"):
+            try:
+                return data.decode(enc).lstrip("\ufeff")
+            except (UnicodeDecodeError, ValueError):
+                continue
+    for enc in ("utf-8", "gbk", "gb18030", "latin-1"):
         try:
             text = data.decode(enc)
             if text.startswith("\ufeff"):
@@ -164,17 +173,23 @@ def parse_numbers(text: str) -> list[str]:
 
 _PROVINCES = "京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼"
 
+# 车牌：港澳入出内地牌（粤Z…港/澳，4~5 位主体）放最前，
+# 否则普通 5 位分支会先匹配掉「粤ZD1234港」并丢掉港字；
+# 其次是普通/新能源 5~6 位主体，最后是警/学/使/领尾缀牌。
+# 末尾负向断言只拦字母数字，不拦中文，保证「京A12345张三」紧贴姓名也能提出。
 _PLATE_RE = re.compile(
-    rf"[{_PROVINCES}][A-Z][0-9A-Z]{{5,6}}(?![0-9A-Z])"
+    rf"(?:粤Z[0-9A-Z]{{4,5}}[港澳]"
+    rf"|[{_PROVINCES}][A-Z][0-9A-Z]{{5,6}}"
+    rf"|[{_PROVINCES}][A-Z][0-9A-Z]{{4}}[警学使领])"
+    rf"(?![0-9A-Z])"
 )
 
 
 def extract_plates(text: str) -> list[str]:
     """从文本中提取全部车牌号（保留出现顺序，含重复）。
 
-    匹配中国大陆民用/新能源车牌：
-    省份简称 + 发牌机关字母 + 5~6 位数字字母（如 京A12345、京AD12345）。
-    末尾用负向断言避免把相邻手机号/数字串吞进来。
+    匹配中国大陆民用/新能源车牌（京A12345、京AD12345），
+    以及港澳入出内地牌（粤Z1234港）与警/学/使/领尾缀。
     """
     return [m.group(0) for m in _PLATE_RE.finditer(text)]
 
@@ -679,16 +694,37 @@ def xlsx_to_lines(data: bytes) -> list[str]:
         line = line.replace("\r\n", " ").replace("\n", " ").replace("\r", " ")
         lines.append(line)
 
+    def _check_row_precision(cells) -> None:
+        """16 位以上的数字（银行卡/身份证）在 Excel 里按浮点存储，精度已丢失，
+        宁可报错也不要静默给错数据。文本格式的单元格读出来是 str，不受影响。"""
+        for v in cells:
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and abs(v) >= 1e16:
+                raise ValueError(
+                    "检测到 16 位以上的数字（可能是银行卡/身份证）："
+                    "Excel 以数值格式存储时会丢失精度，"
+                    "请把该列单元格格式改为「文本」后重新保存，再上传。"
+                )
+
     if is_xls:
-        # 旧版 xls 格式，用 xlrd
+        # 旧版 xls 格式，用 xlrd（按单元格类型转换，日期不再变成序列号）
         import xlrd
         wb = xlrd.open_workbook(file_contents=data)
         try:
             for sheet_idx in range(wb.nsheets):
                 ws = wb.sheet_by_index(sheet_idx)
                 for row_idx in range(ws.nrows):
-                    row = ws.row_values(row_idx)
-                    _append_row([_xlsx_cell_to_text(v) for v in row])
+                    row_cells = []
+                    for col_idx in range(ws.ncols):
+                        cell = ws.cell(row_idx, col_idx)
+                        v = cell.value
+                        if cell.ctype == xlrd.XL_CELL_DATE:
+                            try:
+                                v = xlrd.xldate.xldate_as_datetime(v, wb.datemode)
+                            except Exception:
+                                pass
+                        row_cells.append(v)
+                    _check_row_precision(row_cells)
+                    _append_row([_xlsx_cell_to_text(v) for v in row_cells])
         finally:
             wb.release_resources()
     else:
@@ -698,7 +734,9 @@ def xlsx_to_lines(data: bytes) -> list[str]:
         try:
             for ws in wb.worksheets:
                 for row in ws.iter_rows(values_only=True):
-                    _append_row([_xlsx_cell_to_text(v) for v in row])
+                    row_cells = list(row)
+                    _check_row_precision(row_cells)
+                    _append_row([_xlsx_cell_to_text(v) for v in row_cells])
         finally:
             wb.close()
 
