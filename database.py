@@ -618,7 +618,10 @@ def get_washed_breakdown(session) -> tuple[int, int]:
     now = time.time()
     stale_rows = []
     # 待扣费任务：wash_pending:{随机码} = user_id:line_count:cost[:时间戳[:批量JSON]]
-    for row in session.scalars(select(AppConfig).where(AppConfig.key.like("wash_pending:%"))):
+    # 行锁：防并发调用（后台统计与洗数据提交同时跑）对同一任务重复退款
+    for row in session.scalars(
+        select(AppConfig).where(AppConfig.key.like("wash_pending:%")).with_for_update()
+    ):
         parts = (row.value or "").split(":", 4)
         if len(parts) < 3 or not parts[1].isdigit():
             stale_rows.append(row)
@@ -657,10 +660,20 @@ def get_washed_breakdown(session) -> tuple[int, int]:
                 except Exception:
                     pass
                 continue
+        # 处理中行数：批量任务只算尚未回传的部分（已结算的不再占用配额）
+        if len(parts) >= 5:
+            try:
+                fm = json.loads(parts[4])
+                pending += int(sum(fm.get("files") or []))
+                continue
+            except Exception:
+                pass
         pending += int(parts[1])
     # wash_code:{随机码} = user_id[:提交时间戳]：同一任务多个结果文件共用的映射，
     # 只按时间戳做过期清理；旧格式（无时间戳）保持原样不清除
-    for row in session.scalars(select(AppConfig).where(AppConfig.key.like("wash_code:%"))):
+    for row in session.scalars(
+        select(AppConfig).where(AppConfig.key.like("wash_code:%")).with_for_update()
+    ):
         parts = (row.value or "").split(":")
         if len(parts) == 2 and parts[1].isdigit():
             if now - int(parts[1]) > WASH_CODE_TTL_SECONDS:
