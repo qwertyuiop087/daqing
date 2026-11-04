@@ -582,9 +582,9 @@ footer a{color:var(--cyan)}
 
 <footer>
   <div class="wrap">
-    <div>© 2026 大晴分包机器人 · DQFB</div>
+    <div id="footerText">© 2026 大晴分包机器人 · DQFB</div>
     <div><span class="c1label">大晴</span> <a class="contact1" href="https://t.me/mmmg" target="_blank" rel="noopener">@mmmmg</a> · <span class="c2label">客服</span> <a class="contact2" href="https://t.me/kefu686" target="_blank" rel="noopener">@kefu686</a></div>
-    <div>本页面为功能演示，奖品概率与套餐以机器人内实际配置为准。</div>
+    <div id="footerNote">本页面为功能演示，奖品概率与套餐以机器人内实际配置为准。</div>
   </div>
 </footer>
 
@@ -704,6 +704,8 @@ async function loadSiteConfig(){
     if(s.mock_status){const e=document.getElementById('mockStatus'); if(e)e.textContent=s.mock_status;}
     if(s.mock_chip1){const e=document.getElementById('mockChip1'); if(e)e.textContent=s.mock_chip1;}
     if(s.mock_chip2){const e=document.getElementById('mockChip2'); if(e)e.textContent=s.mock_chip2;}
+    if(s.footer_text){const e=document.getElementById('footerText'); if(e)e.textContent=s.footer_text;}
+    if(s.footer_note){const e=document.getElementById('footerNote'); if(e)e.textContent=s.footer_note;}
     if(s.bot_link) document.querySelectorAll('.bot-link').forEach(a=>a.href=s.bot_link);
   }catch(e){}
 }
