@@ -610,11 +610,9 @@ def get_washed_breakdown(session) -> tuple[int, int]:
     待扣费任务格式：wash_pending:{随机码} = user_id:line_count:cost[:提交时间戳]
     带时间戳且超过 WASH_PENDING_TTL_SECONDS 未回传的任务视为作废：不再计入
     待扣费，并顺手删除，避免记录无限增长、配额被永久占用。
+    因为费用在提交时已预扣，作废时会把预扣费用退回用户余额并记退款流水。
     旧格式（3 段、无时间戳）保持兼容，仍正常计入。
     """
-    charged = session.scalar(
-        select(func.coalesce(func.sum(WashOrder.row_count), 0)).where(WashOrder.type == "deduct")
-    ) or 0
     pending = 0
     now = time.time()
     stale_rows = []
@@ -627,6 +625,22 @@ def get_washed_breakdown(session) -> tuple[int, int]:
         if len(parts) >= 4 and parts[3].isdigit():
             if now - int(parts[3]) > WASH_PENDING_TTL_SECONDS:
                 stale_rows.append(row)
+                # 任务超时未回传：退回预扣费用并记退款流水
+                try:
+                    uid = int(parts[0])
+                    cost = float(parts[2])
+                    add_wash_balance(session, uid, cost)
+                    session.add(
+                        WashOrder(
+                            user_id=uid,
+                            filename=f"超时退款（{row.key}）",
+                            row_count=-(int(parts[1])),
+                            cost=-cost,
+                            type="refund",
+                        )
+                    )
+                except Exception:
+                    pass
                 continue
         pending += int(parts[1])
     # wash_code:{随机码} = user_id[:提交时间戳]：同一任务多个结果文件共用的映射，
@@ -640,6 +654,13 @@ def get_washed_breakdown(session) -> tuple[int, int]:
         session.delete(row)
     if stale_rows:
         session.commit()
+    # 已完成行数 = 扣费 + 退款（退款行为负数行数/负数金额，自然冲减）。
+    # 必须在清理提交之后再统计，确保本次新产生的退款流水计入结果。
+    charged = session.scalar(
+        select(func.coalesce(func.sum(WashOrder.row_count), 0)).where(
+            WashOrder.type.in_(("deduct", "refund"))
+        )
+    ) or 0
     return int(charged), int(pending)
 
 
