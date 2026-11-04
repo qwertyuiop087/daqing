@@ -96,31 +96,42 @@ def _secret() -> bytes:
     return hashlib.sha256(ADMIN_PASSWORD.encode("utf-8")).digest()
 
 
-def _make_token() -> str:
+def _make_token(username: str = "admin") -> str:
     expires = int(time.time()) + COOKIE_TTL
-    msg = str(expires).encode()
+    user = str(username or "admin").replace(".", "_")
+    msg = f"{expires}.{user}".encode()
     sig = hmac.new(_secret(), msg, hashlib.sha256).hexdigest()
-    return f"{expires}.{sig}"
+    return f"{expires}.{user}.{sig}"
 
 
-def _check_token(token) -> bool:
-    if not token or "." not in token:
-        return False
+def _check_token(token) -> str | None:
+    """校验登录令牌，返回登录用户名；无效返回 None。"""
+    if not token:
+        return None
     try:
-        exp_s, sig = token.split(".", 1)
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        exp_s, user, sig = parts
         expires = int(exp_s)
     except ValueError:
-        return False
+        return None
     if expires < int(time.time()):
-        return False
-    return hmac.compare_digest(sig, hmac.new(_secret(), exp_s.encode(), hashlib.sha256).hexdigest())
+        return None
+    msg = f"{exp_s}.{user}".encode()
+    if not hmac.compare_digest(sig, hmac.new(_secret(), msg, hashlib.sha256).hexdigest()):
+        return None
+    return user
 
 
-def _auth(request: web.Request) -> None:
+def _auth(request: web.Request) -> str:
+    """校验登录，返回登录用户名（用于审计）。"""
     if not ADMIN_PASSWORD:
         raise web.HTTPForbidden(text="未配置 ADMIN_PASSWORD，后台不可用")
-    if not _check_token(request.cookies.get(COOKIE_NAME)):
+    user = _check_token(request.cookies.get(COOKIE_NAME))
+    if not user:
         raise web.HTTPUnauthorized(text="未登录")
+    return user
 
 
 # ---------------- 页面 ----------------
@@ -197,8 +208,10 @@ async def login(request: web.Request):
         _login_fails.append(now)
         await asyncio.sleep(0.5)  # 失败延时，拖慢爆破速度
         raise web.HTTPUnauthorized(text="用户名或密码错误")
+    with database.SessionLocal() as session:
+        database.log_audit(session, username, "login", f"后台登录成功（IP: {_client_ip(request)}）")
     resp = web.json_response({"ok": True})
-    resp.set_cookie(COOKIE_NAME, _make_token(), max_age=COOKIE_TTL, httponly=True, samesite="lax")
+    resp.set_cookie(COOKIE_NAME, _make_token(username), max_age=COOKIE_TTL, httponly=True, samesite="lax")
     return resp
 
 
@@ -217,7 +230,7 @@ async def get_config_api(request: web.Request):
 
 
 async def save_config_api(request: web.Request):
-    _auth(request)
+    admin = _auth(request)
     key = request.match_info["key"]
     try:
         data = await request.json()
@@ -229,17 +242,19 @@ async def save_config_api(request: web.Request):
             config_api.save_config(session, key, value)
         except ValueError as e:
             raise web.HTTPBadRequest(text=str(e))
+        database.log_audit(session, admin, "config_save", f"{key} = {value[:120]}")
     return web.json_response({"ok": True})
 
 
 async def reset_config_api(request: web.Request):
-    _auth(request)
+    admin = _auth(request)
     key = request.match_info["key"]
     with database.SessionLocal() as session:
         try:
             config_api.reset_config(session, key)
         except ValueError as e:
             raise web.HTTPBadRequest(text=str(e))
+        database.log_audit(session, admin, "config_reset", f"{key}")
     return web.json_response({"ok": True})
 
 
@@ -301,7 +316,7 @@ async def members_api(request: web.Request):
 
 async def members_adjust_api(request: web.Request):
     """调整成员天数/余额（正数增加、负数扣减），并给用户发到账通知（仅增加时）。"""
-    _auth(request)
+    admin = _auth(request)
     try:
         data = await request.json()
     except Exception:
@@ -321,6 +336,8 @@ async def members_adjust_api(request: web.Request):
             result = config_api.adjust_member(session, user_id, days_delta, balance_delta)
         except ValueError as e:
             raise web.HTTPBadRequest(text=str(e))
+        detail = "、".join(result.get("changed") or [])
+        database.log_audit(session, admin, "member_adjust", f"用户 {user_id}：{detail}")
     if _bot and (days_delta > 0 or balance_delta > 0):
         parts = []
         if days_delta > 0:
@@ -358,7 +375,7 @@ async def site_api(request: web.Request):
 
 async def site_save_api(request: web.Request):
     """后台保存网站配置。"""
-    _auth(request)
+    admin = _auth(request)
     try:
         data = await request.json()
     except Exception:
@@ -368,6 +385,7 @@ async def site_save_api(request: web.Request):
             cfg = config_api.set_site_config(session, data)
         except ValueError as e:
             raise web.HTTPBadRequest(text=str(e))
+        database.log_audit(session, admin, "site_save", "、".join(sorted((data or {}).keys())) or "（空）")
     _public_cache.pop("site", None)  # 立即让公开接口生效
     return web.json_response({"ok": True, "site": cfg})
 
@@ -418,7 +436,7 @@ async def bot_profile_api(request: web.Request):
 
 async def bot_profile_save_api(request: web.Request):
     """修改机器人显示名称与简介（调用 Telegram Bot API，立即生效）。"""
-    _auth(request)
+    admin = _auth(request)
     try:
         data = await request.json()
     except Exception:
@@ -473,7 +491,28 @@ async def bot_profile_save_api(request: web.Request):
         raise
     except Exception as e:
         raise web.HTTPBadRequest(text=f"操作失败：{str(e)[:100]}")
+    with database.SessionLocal() as session:
+        database.log_audit(session, admin, "bot_profile", "、".join(updated) or "（无变化）")
     return web.json_response({"ok": True, "updated": updated})
+
+
+# ---------------- 操作审计 ----------------
+
+async def audit_api(request: web.Request):
+    """后台操作记录（谁在什么时候改了什么）。"""
+    _auth(request)
+    with database.SessionLocal() as session:
+        logs = database.get_audit_logs(session, 100)
+    items = [
+        {
+            "time": database.beijing_str(l.created_at),
+            "admin": l.admin,
+            "action": l.action,
+            "detail": l.detail,
+        }
+        for l in logs
+    ]
+    return web.json_response({"ok": True, "items": items})
 
 
 def build_app(bot=None) -> web.Application:
@@ -499,4 +538,5 @@ def build_app(bot=None) -> web.Application:
     app.router.add_post("/api/site", site_save_api)
     app.router.add_get("/api/bot/profile", bot_profile_api)
     app.router.add_post("/api/bot/profile", bot_profile_save_api)
+    app.router.add_get("/api/audit", audit_api)
     return app
