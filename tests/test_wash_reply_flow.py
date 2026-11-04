@@ -150,9 +150,13 @@ class TestWashReplyFlow(unittest.TestCase):
             self.assertAlmostEqual(get_wash_balance(session, uid), 10.0)
             # pending 记录已删除
             self.assertEqual(get_config(session, "wash_pending:OldCode", ""), "")
-            # 退款流水：负数行数、负数金额、type=refund
+            # 退款流水：负数行数、负数金额、type=refund（只查本用户，避免串到其它测试）
             refunds = list(
-                session.scalars(select(WashOrder).where(WashOrder.type == "refund"))
+                session.scalars(
+                    select(WashOrder).where(
+                        WashOrder.type == "refund", WashOrder.user_id == uid
+                    )
+                )
             )
             self.assertEqual(len(refunds), 1)
             self.assertEqual(refunds[0].row_count, -1000)
@@ -167,6 +171,77 @@ class TestWashReplyFlow(unittest.TestCase):
             self.assertEqual(pending2, 0)
             self.assertAlmostEqual(get_wash_balance(session, uid), 10.0)
             self.assertEqual(charged2, charged)
+
+    def test_batch_partial_settlement_and_refund(self):
+        """批量任务：收到几个结果就结算几份，没回传的部分超时按比例退款。"""
+        import json as _json
+        import time as _time
+        from sqlalchemy import select
+
+        from database import (
+            WASH_PENDING_TTL_SECONDS,
+            WashOrder,
+            add_wash_balance,
+            delete_config,
+            get_or_create_user,
+            get_washed_breakdown,
+            get_wash_balance,
+        )
+
+        uid = 777
+        code = "Btc7k9Q"
+        with SessionLocal() as session:
+            delete_config(session, f"wash_pending:{CODE}")
+            delete_config(session, f"wash_code:{CODE}")
+            get_or_create_user(session, uid)
+            # 模拟提交时已预扣 60 元（原余额 100）
+            add_wash_balance(session, uid, 40.0)
+            ts = int(_time.time())
+            fm = _json.dumps({"files": [100, 200, 300], "charged": 0.0}, ensure_ascii=False)
+            set_config(session, f"wash_pending:{code}", f"{uid}:600:60:{ts}:{fm}")
+            set_config(session, f"wash_code:{code}", f"{uid}:{ts}")
+
+        async def flow():
+            handler = get_handler("message", "alt_user_reply")
+            bot = FakeBot()
+            await handler(FakeMessage(f"{code}_A.txt"), bot)  # 结算 60*100/600 = 10
+            await handler(FakeMessage(f"{code}_B.txt"), bot)  # 结算 60*200/600 = 20
+            self.assertEqual(len(bot.sent), 2)
+            self.assertEqual(bot.sent[0][0], uid)
+
+        asyncio.run(flow())
+
+        with SessionLocal() as session:
+            rows = list(session.scalars(
+                select(WashOrder).where(
+                    WashOrder.user_id == uid, WashOrder.type == "deduct"
+                )
+            ))
+            self.assertEqual(len(rows), 2)
+            self.assertAlmostEqual(rows[0].cost, 10.0)
+            self.assertAlmostEqual(rows[1].cost, 20.0)
+            # 还剩 1 个文件未回传，pending 仍在
+            self.assertNotEqual(get_config(session, f"wash_pending:{code}", ""), "")
+
+        # 把提交时间改成超过 TTL，触发过期退款（60 - 30 = 30）
+        with SessionLocal() as session:
+            old_ts = int(_time.time()) - WASH_PENDING_TTL_SECONDS - 60
+            fm = _json.dumps({"files": [300], "charged": 30.0}, ensure_ascii=False)
+            set_config(session, f"wash_pending:{code}", f"{uid}:600:60:{old_ts}:{fm}")
+
+        with SessionLocal() as session:
+            get_washed_breakdown(session)
+            # 退款 30：余额 40 + 30 = 70
+            self.assertAlmostEqual(get_wash_balance(session, uid), 70.0)
+            self.assertEqual(get_config(session, f"wash_pending:{code}", ""), "")
+            refunds = list(session.scalars(
+                select(WashOrder).where(
+                    WashOrder.user_id == uid, WashOrder.type == "refund"
+                )
+            ))
+            self.assertEqual(len(refunds), 1)
+            self.assertAlmostEqual(refunds[0].cost, -30.0)
+            self.assertEqual(refunds[0].row_count, -300)
 
     def test_reply_does_not_deduct_again(self):
         """回传时只记账不扣费（费用在提交时已预扣），余额保持不变。"""
