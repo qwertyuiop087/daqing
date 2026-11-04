@@ -109,8 +109,11 @@ async def _sweep_payments(bot) -> None:
         # 4) 自动入账
         notify_text = None
         with SessionLocal() as session:
+            # 行锁：与用户手动点击「我已支付」互斥，防止同一订单被重复入账
             fresh = session.scalar(
-                select(PaymentOrder).where(PaymentOrder.order_id == order.order_id)
+                select(PaymentOrder)
+                .where(PaymentOrder.order_id == order.order_id)
+                .with_for_update()
             )
             if fresh is None or fresh.status == "paid":
                 continue
