@@ -1,4 +1,4 @@
-# DQFB 管理后台（webadmin）部署说明
+﻿# 错落雨 管理后台（webadmin）部署说明
 
 管理后台用 FastAPI 写，**直接读写机器人同一个数据库**（`app_config` / `users` / `lottery_records` 等表），
 所以网页上改抽奖/套餐/定价，机器人立即生效，两边不会格式不一致。
