@@ -10,49 +10,81 @@ from utils.lottery import parse_prizes_input, parse_redeem_input
 
 
 def parse_plans_input(text: str) -> list[dict]:
-    """解析套餐输入：天数:价格,天数:价格。格式错误抛 ValueError。"""
-    plans = []
-    for item in (text or "").strip().split(","):
-        item = item.strip()
-        if not item:
-            continue
-        parts = item.split(":")
-        if len(parts) != 2:
-            raise ValueError(f"「{item}」格式错误，应为 天数:价格")
+    """解析套餐输入：天数:价格,天数:价格；兼容 JSON 数组。格式错误抛 ValueError。"""
+    text = (text or "").strip()
+    if text.startswith("["):
         try:
-            days = int(parts[0].strip())
-            price = float(parts[1].strip())
-        except ValueError:
-            raise ValueError(f"「{item}」数值不是数字")
-        if days < 1 or price <= 0:
-            raise ValueError(f"「{item}」天数需≥1、价格需>0")
-        plans.append({"days": days, "price": price})
+            data = json.loads(text)
+            plans = [
+                {"days": int(p["days"]), "price": float(p["price"])}
+                for p in data
+            ]
+        except Exception:
+            raise ValueError("套餐 JSON 格式错误")
+    else:
+        plans = []
+        for item in text.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            parts = item.split(":")
+            if len(parts) != 2:
+                raise ValueError(f"「{item}」格式错误，应为 天数:价格")
+            try:
+                days = int(parts[0].strip())
+                price = float(parts[1].strip())
+            except ValueError:
+                raise ValueError(f"「{item}」数值不是数字")
+            if days < 1 or price <= 0:
+                raise ValueError(f"「{item}」天数需≥1、价格需>0")
+            plans.append({"days": days, "price": price})
     if not plans:
         raise ValueError("至少一个套餐")
     return plans
 
 
 def parse_wash_prices_input(text: str) -> list[dict]:
-    """解析洗数据阶梯定价：行数:单价,行数:单价。格式错误抛 ValueError。"""
-    prices = []
-    for item in (text or "").strip().split(","):
-        item = item.strip()
-        if not item:
-            continue
-        parts = item.split(":")
-        if len(parts) != 2:
-            raise ValueError(f"「{item}」格式错误，应为 行数:单价")
+    """解析洗数据阶梯定价：行数:单价,行数:单价；兼容 JSON 数组。格式错误抛 ValueError。"""
+    text = (text or "").strip()
+    if text.startswith("["):
         try:
-            min_rows = int(parts[0].strip())
-            price = float(parts[1].strip())
-        except ValueError:
-            raise ValueError(f"「{item}」数值不是数字")
-        if min_rows < 0 or price <= 0:
-            raise ValueError(f"「{item}」行数需≥0、单价需>0")
-        prices.append({"min_rows": min_rows, "price_per_row": price})
+            data = json.loads(text)
+            prices = [
+                {"min_rows": int(p["min_rows"]), "price_per_row": float(p["price_per_row"])}
+                for p in data
+            ]
+        except Exception:
+            raise ValueError("阶梯定价 JSON 格式错误")
+    else:
+        prices = []
+        for item in text.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            parts = item.split(":")
+            if len(parts) != 2:
+                raise ValueError(f"「{item}」格式错误，应为 行数:单价")
+            try:
+                min_rows = int(parts[0].strip())
+                price = float(parts[1].strip())
+            except ValueError:
+                raise ValueError(f"「{item}」数值不是数字")
+            if min_rows < 0 or price <= 0:
+                raise ValueError(f"「{item}」行数需≥0、单价需>0")
+            prices.append({"min_rows": min_rows, "price_per_row": price})
     if not prices:
         raise ValueError("至少一个档位")
     return prices
+
+
+def _plans_to_text(plans: list[dict]) -> str:
+    """套餐 → 「天数:价格」文本（与后台输入格式一致）。"""
+    return ",".join(f"{int(p['days'])}:{float(p['price']):g}" for p in plans)
+
+
+def _wash_prices_to_text(prices: list[dict]) -> str:
+    """阶梯定价 → 「行数:单价」文本（与后台输入格式一致）。"""
+    return ",".join(f"{int(p['min_rows'])}:{float(p['price_per_row']):g}" for p in prices)
 
 
 _PRIZE_TYPE_LABEL = {"days": "天", "wash_balance": "余额", "ticket": "高级券"}
@@ -83,8 +115,8 @@ def get_all_config(session) -> dict:
         "lottery_prizes": _prizes_to_text(database.get_lottery_prizes(session)),
         "lottery_premium_prizes": _prizes_to_text(database.get_lottery_premium_prizes(session)),
         "lottery_redeem": _redeem_to_text(database.get_lottery_redeem(session)),
-        "plans": json.dumps(database.get_plans(session), ensure_ascii=False),
-        "wash_prices": json.dumps(database.get_wash_prices(session), ensure_ascii=False),
+        "plans": _plans_to_text(database.get_plans(session)),
+        "wash_prices": _wash_prices_to_text(database.get_wash_prices(session)),
         "wash_price_floor": database.get_wash_price_floor(session),
         "wash_quota": database.get_wash_quota(session),
         "usdt_rate": database.get_config(session, "usdt_rate", ""),
@@ -259,6 +291,13 @@ def adjust_member(session, user_id: int, days_delta: int = 0, balance_delta: flo
     user = session.get(database.User, user_id)
     if user is None:
         raise ValueError("用户不存在")
+
+    # 拒绝 NaN / Infinity 与离谱数值，防止余额被永久损坏
+    import math as _math
+    if not _math.isfinite(float(days_delta)) or not _math.isfinite(float(balance_delta)):
+        raise ValueError("调整数值格式错误")
+    if abs(days_delta) > 365000 or abs(balance_delta) > 1e9:
+        raise ValueError("调整数值超出允许范围")
 
     changed = []
     if days_delta:
