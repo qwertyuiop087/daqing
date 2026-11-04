@@ -54,11 +54,14 @@ async def zip_got_file(message: Message, state: FSMContext, bot: Bot):
             max_size=settings.MAX_ZIP_SIZE,
             max_total_size=settings.MAX_ZIP_SIZE * 2,
         )
-    except (zipfile.BadZipFile, NotImplementedError):
-        await message.answer("⚠️ 无法解析该 ZIP 文件。")
+    except (zipfile.BadZipFile, NotImplementedError, RuntimeError):
+        # RuntimeError：zip 内条目被加密等无法读取的情况
+        await message.answer("⚠️ 无法解析该 ZIP 文件（可能是损坏或加密的压缩包）。")
+        await cleanup_state(state)
         return
     if not extracted:
         await message.answer("⚠️ 压缩包内没有 TXT 文件。")
+        await cleanup_state(state)
         return
 
     out: list[tuple[str, str]] = []
