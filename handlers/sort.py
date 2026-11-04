@@ -64,7 +64,8 @@ async def sort_got_file(message: Message, state: FSMContext, bot: Bot):
         return
 
     name = sanitize_filename(doc.file_name or f"file_{len(files) + 1}.txt")
-    path = os.path.join(data["workdir"], name)
+    # 加序号前缀，避免同名文件互相覆盖导致数据丢失
+    path = os.path.join(data["workdir"], f"in_{len(files) + 1}_{name}")
     file = await bot.get_file(doc.file_id)
     await bot.download_file(file.file_path, destination=path)
     files.append((name, path))
@@ -114,8 +115,13 @@ async def sort_done(cq: CallbackQuery, state: FSMContext):
     for k in ("手机号", "银行卡", "身份证", "金额", "时间", "名字"):
         head += f"· {k}：<b>{counts.get(k, 0)}</b>\n"
 
-    # 统计多余字段（"其他"类型）的数量，包括带特殊符号的
-    other_count = sum(counts.values()) - sum(counts.get(k, 0) for k in ("手机号", "银行卡", "身份证", "金额", "时间", "名字"))
+    # 统计多余字段（"其他"类型）的数量：counts 里只有已知类型，需要直接逐 token 统计
+    other_count = sum(
+        1
+        for ln in all_lines
+        for t in split_record(ln, delim)
+        if t.strip() and detect_field_type(t) == "其他"
+    )
 
     # 收集多余字段的样本，给用户看例子
     other_samples = []
