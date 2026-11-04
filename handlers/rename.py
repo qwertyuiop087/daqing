@@ -50,7 +50,8 @@ async def rename_got_file(message: Message, state: FSMContext, bot: Bot):
         return
 
     name = sanitize_filename(doc.file_name or f"file_{len(files) + 1}.txt")
-    path = os.path.join(data["workdir"], name)
+    # 加序号前缀，避免同名文件互相覆盖
+    path = os.path.join(data["workdir"], f"in_{len(files) + 1}_{name}")
     file = await bot.get_file(doc.file_id)
     await bot.download_file(file.file_path, destination=path)
     files.append((name, path))
