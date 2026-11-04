@@ -1,4 +1,4 @@
-"""全局配置：从环境变量 / .env 文件读取。"""
+﻿"""全局配置：从环境变量 / .env 文件读取。"""
 import os
 
 from dotenv import load_dotenv
@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.42"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.43"))
 
 
 settings = Settings()
@@ -96,6 +96,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.43",
+        [
+            "介绍页按同一套设计规范重做：线性图标、单一强调色、统一栅格",
+            "介绍页移除渐变、发光、光标特效与抽奖转盘，改为纯内容版式",
+            "套餐与中奖通知继续与机器人实时同步",
+        ],
+    ),
     (
         "2026-10-28.42",
         [
