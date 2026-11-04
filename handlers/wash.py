@@ -458,9 +458,10 @@ async def wash_got_file(message: Message, state: FSMContext, bot: Bot):
         await bot.download_file(file.file_path, destination=tmp_path)
 
         await progress_msg.edit_text("⏳ 正在计算行数…")
-        # 计算行数
-        with open(tmp_path, "r", encoding="utf-8", errors="ignore") as f:
-            lines = [ln.strip() for ln in f if ln.strip()]
+        # 计算行数（与其它功能一致：自动识别 UTF-8 / GBK / GB18030 等编码）
+        from services.file_ops import decode_bytes, read_file
+        text = decode_bytes(read_file(tmp_path))
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
         line_count = len(lines)
 
         # 检查是不是只有手机号
