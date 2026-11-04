@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -579,7 +579,7 @@ async function reset(key){
   catch(e){toast(e.message,false);}
 }
 
-const esc=t=>String(t??'').replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+const esc=t=>String(t??'').replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
 let adjustUserId=null;
 
 async function loadMembers(){
@@ -592,14 +592,23 @@ async function loadMembers(){
         <td>${u.id}</td>
         <td>${esc(name)}</td>
         <td>${esc(u.member_text)}${u.expires?'<br><span style="color:var(--ink-3);font-size:12px">'+esc(u.expires)+'</span>':''}</td>
-        <td>¥${u.wash_balance.toFixed(4)}</td>
-        <td>${u.lottery_tickets}</td>
-        <td><button class="ghost" style="height:32px;padding:0 12px" onclick='openAdjust(${u.id},"${esc(name)}")'>调整</button></td>
+        <td>¥${Number(u.wash_balance).toFixed(4)}</td>
+        <td>${Number(u.lottery_tickets)||0}</td>
+        <td><button class="ghost adjust-btn" style="height:32px;padding:0 12px" data-id="${u.id}" data-name="${esc(name)}">调整</button></td>
       </tr>`;
     }).join('');
     $('member-rows').innerHTML=rows||'<tr><td colspan="6" style="color:var(--ink-3)">没有找到用户</td></tr>';
   }catch(e){toast(e.message,false);}
 }
+
+/* 事件委托：昵称可能含引号，不用内联 onclick（防注入） */
+document.addEventListener('click',e=>{
+  const btn=e.target.closest('.adjust-btn');
+  if(!btn)return;
+  const id=parseInt(btn.dataset.id,10);
+  const name=btn.dataset.name||String(id);
+  openAdjust(id,name);
+});
 
 function openAdjust(id,name){
   adjustUserId=id;
