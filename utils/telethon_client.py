@@ -6,6 +6,7 @@
 4. 我们的 bot 收到后，从文件名提取用户ID，发给用户
 """
 import asyncio
+import time
 
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -24,6 +25,26 @@ bot_instance = None
 _userbot_lock: asyncio.Lock | None = None
 # 当前心跳任务：重启客户端前先取消旧任务，避免任务无限累积
 _heartbeat_task: asyncio.Task | None = None
+# 掉线通知节流：30 分钟内最多主动提醒一次（恢复通知不受限）
+_last_offline_notify = 0.0
+_NOTIFY_MIN_INTERVAL = 1800
+
+
+async def _notify_admins(text: str, force: bool = False) -> None:
+    """给全部管理员发通知（掉线类通知按 30 分钟节流，避免刷屏）。"""
+    global _last_offline_notify
+    if not bot_instance:
+        return
+    now = time.time()
+    if not force and now - _last_offline_notify < _NOTIFY_MIN_INTERVAL:
+        return
+    _last_offline_notify = now
+    from utils.roles import admin_id_list
+    for uid in admin_id_list():
+        try:
+            await bot_instance.send_message(uid, text)
+        except Exception:
+            pass
 
 
 def setup_handlers():
@@ -207,7 +228,16 @@ async def _start_userbot_inner(bot=None):
     userbot = TelegramClient(StringSession(session_str), settings.TELETHON_API_ID, settings.TELETHON_API_HASH)
     setup_handlers()
 
-    await userbot.start()
+    try:
+        await userbot.start()
+    except Exception as e:
+        print(f"❌ 小号登录失败：{e}")
+        await _notify_admins(
+            f"⚠️ <b>洗数据小号登录失败</b>\n\n{str(e)[:200]}\n\n"
+            "洗数据中转不可用，请到管理面板「小号登录」重新登录。",
+            force=True,
+        )
+        return
 
     # 把小号的用户名和 user_id 存到数据库
     me = await userbot.get_me()
@@ -230,6 +260,7 @@ async def _start_userbot_inner(bot=None):
                     with SessionLocal() as session:
                         set_config(session, "alt_status", "offline")
                     print("⚠️ 小号心跳检测：已断开，正在重连...")
+                    await _notify_admins("⚠️ <b>洗数据小号已掉线</b>，正在尝试自动重连…")
                     try:
                         await userbot.connect()
                         # 验证是否真的登录了
@@ -240,11 +271,13 @@ async def _start_userbot_inner(bot=None):
                                 set_config(session, "alt_username", me.username or "")
                                 set_config(session, "alt_user_id", str(me.id))
                             print(f"✅ 小号已重新连接成功: @{me.username}")
+                            await _notify_admins(f"✅ <b>洗数据小号已恢复在线</b>（@{me.username}）", force=True)
                     except Exception as e:
                         print(f"❌ 小号重连失败：{e}")
                         # 重连失败，标记离线
                         with SessionLocal() as session:
                             set_config(session, "alt_status", "offline")
+                        await _notify_admins(f"❌ <b>洗数据小号重连失败</b>：{str(e)[:200]}")
             except Exception as e:
                 print(f"⚠️ 小号心跳检测异常：{e}")
 
