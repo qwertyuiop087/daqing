@@ -59,8 +59,20 @@ async def show_plans(cq: CallbackQuery):
 @router.callback_query(F.data.startswith("buy:plan:"))
 async def create_order(cq: CallbackQuery, state: FSMContext):
     parts = cq.data.split(":")
-    days = int(parts[2])
-    price = float(parts[3])
+    try:
+        days = int(parts[2])
+        price = float(parts[3])
+    except (ValueError, IndexError):
+        await cq.answer("参数错误。", show_alert=True)
+        return
+
+    # 服务端定价：回调数据客户端可见可伪造，价格与天数必须以数据库套餐为准
+    with SessionLocal() as session:
+        plans = get_plans(session)
+    plan = next((p for p in plans if p["days"] == days and abs(float(p["price"]) - price) < 1e-9), None)
+    if plan is None:
+        await cq.answer("套餐不存在或已调整，请重新选择。", show_alert=True)
+        return
 
     client = get_client()
     if not client:
@@ -71,16 +83,20 @@ async def create_order(cq: CallbackQuery, state: FSMContext):
     user_id = cq.from_user.id
 
     # 调用大力钱包创建支付链接（同步 HTTP 丢线程池，避免卡事件循环）
-    result = await asyncio.to_thread(
-        client.call,
-        "/merchant/payLink",
-        {
-            "amount": price,
-            "coin": "usdt",
-            "userOrder": order_id,
-            "name": f"会员{days}天",
-        },
-    )
+    try:
+        result = await asyncio.to_thread(
+            client.call,
+            "/merchant/payLink",
+            {
+                "amount": price,
+                "coin": "usdt",
+                "userOrder": order_id,
+                "name": f"会员{days}天",
+            },
+        )
+    except Exception as e:
+        await cq.answer(f"创建支付订单失败，请稍后重试。", show_alert=True)
+        return
 
     if not result.get("ok"):
         await cq.answer("创建支付订单失败，请稍后重试。", show_alert=True)
@@ -137,44 +153,60 @@ async def check_order(cq: CallbackQuery, state: FSMContext):
         if not order:
             await cq.answer("订单不存在。", show_alert=True)
             return
-
+        if order.user_id != cq.from_user.id:
+            await cq.answer("这不是你的订单。", show_alert=True)
+            return
         if order.status == "paid":
-            await cq.answer(f"✅ 订单已支付，会员已开通！", show_alert=True)
+            await cq.answer("订单已支付，会员已开通。", show_alert=True)
             return
 
-        # 主动查单（同步 HTTP 丢线程池，避免卡事件循环）
+    # 主动查单（同步 HTTP 丢线程池，避免卡事件循环）
+    try:
         result = await asyncio.to_thread(
             client.call, "/merchant/checkDeposit", {"userOrder": order_id}
         )
-        if not result.get("ok"):
-            await cq.answer("查询失败，请稍后再试。", show_alert=True)
+    except Exception:
+        await cq.answer("查询失败，请稍后再试。", show_alert=True)
+        return
+    if not result.get("ok"):
+        await cq.answer("查询失败，请稍后再试。", show_alert=True)
+        return
+
+    data = result["data"]
+    status_cn = data.get("statusTextCN", "")
+    status_text = data.get("statusText", "")
+
+    if status_text != "paid":
+        await cq.answer(f"当前状态：{status_cn}，请完成支付后再查询。", show_alert=True)
+        return
+
+    # 支付成功：行锁 + 二次确认，与自动到账扫描互斥，防止重复开通
+    with SessionLocal() as session:
+        locked = session.scalar(
+            select(PaymentOrder)
+            .where(PaymentOrder.order_id == order_id)
+            .with_for_update()
+        )
+        if locked is None or locked.status == "paid":
+            await cq.answer("订单已支付。", show_alert=True)
             return
+        locked.status = "paid"
+        locked.txid = data.get("txid", locked.txid)
 
-        data = result["data"]
-        status_cn = data.get("statusTextCN", "")
-        status_text = data.get("statusText", "")
-
-        if status_text == "paid":
-            # 支付成功，开通会员；先落订单状态保证幂等
-            order.status = "paid"
-            order.txid = data.get("txid", order.txid)
-
-            user = get_user_by_id(session, order.user_id)
-            if user:
-                add_user_days(session, user, order.days)
-            else:
-                # 用户不存在时也要把订单状态提交掉，防止重复点击再次开通
-                session.commit()
-
-            await cq.answer(f"🎉 支付成功！会员已增加 {order.days} 天。", show_alert=True)
-            await cq.message.edit_text(
-                f"✅ <b>支付成功！</b>\n\n"
-                f"已为你开通 {order.days} 天会员。\n"
-                f"感谢购买！\n\n"
-                f"👉 会员群：@youzui\n"
-                f"进群获取最新资源和通知。",
-                reply_markup=menu_kb(cq.from_user.id),
-                parse_mode="HTML",
-            )
+        user = get_user_by_id(session, locked.user_id)
+        if user:
+            add_user_days(session, user, locked.days)
         else:
-            await cq.answer(f"当前状态：{status_cn}，请完成支付后再查询。", show_alert=True)
+            # 用户不存在时也要把订单状态提交掉，防止重复点击再次开通
+            session.commit()
+
+    await cq.answer(f"支付成功！会员已增加 {locked.days} 天。", show_alert=True)
+    await cq.message.edit_text(
+        f"✅ <b>支付成功！</b>\n\n"
+        f"已为你开通 {locked.days} 天会员。\n"
+        f"感谢购买！\n\n"
+        f"👉 会员群：@youzui\n"
+        f"进群获取最新资源和通知。",
+        reply_markup=menu_kb(cq.from_user.id),
+        parse_mode="HTML",
+    )
