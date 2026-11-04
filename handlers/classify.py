@@ -162,8 +162,9 @@ async def classify_filename_skip(cq: CallbackQuery, state: FSMContext):
 @router.message(ClassifyStates.waiting_filename, F.text)
 async def classify_filename_input(message: Message, state: FSMContext):
     prefix = (message.text or "").strip()
-    # 简单清理：去掉非法文件名字符
-    prefix = prefix.replace("/", "_").replace("\\", "_").replace(":", "_")
+    # 完整清理非法文件名字符（Windows 下 * ? " < > | 等会导致写文件失败）
+    from services.file_ops import sanitize_filename
+    prefix = sanitize_filename(prefix)
     await _do_export(message, state, prefix=prefix)
 
 
