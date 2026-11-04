@@ -878,3 +878,22 @@ async def alt_user_reply(message: Message, bot: Bot):
         if ok:
             print(f"✅ 已把洗好的文件发给用户 {user_id}")
         return
+
+
+# ---------------- 兜底：文件没被任何功能接住 ----------------
+# 放在 wash.router 末尾（wash 是最先注册回传、最后注册普通路由的），
+# 只有在所有功能的状态处理器都没匹配时才会走到这里。
+# 典型场景：点了「上传文件」后机器人重启，内存里的上传状态丢失，
+# 用户再发文件就没人接——以前是完全没反应，现在给出明确提示。
+
+@router.message(F.document)
+async def document_fallback(message: Message, state: FSMContext):
+    await cleanup_state(state)
+    await message.answer(
+        "⚠️ <b>没认出这个文件要做什么</b>\n\n"
+        "可能是刚才机器人重启，上传状态丢了。\n"
+        "请从主菜单重新选择功能，再发文件：\n\n"
+        "· 洗数据：主菜单 → 🧼 洗数据 → 📤 上传文件洗数据\n"
+        "· 其它功能：主菜单里点对应按钮，再发文件",
+        reply_markup=menu_kb(message.from_user.id),
+    )
