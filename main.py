@@ -6,6 +6,7 @@
 """
 import logging
 import os
+import secrets
 
 import asyncio
 import time
@@ -59,51 +60,67 @@ async def _sweep_payments(bot) -> None:
             session.scalars(
                 select(PaymentOrder)
                 .where(PaymentOrder.status == "pending")
-                .order_by(PaymentOrder.id.desc())
+                .order_by(PaymentOrder.id.asc())  # 最旧的先处理，避免大量订单时饿死
                 .limit(AUTO_CREDIT_MAX_ORDERS)
             )
         )
     for order in orders:
-        # 1) 超时判定：创建超过 5 分钟仍未支付 → 无效
-        if order.created_at is not None and order.created_at < timeout_cutoff:
-            with SessionLocal() as session:
-                fresh = session.scalar(
-                    select(PaymentOrder).where(PaymentOrder.order_id == order.order_id)
+        # 1) 超时判定：过期订单在标记无效前，最后查一次支付状态；
+        #    已付款的照常入账，未付款的才标记超时（防止误杀已付款订单）
+        expired = order.created_at is not None and order.created_at < timeout_cutoff
+        data = None
+        txid = ""
+        if expired:
+            try:
+                result = await asyncio.to_thread(
+                    client.call, "/merchant/checkDeposit", {"userOrder": order.order_id}
                 )
-                if fresh is not None and fresh.status == "pending":
-                    fresh.status = "timeout"
-                    session.commit()
-                    try:
-                        await bot.send_message(
-                            fresh.user_id,
-                            "⚠️ <b>订单已超时</b>\n\n"
-                            f"订单号：<code>{fresh.order_id}</code>\n"
-                            "5 分钟内未完成支付，订单已失效，请重新下单。",
-                            parse_mode="HTML",
-                        )
-                    except Exception:
-                        pass
-            continue
+            except Exception:
+                result = {"ok": False}
+            if not result.get("ok") or (result.get("data") or {}).get("statusText") != "paid":
+                with SessionLocal() as session:
+                    fresh = session.scalar(
+                        select(PaymentOrder)
+                        .where(PaymentOrder.order_id == order.order_id)
+                        .with_for_update()
+                    )
+                    if fresh is not None and fresh.status == "pending":
+                        fresh.status = "timeout"
+                        session.commit()
+                        try:
+                            await bot.send_message(
+                                fresh.user_id,
+                                "⚠️ <b>订单已超时</b>\n\n"
+                                f"订单号：<code>{fresh.order_id}</code>\n"
+                                "5 分钟内未完成支付，订单已失效，请重新下单。",
+                                parse_mode="HTML",
+                            )
+                        except Exception:
+                            pass
+                continue
+            data = result.get("data") or {}
+            txid = data.get("txid", "") or ""
 
-        # 2) 节流：同一订单最多每 5 秒查一次
-        last = _last_checked.get(order.order_id, 0.0)
-        if now - last < ORDER_CHECK_EVERY:
-            continue
-        _last_checked[order.order_id] = now
+        # 2) 节流：同一订单最多每 5 秒查一次（过期且已付款的订单跳过节流直接入账）
+        if not expired:
+            last = _last_checked.get(order.order_id, 0.0)
+            if now - last < ORDER_CHECK_EVERY:
+                continue
+            _last_checked[order.order_id] = now
 
-        # 3) 查支付状态
-        try:
-            result = await asyncio.to_thread(
-                client.call, "/merchant/checkDeposit", {"userOrder": order.order_id}
-            )
-        except Exception:
-            continue
-        if not result.get("ok"):
-            continue
-        data = result.get("data", {})
-        if data.get("statusText") != "paid":
-            continue
-        txid = data.get("txid", "") or ""
+            # 3) 查支付状态
+            try:
+                result = await asyncio.to_thread(
+                    client.call, "/merchant/checkDeposit", {"userOrder": order.order_id}
+                )
+            except Exception:
+                continue
+            if not result.get("ok"):
+                continue
+            data = result.get("data", {})
+            if data.get("statusText") != "paid":
+                continue
+            txid = data.get("txid", "") or ""
         amount = float(data.get("amount", 0) or 0)
 
         # 4) 自动入账
@@ -180,6 +197,27 @@ TEMP_CLEANUP_INTERVAL = 3600      # 每小时一次
 TEMP_KEEP_SECONDS = 24 * 3600     # 只清理 24 小时前的
 
 
+def _cleanup_stale_config_keys() -> None:
+    """清理过期映射（phone_check_code:* 无限增长防护）。
+
+    该表没有时间戳列，采用保守策略：只在总量异常多（>10 万条）时
+    删除最早的一批，防止查询退化和数据库膨胀；日常量级下不误删。
+    """
+    from database import AppConfig, SessionLocal
+    with SessionLocal() as session:
+        rows = list(session.scalars(
+            select(AppConfig).where(AppConfig.key.like("phone_check_code:%"))
+        ))
+        total = len(rows)
+        if total > 100000:
+            removed = 0
+            for row in rows[: total - 90000]:
+                session.delete(row)
+                removed += 1
+            session.commit()
+            logging.info("🧹 已清理 %d 条过期空号检测映射", removed)
+
+
 def _cleanup_stale_tempdirs() -> None:
     """删除系统临时目录里 24 小时前的 bot_ 工作目录（用户操作中断留下的）。"""
     import shutil
@@ -208,13 +246,17 @@ def _cleanup_stale_tempdirs() -> None:
 
 
 async def start_temp_cleanup() -> None:
-    """每小时清理一次 24 小时前的废弃临时目录。"""
+    """每小时清理一次：废弃临时目录 + 过期的空号检测映射。"""
     while True:
         await asyncio.sleep(TEMP_CLEANUP_INTERVAL)
         try:
             await asyncio.to_thread(_cleanup_stale_tempdirs)
         except Exception as e:
             logging.warning("⚠️ 临时目录清理异常：%s", e)
+        try:
+            await asyncio.to_thread(_cleanup_stale_config_keys)
+        except Exception as e:
+            logging.warning("⚠️ 配置键清理异常：%s", e)
 
 
 # ---------------- 主流程 ----------------
@@ -284,13 +326,16 @@ async def main() -> None:
         # ---- Webhook 模式（Railway 部署推荐） ----
         from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
+        # webhook 密钥：未配置时自动生成随机值，防止任何人伪造 update 打我们的接口。
+        # set_webhook 与请求校验用的是同一份值，双方都能对上，无需额外配置。
+        webhook_secret = settings.WEBHOOK_SECRET or secrets.token_hex(32)
         await bot.set_webhook(
             url=f"{settings.WEBHOOK_DOMAIN}{settings.WEBHOOK_PATH}",
-            secret_token=settings.WEBHOOK_SECRET or None,
+            secret_token=webhook_secret,
             allowed_updates=dp.resolve_used_update_types(),
         )
         SimpleRequestHandler(
-            dispatcher=dp, bot=bot, secret_token=settings.WEBHOOK_SECRET or None
+            dispatcher=dp, bot=bot, secret_token=webhook_secret
         ).register(app, path=settings.WEBHOOK_PATH)
         setup_application(app, dp, bot=bot)
 
