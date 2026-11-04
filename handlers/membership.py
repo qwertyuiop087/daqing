@@ -1619,7 +1619,7 @@ async def admin_wash_orders(cq: CallbackQuery):
             select(func.sum(WashOrder.cost)).where(WashOrder.type == "recharge")
         ).scalar() or 0
         total_deduct = session.execute(
-            select(func.sum(WashOrder.cost)).where(WashOrder.type == "deduct")
+            select(func.sum(WashOrder.cost)).where(WashOrder.type.in_(("deduct", "refund")))
         ).scalar() or 0
 
     if not orders:
