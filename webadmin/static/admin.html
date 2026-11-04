@@ -240,6 +240,10 @@ dialog .row{margin-top:18px}
         <input id="site_title">
         <label>品牌名（左上角）</label>
         <input id="brand">
+        <label>Logo 图标（emoji，如 🃏）</label>
+        <input id="logo_icon">
+        <label>Logo 后缀（如 DQFB，留空则不显示）</label>
+        <input id="logo_suffix">
         <label>主标题渐变词</label>
         <input id="hero_highlight">
         <label>副标题</label>
@@ -430,7 +434,7 @@ async function doAdjust(){
 }
 
 /* ---- 网站设置 ---- */
-const SITE_FIELDS=['site_title','brand','hero_highlight','hero_subtitle','accent','contact1','contact2','contact1_label','contact2_label','bot_link','mock_name','mock_status','mock_chip1','mock_chip2','toast_prefix','toast_footer','footer_text','footer_note'];
+const SITE_FIELDS=['site_title','brand','hero_highlight','hero_subtitle','accent','contact1','contact2','contact1_label','contact2_label','bot_link','mock_name','mock_status','mock_chip1','mock_chip2','toast_prefix','toast_footer','footer_text','footer_note','logo_icon','logo_suffix'];
 async function loadSite(){
   try{
     const d=await api('/api/site');
