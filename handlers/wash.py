@@ -71,8 +71,17 @@ async def _send_document_retry(bot, chat_id: int, document, caption: str, attemp
     return False
 
 
+_last_unmatched_alert = 0.0
+
+
 async def _alert_unmatched(bot, filename: str, code: str) -> None:
-    """结果文件匹配不到用户时私聊管理员，避免静默丢文件。"""
+    """结果文件匹配不到用户时私聊管理员，避免静默丢文件（10 分钟节流，防止被刷屏）。"""
+    global _last_unmatched_alert
+    import time as _time
+    now = _time.time()
+    if now - _last_unmatched_alert < 600:
+        return
+    _last_unmatched_alert = now
     admin_ids = set(settings.ADMIN_IDS) | set(settings.SUPER_ADMIN_IDS)
     if not admin_ids:
         return
@@ -426,6 +435,24 @@ def wash_upload_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def _refund_full_batch(user_id: int, total_lines: int, cost: float, code: str, reason: str) -> None:
+    """退回整单预扣费用并作废任务（仅在文件还没转发给小号之前失败时调用）。"""
+    with SessionLocal() as session:
+        from database import WashOrder, add_wash_balance, delete_config
+        add_wash_balance(session, user_id, cost)
+        session.add(
+            WashOrder(
+                user_id=user_id,
+                filename=reason,
+                row_count=-total_lines,
+                cost=-cost,
+                type="refund",
+            )
+        )
+        delete_config(session, f"wash_pending:{code}")
+        session.commit()
+
+
 @router.callback_query(F.data == "wash:upload")
 async def wash_upload(cq: CallbackQuery, state: FSMContext):
     await cq.answer()
@@ -661,12 +688,14 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
                 set_config(session, "alt_user_id", alt_user_id)
             await temp_client.disconnect()
         except Exception as e:
-            await cq.message.answer(f"⚠️ 获取小号信息失败：{str(e)[:100]}")
+            _refund_full_batch(user_id, total_lines, cost, random_code, "获取小号信息失败退款")
+            await cq.message.answer(f"⚠️ 获取小号信息失败：{str(e)[:100]}\n\n费用已原路退回。")
             await cleanup_state(state)
             return
 
     if not alt_user_id:
-        await cq.message.answer("⚠️ 小号未登录，请先在管理面板登录小号。")
+        _refund_full_batch(user_id, total_lines, cost, random_code, "小号未登录退款")
+        await cq.message.answer("⚠️ 小号未登录，请先在管理面板登录小号。\n\n费用已原路退回。")
         await cleanup_state(state)
         return
 
@@ -685,29 +714,55 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
             await asyncio.sleep(0.6)  # 连发多个文件，稍作间隔避免限流
     except Exception as e:
         send_error = str(e)
-        # 发送失败：退回预扣费用并作废任务
+        if sent_ok == 0:
+            # 一个都没发出去：整单退款并作废
+            _refund_full_batch(user_id, total_lines, cost, random_code, "发送失败退款")
+            if "chat not found" in send_error.lower():
+                tip = (
+                    "⚠️ 小号还没和我们的机器人建立会话！\n\n"
+                    "请用小号给我们的机器人发一条消息（比如发个 /start），然后再试。"
+                )
+            else:
+                tip = f"⚠️ 转发给小号失败：{send_error[:100]}"
+            await cq.message.answer(f"{tip}\n\n费用已原路退回。", reply_markup=menu_kb(user_id))
+            await cleanup_state(state)
+            return
+        # 部分已发出：只退回未发出部分的费用，已发出的继续等回传结算
+        sent_files = files[:sent_ok]
+        unsent_files = files[sent_ok:]
+        sent_total = sum(f["lines"] for f in sent_files)
+        unsent_lines = sum(f["lines"] for f in unsent_files)
+        refund = round(cost * unsent_lines / total_lines, 4)
+        remain_cost = round(cost - refund, 4)
         with SessionLocal() as session:
-            from database import add_wash_balance, delete_config, WashOrder
-            add_wash_balance(session, user_id, cost)
+            from database import WashOrder, add_wash_balance, set_config
+            add_wash_balance(session, user_id, refund)
             session.add(
                 WashOrder(
                     user_id=user_id,
-                    filename="发送失败退款",
-                    row_count=-total_lines,
-                    cost=-cost,
+                    filename="部分发送失败退款",
+                    row_count=-unsent_lines,
+                    cost=-refund,
                     type="refund",
                 )
             )
-            delete_config(session, f"wash_pending:{random_code}")
-            session.commit()
-        if "chat not found" in send_error.lower():
-            tip = (
-                "⚠️ 小号还没和我们的机器人建立会话！\n\n"
-                "请用小号给我们的机器人发一条消息（比如发个 /start），然后再试。"
+            # 更新 pending：行数与费用都改为「已发出部分」，结算按已发出文件的比例分摊
+            remain_map = json.dumps(
+                {"files": [f["lines"] for f in sent_files], "charged": 0.0},
+                ensure_ascii=False,
             )
-        else:
-            tip = f"⚠️ 转发给小号失败：{send_error[:100]}"
-        await cq.message.answer(f"{tip}\n\n费用已原路退回。", reply_markup=menu_kb(user_id))
+            set_config(
+                session,
+                f"wash_pending:{random_code}",
+                f"{user_id}:{sent_total}:{remain_cost}:{int(time.time())}:{remain_map}",
+            )
+            session.commit()
+        await cq.message.answer(
+            f"⚠️ 转发到第 {sent_ok + 1} 个文件时失败：{send_error[:100]}\n\n"
+            f"已发出 <b>{sent_ok}</b> 个文件（继续处理，完成后回传）；\n"
+            f"未发出的 <b>{len(unsent_files)}</b> 个文件已退回 ¥{refund:.4f}。",
+            reply_markup=menu_kb(user_id),
+        )
         await cleanup_state(state)
         return
 
