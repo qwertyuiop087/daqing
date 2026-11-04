@@ -4,6 +4,7 @@
 - 未配置则回退到本地 SQLite 文件 bot_data.db（适合本地调试）。
 """
 import asyncio
+import json
 import random
 import time
 from datetime import datetime, timedelta, timezone
@@ -616,29 +617,43 @@ def get_washed_breakdown(session) -> tuple[int, int]:
     pending = 0
     now = time.time()
     stale_rows = []
-    # 待扣费任务：wash_pending:{随机码} = user_id:line_count:cost[:时间戳]
+    # 待扣费任务：wash_pending:{随机码} = user_id:line_count:cost[:时间戳[:批量JSON]]
     for row in session.scalars(select(AppConfig).where(AppConfig.key.like("wash_pending:%"))):
-        parts = (row.value or "").split(":")
+        parts = (row.value or "").split(":", 4)
         if len(parts) < 3 or not parts[1].isdigit():
             stale_rows.append(row)
             continue
         if len(parts) >= 4 and parts[3].isdigit():
             if now - int(parts[3]) > WASH_PENDING_TTL_SECONDS:
                 stale_rows.append(row)
-                # 任务超时未回传：退回预扣费用并记退款流水
+                # 任务超时未回传：退回未结算的费用并记退款流水。
+                # 批量任务（第 5 段为 JSON：各文件行数与已结算金额）按剩余比例退款。
                 try:
                     uid = int(parts[0])
+                    total_lines = int(parts[1])
                     cost = float(parts[2])
-                    add_wash_balance(session, uid, cost)
-                    session.add(
-                        WashOrder(
-                            user_id=uid,
-                            filename=f"超时退款（{row.key}）",
-                            row_count=-(int(parts[1])),
-                            cost=-cost,
-                            type="refund",
+                    refund_amount = cost
+                    refund_lines = total_lines
+                    if len(parts) >= 5:
+                        try:
+                            fm = json.loads(parts[4])
+                            rem_lines = int(sum(fm.get("files") or []))
+                            charged = float(fm.get("charged", 0.0))
+                            refund_amount = round(cost - charged, 4)
+                            refund_lines = rem_lines
+                        except Exception:
+                            pass
+                    if refund_amount > 0:
+                        add_wash_balance(session, uid, refund_amount)
+                        session.add(
+                            WashOrder(
+                                user_id=uid,
+                                filename=f"超时退款（{row.key}）",
+                                row_count=-refund_lines,
+                                cost=-refund_amount,
+                                type="refund",
+                            )
                         )
-                    )
                 except Exception:
                     pass
                 continue
