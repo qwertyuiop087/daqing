@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -549,7 +549,7 @@ footer a{color:var(--cyan)}
       <h2>会员套餐</h2>
       <p>USDT 支付，兑换后立即生效，套餐与机器人实时同步。</p>
     </div>
-    <div class="plans" id="plans"></div>
+    <div class="plans" id="plansBox"></div>
   </div>
 </section>
 
@@ -597,19 +597,25 @@ document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
 
 /* 导航滚动态 */
 const nav=document.getElementById('nav');
-addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>20));
+addEventListener('scroll',()=>nav.classList.toggle('scrolled',scrollY>20),{passive:true});
 
-/* 英雄区鼠标光晕 */
+/* 英雄区鼠标光晕 + 全局光标光晕：合并为一个 rAF 节流的监听 */
 const hero=document.getElementById('hero');
-addEventListener('mousemove',e=>{
-  const r=hero.getBoundingClientRect();
-  hero.style.setProperty('--mx',((e.clientX-r.left)/r.width*100)+'%');
-  hero.style.setProperty('--my',((e.clientY-r.top)/r.height*100)+'%');
-});
-
-/* 全局光标光晕 */
 const glow=document.getElementById('cursorGlow');
-addEventListener('mousemove',e=>{glow.style.opacity='1';glow.style.left=e.clientX+'px';glow.style.top=e.clientY+'px';});
+let _rafTick=false;
+addEventListener('mousemove',e=>{
+  if(_rafTick)return;
+  _rafTick=true;
+  requestAnimationFrame(()=>{
+    _rafTick=false;
+    const r=hero.getBoundingClientRect();
+    hero.style.setProperty('--mx',((e.clientX-r.left)/r.width*100)+'%');
+    hero.style.setProperty('--my',((e.clientY-r.top)/r.height*100)+'%');
+    glow.style.opacity='1';
+    glow.style.left=e.clientX+'px';
+    glow.style.top=e.clientY+'px';
+  });
+});
 document.addEventListener('mouseleave',()=>{glow.style.opacity='0';});
 
 /* 转盘（演示） */
@@ -647,7 +653,11 @@ function pushToast(){
   const footer=SITE_CFG.toast_footer||'刚刚 · 错落雨分包机器人';
   const t=document.createElement('div');
   t.className='toast';
-  t.innerHTML=`<span class="ico">${ico}</span><div><b>${user} ${prefix} ${prize}</b><span>${footer}</span></div>`;
+  const ti=document.createElement('span');ti.className='ico';ti.textContent=ico;
+  const tw=document.createElement('div');
+  const tb=document.createElement('b');tb.textContent=`${user} ${prefix} ${prize}`;
+  const ts=document.createElement('span');ts.textContent=footer;
+  tw.appendChild(tb);tw.appendChild(ts);t.appendChild(ti);t.appendChild(tw);
   box.appendChild(t);
   while(box.children.length>3)box.firstChild.remove();
   setTimeout(()=>t.classList.add('out'),5200);
@@ -670,7 +680,7 @@ function renderPlans(plans){
       <h3>${p.days} 天</h3>
       <div class="price">${p.price}<small> USDT</small></div>
       <ul><li>${p.days} 天会员</li><li>全部功能</li><li>每日抽奖</li></ul>
-      <a class="btn ${isHot?'primary':'ghost'} bot-link" href="https://t.me/sechou_bot" target="_blank" rel="noopener">选择套餐</a>
+      <a class="btn ${isHot?'primary':'ghost'} bot-link" href="${SITE_CFG.bot_link||'https://t.me/sechou_bot'}" target="_blank" rel="noopener">选择套餐</a>
     </div>`;
   }).join('');
 }
@@ -697,7 +707,7 @@ async function loadSiteConfig(){
     if(s.logo_suffix){const e=document.getElementById('logoSuffix'); if(e)e.textContent=s.logo_suffix;}
     if(s.hero_highlight){const e=document.getElementById('heroHighlight'); if(e)e.textContent=s.hero_highlight;}
     if(s.hero_subtitle){const e=document.getElementById('heroSubtitle'); if(e)e.textContent=s.hero_subtitle;}
-    if(s.accent) document.documentElement.style.setProperty('--violet',s.accent);
+    if(s.accent&&/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(s.accent)) document.documentElement.style.setProperty('--violet',s.accent);
     if(s.contact1) document.querySelectorAll('.contact1').forEach(a=>{a.textContent=s.contact1; a.href='https://t.me/'+String(s.contact1).replace(/^@/,'');});
     if(s.contact2) document.querySelectorAll('.contact2').forEach(a=>{a.textContent=s.contact2; a.href='https://t.me/'+String(s.contact2).replace(/^@/,'');});
     if(s.contact1_label) document.querySelectorAll('.c1label').forEach(e=>e.textContent=s.contact1_label);
@@ -708,7 +718,7 @@ async function loadSiteConfig(){
     if(s.mock_chip2){const e=document.getElementById('mockChip2'); if(e)e.textContent=s.mock_chip2;}
     if(s.footer_text){const e=document.getElementById('footerText'); if(e)e.textContent=s.footer_text;}
     if(s.footer_note){const e=document.getElementById('footerNote'); if(e)e.textContent=s.footer_note;}
-    if(s.bot_link) document.querySelectorAll('.bot-link').forEach(a=>a.href=s.bot_link);
+    if(s.bot_link&&/^(https?:|tg:|t\.me)/.test(s.bot_link)) document.querySelectorAll('.bot-link').forEach(a=>a.href=s.bot_link);
   }catch(e){}
 }
 loadSiteConfig();
