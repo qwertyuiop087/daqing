@@ -671,12 +671,22 @@ def get_washed_breakdown(session) -> tuple[int, int]:
         pending += int(parts[1])
     # wash_code:{随机码} = user_id[:提交时间戳]：同一任务多个结果文件共用的映射，
     # 只按时间戳做过期清理；旧格式（无时间戳）保持原样不清除
+    expired_codes = []
     for row in session.scalars(
         select(AppConfig).where(AppConfig.key.like("wash_code:%")).with_for_update()
     ):
         parts = (row.value or "").split(":")
         if len(parts) == 2 and parts[1].isdigit():
             if now - int(parts[1]) > WASH_CODE_TTL_SECONDS:
+                stale_rows.append(row)
+                expired_codes.append((row.key or "").split(":", 1)[-1])
+    # 结果投递去重键跟着任务一起过期，避免 wash_sent:* 无限增长
+    if expired_codes:
+        for row in session.scalars(
+            select(AppConfig).where(AppConfig.key.like("wash_sent:%"))
+        ):
+            code = (row.key or "").split(":", 1)[-1]
+            if code in expired_codes:
                 stale_rows.append(row)
     for row in stale_rows:
         session.delete(row)
