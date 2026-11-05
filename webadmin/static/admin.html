@@ -155,6 +155,8 @@ td .tag{
 }
 td .tag.recharge-t{color:var(--ok);border-color:rgba(63,107,79,.35);background:rgba(63,107,79,.06)}
 td .tag.refund-t{color:var(--accent);border-color:rgba(61,90,140,.35);background:rgba(61,90,140,.06)}
+td .tag.deduct-t{color:var(--danger);border-color:rgba(155,74,74,.3);background:rgba(155,74,74,.05)}
+td .tag.lottery-t{color:var(--ink-2);border-color:var(--line-2);background:var(--surface-2)}
 .num{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;text-align:right}
 .positive{color:var(--ok)}
 .negative{color:var(--accent)}
@@ -475,11 +477,12 @@ dialog h2{font-size:15px;font-weight:600;margin-bottom:16px}
     <section id="p-washorders" class="page" style="display:none">
       <div class="page-head">
         <h1>洗数据账单</h1>
-        <p>充值与扣费流水，最近 100 条 · 退款以负数冲减</p>
+        <p>充值、扣费、退款与抽奖发放流水，最近 100 条</p>
       </div>
       <div class="grid">
         <div class="stat"><b id="w-recharge">-</b><span>总充值（元）</span></div>
-        <div class="stat"><b id="w-charge">-</b><span>总扣费（元）</span></div>
+        <div class="stat"><b id="w-deduct">-</b><span>总扣费（元）</span></div>
+        <div class="stat"><b id="w-refund">-</b><span>总退款（元）</span></div>
         <div class="stat"><b id="w-balance">-</b><span>用户剩余余额合计（元）</span></div>
       </div>
       <div class="card">
@@ -706,17 +709,25 @@ async function loadAudit(){
 }
 
 /* ---- 洗数据账单 ---- */
-const WASH_TYPES={recharge:['充值','tag recharge-t'],deduct:['扣费',''],refund:['退款','tag refund-t']};
+const WASH_TYPES={
+  recharge:['充值','tag recharge-t'],
+  deduct:['扣费','tag deduct-t'],
+  refund:['退款','tag refund-t'],
+  lottery:['抽奖发放','tag lottery-t'],
+};
 async function loadWashOrders(){
   try{
     const d=await api('/api/wash/orders');
-    if($('w-recharge'))$('w-recharge').textContent='¥'+Number(d.total_recharge||0).toFixed(2);
-    if($('w-charge'))$('w-charge').textContent='¥'+Number(d.total_charge||0).toFixed(2);
-    if($('w-balance'))$('w-balance').textContent='¥'+Number(d.total_balance||0).toFixed(2);
+    const money=v=>'¥'+Number(v||0).toFixed(2);
+    if($('w-recharge'))$('w-recharge').textContent=money(d.total_recharge);
+    if($('w-deduct'))$('w-deduct').textContent=money(d.total_deduct);
+    if($('w-refund'))$('w-refund').textContent=money(d.total_refund);
+    if($('w-balance'))$('w-balance').textContent=money(d.total_balance);
     const rows=(d.items||[]).map(o=>{
       const [tn,tc]=WASH_TYPES[o.type]||[o.type,''];
-      const cost=(Number(o.cost)||0).toFixed(4);
-      const cls=o.type==='recharge'?'positive':(o.type==='refund'?'negative':'');
+      const v=Number(o.cost)||0;
+      const cost=(v>=0?'+':'')+v.toFixed(4);
+      const cls=v>=0?'positive':'negative';
       return `<tr>
         <td>${esc(o.time)}</td>
         <td>${esc(o.user)}${o.user_id?'<br><span style="color:var(--ink-3);font-size:11px">'+o.user_id+'</span>':''}</td>
