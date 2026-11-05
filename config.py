@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.58"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.59"))
 
 
 settings = Settings()
@@ -96,6 +96,15 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.59",
+        [
+            "洗数据结果改为先发文件再记账：记账出错也不会影响文件送达",
+            "文件没能发给你时会私聊管理员人工补发，不再静默丢失",
+            "没送达的结果不扣钱，48 小时未回传自动按比例退款",
+            "同一个结果文件重复到达只投递、结算一次",
+        ],
+    ),
     (
         "2026-10-28.58",
         [
