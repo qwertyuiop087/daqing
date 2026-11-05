@@ -980,6 +980,7 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
     # 逐个转发给小号（文件名加随机码前缀，回传时靠它识别）
     sent_ok = 0
     send_error = None
+    sent_names = []
     try:
         for f in files:
             new_filename = f"{random_code}_{f['name']}"
@@ -989,7 +990,17 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
                 caption="im",
             )
             sent_ok += 1
+            sent_names.append(new_filename)
             await asyncio.sleep(0.6)  # 连发多个文件，稍作间隔避免限流
+        # 记下我们自己发出的源文件名：补发扫描要跳过它们（否则会把原文件当结果再发一遍）
+        if sent_names:
+            with SessionLocal() as session:
+                from database import set_config
+                set_config(
+                    session,
+                    f"wash_src:{random_code}",
+                    json.dumps(sent_names, ensure_ascii=False),
+                )
     except Exception as e:
         send_error = str(e)
         if sent_ok == 0:
@@ -1133,7 +1144,7 @@ async def alt_user_reply(message: Message, bot: Bot):
         # ① 先把文件交给用户：这是用户唯一关心的结果。
         #    记账放在后面，记账只要出一点问题都不能影响交付（以前是先记账后发送，
         #    记账一抛异常就整条 update 被全局错误处理器吞掉，用户永远收不到文件）。
-        dkey = f"{getattr(doc, 'file_unique_id', '') or ''}|{filename}"
+        dkey = f"{filename}|{getattr(doc, 'file_size', 0) or 0}"
         if _already_delivered(random_code, dkey):
             print(f"⚠️ 这个结果文件已经发过了，跳过重复投递: {filename}")
             return
