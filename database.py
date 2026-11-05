@@ -600,6 +600,8 @@ def set_wash_quota(session, value: int) -> None:
 
 # 待扣费任务超过该时长未回传视为作废，不再占用累计洗数据配额
 WASH_PENDING_TTL_SECONDS = 48 * 60 * 60
+# 已结清任务记录（补发兜底用）的保留时长
+WASH_DONE_TTL_SECONDS = 3 * 60 * 60
 # wash_code 映射的过期清理时间：多个结果文件共用同一映射，不能随首个文件到达删除，
 # 只按提交时间戳做保守的 30 天清理，防止旧记录无限增长
 WASH_CODE_TTL_SECONDS = 30 * 24 * 60 * 60
@@ -626,6 +628,17 @@ def get_washed_breakdown(session) -> tuple[int, int]:
         if len(parts) < 3 or not parts[1].isdigit():
             stale_rows.append(row)
             continue
+        # 已结清（done）的记录只为补发兜底保留，3 小时后清掉，
+        # 免得 wash_pending 越堆越多、每次提交都要整表 FOR UPDATE
+        if len(parts) >= 5:
+            try:
+                _fm = json.loads(parts[4])
+            except Exception:
+                _fm = None
+            if isinstance(_fm, dict) and _fm.get("done"):
+                if parts[3].isdigit() and now - int(parts[3]) > WASH_DONE_TTL_SECONDS:
+                    stale_rows.append(row)
+                    continue
         if len(parts) >= 4 and parts[3].isdigit():
             if now - int(parts[3]) > WASH_PENDING_TTL_SECONDS:
                 stale_rows.append(row)
