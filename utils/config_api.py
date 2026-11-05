@@ -4,6 +4,7 @@
 保证两边校验规则与存取格式完全一致。
 """
 import json
+import math
 
 import database
 from utils.lottery import parse_prizes_input, parse_redeem_input
@@ -35,7 +36,7 @@ def parse_plans_input(text: str) -> list[dict]:
                 price = float(parts[1].strip())
             except ValueError:
                 raise ValueError(f"「{item}」数值不是数字")
-            if days < 1 or price <= 0:
+            if days < 1 or price <= 0 or not math.isfinite(price):
                 raise ValueError(f"「{item}」天数需≥1、价格需>0")
             plans.append({"days": days, "price": price})
     if not plans:
@@ -69,7 +70,7 @@ def parse_wash_prices_input(text: str) -> list[dict]:
                 price = float(parts[1].strip())
             except ValueError:
                 raise ValueError(f"「{item}」数值不是数字")
-            if min_rows < 0 or price <= 0:
+            if min_rows < 0 or price <= 0 or not math.isfinite(price):
                 raise ValueError(f"「{item}」行数需≥0、单价需>0")
             prices.append({"min_rows": min_rows, "price_per_row": price})
     if not prices:
@@ -149,8 +150,8 @@ def save_config(session, key: str, value: str) -> None:
             v = float(value)
         except ValueError:
             raise ValueError("价格下限不是数字")
-        if v <= 0:
-            raise ValueError("价格下限需大于 0")
+        if not math.isfinite(v) or v <= 0:
+            raise ValueError("价格下限需为大于 0 的有限数字")
         database.set_wash_price_floor(session, v)
     elif key == "wash_quota":
         if not value.strip().isdigit():
@@ -160,10 +161,12 @@ def save_config(session, key: str, value: str) -> None:
         value = value.strip()
         if value:
             try:
-                float(value)
+                rate = float(value)
             except ValueError:
                 raise ValueError("汇率不是数字")
-            database.set_usdt_rate(session, float(value))
+            if not math.isfinite(rate) or rate <= 0:
+                raise ValueError("汇率需为大于 0 的有限数字")
+            database.set_usdt_rate(session, rate)
         else:
             database.set_config(session, "usdt_rate", "")
     elif key == "welcome_text":
