@@ -513,12 +513,17 @@ async def admin_lottery_template_input(message: Message, state: FSMContext):
             set_lottery_notify_template(session, DEFAULT_LOTTERY_NOTIFY_TEMPLATE)
         else:
             set_lottery_notify_template(session, template)
-    preview = (DEFAULT_LOTTERY_NOTIFY_TEMPLATE if is_reset else template).format(
-        user_id="123456789",
-        username="王*二",
-        source="普通抽奖",
-        prize="3 天会员",
-    )
+    try:
+        preview = (DEFAULT_LOTTERY_NOTIFY_TEMPLATE if is_reset else template).format(
+            user_id="123456789",
+            username="王*二",
+            source="普通抽奖",
+            prize="3 天会员",
+        )
+    except Exception:
+        # 模板里有不完整的花括号（如 {prize 或多余的 {}）时 format 会报错，
+        # 模板已保存，预览改用原始文本提示
+        preview = (DEFAULT_LOTTERY_NOTIFY_TEMPLATE if is_reset else template) + "\n\n（模板包含无法解析的 { } 占位符，通知发送时可能报错，请检查）"
     await message.answer(
         f"✅ 抽奖通知模板已{'恢复默认' if is_reset else '更新'}！\n\n"
         f"<b>预览：</b>\n{html.escape(preview)}",
