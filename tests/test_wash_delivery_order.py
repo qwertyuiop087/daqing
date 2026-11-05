@@ -1,4 +1,4 @@
-﻿"""洗数据回传顺序回归：必须「先交给用户，再记账」。
+"""洗数据回传顺序回归：必须「先交给用户，再记账」。
 
 线上事故：结果文件已经进了洗数据群（群里能看到成品和统计），用户却一个文件
 都没收到。原因是旧代码先记账后发送，记账里任何一处抛异常都会被全局错误处理器
@@ -156,7 +156,7 @@ class TestWashDeliveryOrder(unittest.TestCase):
 
         asyncio.run(flow())
         keys = wash_module._delivery_keys("Mark1Ok")
-        self.assertTrue(any("mark-me" in k for k in keys), keys)
+        self.assertTrue(any("Mark1Ok_结果.txt" in k for k in keys), keys)
 
 
 if __name__ == "__main__":
