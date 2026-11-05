@@ -49,6 +49,22 @@ class TestReviewFixes(unittest.TestCase):
         bom = b"\xff\xfe" + "45".encode("utf-16-le")
         self.assertEqual(decode_bytes(bom).lstrip("\ufeff"), "45")
 
+    def test_nan_infinity_rejected(self):
+        """NaN / Infinity 不能写进任何数值配置（否则余额等会被永久损坏）。"""
+        from utils.lottery import parse_prizes_input, parse_redeem_input
+
+        prizes, err = parse_prizes_input("余额:nan:5")
+        self.assertIsNone(prizes)
+        self.assertTrue(err)
+        prizes, err = parse_prizes_input("天:1:nan")
+        self.assertIsNone(prizes)
+        items, err = parse_redeem_input("1:余额:nan")
+        self.assertIsNone(items)
+        with self.assertRaises(ValueError):
+            parse_plans_input("7:nan")
+        with self.assertRaises(ValueError):
+            parse_wash_prices_input("0:nan")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
