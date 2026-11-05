@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.63"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.64"))
 
 
 settings = Settings()
@@ -96,6 +96,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.64",
+        [
+            "修复「点开始洗数据没反应」：结果消息发送参数写错，异常被吞掉了",
+            "点按钮立刻回「正在提交，请稍等…」，不会再像没反应",
+            "提交出错时把失败原因直接发给你；上传状态丢失会提示重新发文件",
+        ],
+    ),
     (
         "2026-10-28.63",
         [
