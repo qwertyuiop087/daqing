@@ -1,4 +1,5 @@
 """抽奖系统：奖品池按概率抽取、兑换价目表，中奖直接到账并留痕。"""
+import math
 import random
 
 from database import (
@@ -40,14 +41,14 @@ def parse_prizes_input(text: str):
             prob = float(parts[2].strip())
         except ValueError:
             return None, f"「{item}」概率不是数字"
-        if not (0 < prob <= 100):
+        if not math.isfinite(prob) or not (0 < prob <= 100):
             return None, f"「{item}」概率需在 0~100 之间"
         ptype = TYPE_KEYS[typ]
         try:
             value = int(parts[1].strip()) if ptype in ("days", "ticket") else float(parts[1].strip())
         except ValueError:
             return None, f"「{item}」数值不是数字"
-        if value <= 0:
+        if (isinstance(value, float) and not math.isfinite(value)) or value <= 0:
             return None, f"「{item}」数值需大于 0"
         total += prob
         prizes.append({"type": ptype, "value": value, "prob": prob})
@@ -87,7 +88,7 @@ def parse_redeem_input(text: str):
             value = int(parts[2].strip()) if ptype == "days" else float(parts[2].strip())
         except ValueError:
             return None, f"「{item}」数值不是数字"
-        if value <= 0:
+        if (isinstance(value, float) and not math.isfinite(value)) or value <= 0:
             return None, f"「{item}」数值需大于 0"
         items.append({"cost": cost, "type": ptype, "value": value})
     if not items:
