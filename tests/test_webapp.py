@@ -57,6 +57,23 @@ class TestWebapp(unittest.TestCase):
                     for a in aud["items"]
                 ))
 
+                # 洗数据账单：写一条充值流水后应能查到并带汇总与余额
+                from database import SessionLocal, WashOrder, get_or_create_user, add_wash_balance
+                with SessionLocal() as s:
+                    get_or_create_user(s, 123)
+                    add_wash_balance(s, 123, 57.0)  # 模拟充值后余额 70 - 13 = 57
+                    s.add(WashOrder(user_id=123, filename="充值 $10 USDT", row_count=0, cost=70.0, type="recharge"))
+                    s.add(WashOrder(user_id=123, filename="名单.txt", row_count=10000, cost=13.0, type="deduct"))
+                    s.commit()
+                wo = await (await client.get("/api/wash/orders")).json()
+                self.assertEqual(wo["total_recharge"], 70.0)
+                self.assertEqual(wo["total_charge"], 13.0)
+                self.assertAlmostEqual(wo["total_balance"], 57.0)
+                self.assertTrue(any(
+                    i.get("type") == "deduct" and i.get("filename") == "名单.txt" and abs(i.get("balance", 0) - 57.0) < 1e-6
+                    for i in wo["items"]
+                ))
+
                 # 非法输入 → 400
                 resp = await client.post("/api/config/lottery_prizes", json={"value": "天:1:60,天:2:50"})
                 self.assertEqual(resp.status, 400)
