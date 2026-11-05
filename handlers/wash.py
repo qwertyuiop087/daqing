@@ -1235,8 +1235,14 @@ async def wash_resend_cmd(message: Message, bot: Bot):
     except Exception:
         notice = None
     try:
-        # 手动补发放宽：不要求任务记录还在，只要随机码能查到用户就捞回来
-        stat = await rs._scan(bot, only_code=only or None, require_pending=False)
+        # 不带随机码 = 只检查、不发送（避免把已经发过的历史文件再发一遍）；
+        # 带随机码 = 真的补发这个任务，不要求任务记录还在
+        stat = await rs._scan(
+            bot,
+            only_code=only or None,
+            require_pending=not bool(only),
+            dry_run=not bool(only),
+        )
         text = rs.format_report(stat)
     except Exception as e:
         text = f"⚠️ 扫描失败：<code>{html.escape(str(e)[:300])}</code>"
