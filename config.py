@@ -1,4 +1,4 @@
-﻿"""全局配置：从环境变量 / .env 文件读取。"""
+"""全局配置：从环境变量 / .env 文件读取。"""
 import os
 
 from dotenv import load_dotenv
@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.57"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.58"))
 
 
 settings = Settings()
@@ -96,6 +96,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.58",
+        [
+            "洗数据批量上传不再刷屏：一次发多个文件只有一条消息滚动更新",
+            "提交结果写回同一条消息，不再额外新增消息和按钮",
+            "并发上传的临时文件改用独立文件名，避免互相覆盖",
+        ],
+    ),
     (
         "2026-10-28.57",
         [
