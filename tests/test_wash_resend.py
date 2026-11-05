@@ -142,6 +142,54 @@ class TestWashResend(unittest.TestCase):
         self.assertEqual(n, 0)
         self.assertEqual(bot.sent, [])
 
+    def test_manual_scan_works_without_pending(self):
+        """手动补发放宽：任务记录已结清删除，只要随机码能查到用户也能捞回来。"""
+        from database import delete_config
+
+        with SessionLocal() as session:
+            delete_config(session, "wash_pending:Rs1Scan")
+
+        import utils.telethon_client as tc
+
+        original = tc.userbot
+        tc.userbot = FakeUserbot([make_msg("Rs1Scan_结果.txt", age_seconds=300, size=4242)])
+        bot = FakeBot()
+        try:
+            # 自动循环（要求 pending）→ 不处理
+            self.assertEqual(asyncio.run(resend._scan_once(bot)), 0)
+            # 手动模式 → 补发
+            stat = asyncio.run(resend._scan(bot, require_pending=False))
+        finally:
+            tc.userbot = original
+        self.assertEqual(stat["sent"], 1, stat)
+        self.assertEqual(len(bot.sent), 1)
+
+    def test_settled_task_keeps_record_and_never_recharges(self):
+        """结清后记录保留（带 done 标记），再次结算不会重复扣钱。"""
+        from handlers import wash as wash_handlers
+
+        with SessionLocal() as session:
+            set_config(session, "wash_sent:Settle1", "[]")
+
+        ts = int(time.time())
+        fm = json.dumps({"files": [1000], "charged": 0.0}, ensure_ascii=False)
+        with SessionLocal() as session:
+            set_config(session, "wash_code:Settle1", f"{USER_ID}:{ts}")
+            set_config(session, "wash_pending:Settle1", f"{USER_ID}:1000:2.0:{ts}:{fm}")
+
+        first = wash_handlers._settle_wash_result("Settle1", USER_ID, "结果.txt")
+        self.assertGreater(first[0], 0)
+        self.assertTrue(first[2])
+
+        with SessionLocal() as session:
+            raw = get_config(session, "wash_pending:Settle1", "")
+        self.assertNotEqual(raw, "", "结清后要保留记录，补发才能认出随机码")
+        self.assertIn('"done": 1', raw)
+
+        # 再结算一次：不能重复扣费
+        second = wash_handlers._settle_wash_result("Settle1", USER_ID, "结果.txt")
+        self.assertEqual(second[0], 0)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
