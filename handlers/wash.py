@@ -427,6 +427,31 @@ async def wash_check_order(cq: CallbackQuery):
 # 一次洗数据任务最多收集的文件数（防止消息刷屏与发送限流）
 WASH_MAX_FILES = 20
 
+# 同一批文件的到达间隔很短（媒体组会几乎同时推送），
+# 渲染时先等一下把这一批合并成一次编辑，避免疯狂编辑/触发限流
+_UPLOAD_RENDER_DELAY = 0.8
+
+# 每个用户一条上传会话：lock 串行化「追加文件 + 写状态」，
+# dirty/task 保证同一时间只有一个渲染循环。
+# aiogram 默认把每个 update 丢进独立 task 并发处理，
+# 所以 8 个文件是 8 个 task 同时跑，光看 state 里的 status_msg_id 挡不住并发。
+_UPLOAD_SESSIONS: dict = {}
+_UPLOAD_SESSION_MAX = 500
+
+
+def _upload_session(user_id: int) -> dict:
+    sess = _UPLOAD_SESSIONS.get(user_id)
+    if sess is None:
+        if len(_UPLOAD_SESSIONS) >= _UPLOAD_SESSION_MAX:
+            # 淘汰空闲会话，避免长期运行后字典无限增长
+            for uid in [u for u, s in _UPLOAD_SESSIONS.items() if s["task"] is None]:
+                _UPLOAD_SESSIONS.pop(uid, None)
+                if len(_UPLOAD_SESSIONS) < _UPLOAD_SESSION_MAX:
+                    break
+        sess = {"lock": asyncio.Lock(), "dirty": False, "task": None}
+        _UPLOAD_SESSIONS[user_id] = sess
+    return sess
+
 
 def wash_upload_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
@@ -434,6 +459,120 @@ def wash_upload_kb() -> InlineKeyboardMarkup:
     b.button(text="❌ 取消", callback_data="cancel")
     b.adjust(1)
     return b.as_markup()
+
+
+def _upload_status_text(files: list, total: int, cost: float) -> str:
+    """上传状态文本：文件清单 + 总行数 + 当前单价 + 预估费用。"""
+    per = cost / total if total else 0
+    shown = "\n".join(f"· {html.escape(f['name'])}（{f['lines']:,} 行）" for f in files[:10])
+    if len(files) > 10:
+        shown += f"\n… 还有 {len(files) - 10} 个文件"
+    return (
+        f"📥 已收到 <b>{len(files)}</b> 个文件，共 <b>{total:,}</b> 行\n"
+        f"{shown}\n\n"
+        f"当前单价：¥{per:.6f}/行 · 预估费用：¥{cost:.4f}\n\n"
+        "继续发文件，或点「🚀 开始洗数据」。\n"
+        f"（只收 TXT，一次最多 {WASH_MAX_FILES} 个）"
+    )
+
+
+def _edit_gone(err: Exception) -> bool:
+    """判断这次编辑失败是不是「消息已经不能改了」，只有这种情况才需要重发一条。"""
+    text = str(err).lower()
+    if "not modified" in text:  # 内容没变化，不是错误
+        return False
+    return any(
+        key in text
+        for key in (
+            "message to edit not found",
+            "message_id_invalid",
+            "message can't be edited",
+            "message cannot be edited",
+            "message identifier is not specified",
+            "topic_deleted",
+        )
+    )
+
+
+async def _render_upload_status(bot: Bot, state: FSMContext, chat_id: int, user_id: int) -> None:
+    """请求刷新上传状态；同一批更新会合并成一次编辑。"""
+    sess = _upload_session(user_id)
+    sess["dirty"] = True
+    task = sess.get("task")
+    if task is not None and not task.done():
+        return
+    sess["task"] = asyncio.create_task(_upload_render_loop(bot, state, chat_id, user_id))
+
+
+async def _upload_render_loop(bot: Bot, state: FSMContext, chat_id: int, user_id: int) -> None:
+    """唯一的渲染循环：编辑同一条状态消息，绝不新建。"""
+    sess = _upload_session(user_id)
+    try:
+        while sess["dirty"]:
+            sess["dirty"] = False
+            await asyncio.sleep(_UPLOAD_RENDER_DELAY)  # 等这一批文件都到齐
+            if await state.get_state() != WashStates.waiting_file.state:
+                return
+            data = await state.get_data()
+            files = list(data.get("files") or [])
+            if not files:
+                continue
+            total = sum(f["lines"] for f in files)
+            with SessionLocal() as session:
+                cost = calc_wash_cost(session, total)
+            text = _upload_status_text(files, total, cost)
+
+            status_id = data.get("status_msg_id")
+            rendered = False
+            if status_id:
+                try:
+                    await bot.edit_message_text(
+                        text, chat_id=int(data.get("status_chat_id") or chat_id),
+                        message_id=int(status_id),
+                        reply_markup=wash_upload_kb(), parse_mode="HTML",
+                    )
+                    rendered = True
+                except Exception as e:
+                    rendered = not _edit_gone(e)
+                    if not rendered:
+                        print(f"[wash-upload] status message not editable, sending a new one: {e}")
+            if not rendered:
+                sent = await bot.send_message(
+                    chat_id, text, reply_markup=wash_upload_kb(), parse_mode="HTML"
+                )
+                await state.update_data(status_msg_id=sent.message_id, status_chat_id=chat_id)
+    except Exception as e:
+        print(f"[wash-upload] render loop failed: {e}")
+    finally:
+        sess["task"] = None
+        if sess["dirty"]:
+            # 渲染期间又来了新文件，继续一轮
+            await _render_upload_status(bot, state, chat_id, user_id)
+
+
+async def _stop_upload_render(user_id: int) -> None:
+    """结束上传状态渲染循环，避免和「提交」抢同一条消息。"""
+    sess = _UPLOAD_SESSIONS.get(user_id)
+    if not sess:
+        return
+    sess["dirty"] = False
+    task = sess.get("task")
+    if task is not None and not task.done():
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=3)
+        except Exception:
+            pass
+
+
+async def _edit_or_answer(cq: CallbackQuery, text: str, kb) -> None:
+    """优先把结果写回点按钮的那条消息，改不动再发新消息。"""
+    try:
+        await cq.message.edit_text(text, reply_markup=kb)
+    except Exception:
+        try:
+            await cq.message.answer(text, reply_markup=kb)
+        except Exception as e:
+            print(f"⚠️ 洗数据结果消息发送失败：{e}")
 
 
 def _refund_full_batch(user_id: int, total_lines: int, cost: float, code: str, reason: str) -> None:
@@ -467,7 +606,14 @@ async def wash_upload(cq: CallbackQuery, state: FSMContext):
         )
         return
 
-    await state.update_data(workdir=get_workdir(cq.from_user.id), files=[], status_msg_id=None)
+    # 这条说明消息本身就是「上传状态消息」：后面每收到一个文件都编辑它，
+    # 一次发 8 个文件也只有这一条消息在滚动更新，不会刷屏。
+    await state.update_data(
+        workdir=get_workdir(cq.from_user.id),
+        files=[],
+        status_msg_id=cq.message.message_id,
+        status_chat_id=cq.message.chat.id,
+    )
     await state.set_state(WashStates.waiting_file)
     await cq.message.edit_text(
         "📤 <b>上传文件洗数据（支持多文件）</b>\n\n"
@@ -481,15 +627,19 @@ async def wash_upload(cq: CallbackQuery, state: FSMContext):
 
 @router.message(WashStates.waiting_file, F.document)
 async def wash_got_file(message: Message, state: FSMContext, bot: Bot):
-    """收集文件：每收到一个 TXT 就存起来并更新汇总，提交时按总行数计费。"""
+    """收集文件：每收到一个 TXT 就存起来并更新汇总，提交时按总行数计费。
+
+    一次发多个文件时它们是并发到达的（每个 update 一个 task）：
+    下载并发做，只有「追加到列表 + 刷新状态消息」这一步串行化，
+    保证始终只有一条状态消息在滚动更新。
+    """
     doc = message.document
     if not (doc.file_name or "").lower().endswith((".txt", ".text")):
         await message.answer("⚠️ 只接受 TXT 文件。")
         return
 
     data = await state.get_data()
-    files = list(data.get("files") or [])
-    if len(files) >= WASH_MAX_FILES:
+    if len(list(data.get("files") or [])) >= WASH_MAX_FILES:
         await message.answer(
             f"⚠️ 一次最多 {WASH_MAX_FILES} 个文件。请点「🚀 开始洗数据」提交当前这批。",
             reply_markup=wash_upload_kb(),
@@ -498,7 +648,8 @@ async def wash_got_file(message: Message, state: FSMContext, bot: Bot):
 
     workdir = data.get("workdir") or get_workdir(message.from_user.id)
 
-    # 下载文件（大小超限直接提示）
+    # 下载文件（大小超限直接提示）。临时文件名带 uuid：
+    # 并发下载时不能再用「列表长度+1」当序号，否则同一批文件会写到同一个路径。
     try:
         file = await bot.get_file(doc.file_id)
         if (file.file_size or 0) > settings.MAX_FILE_SIZE:
@@ -506,10 +657,9 @@ async def wash_got_file(message: Message, state: FSMContext, bot: Bot):
                 f"⚠️ 文件 <code>{html.escape(doc.file_name or '')}</code> 超过 20MB 上限，已跳过。"
             )
             return
-        idx = len(files) + 1
         from services.file_ops import sanitize_filename
-        safe = sanitize_filename(doc.file_name or f"input_{idx}.txt")
-        tmp_path = os.path.join(workdir, f"in_{idx}_{safe}")
+        safe = sanitize_filename(doc.file_name or "input.txt")
+        tmp_path = os.path.join(workdir, f"in_{uuid.uuid4().hex[:8]}_{safe}")
         await bot.download_file(file.file_path, destination=tmp_path)
     except Exception as e:
         await message.answer(f"⚠️ 下载失败：{str(e)[:100]}")
@@ -528,45 +678,35 @@ async def wash_got_file(message: Message, state: FSMContext, bot: Bot):
         await message.answer(f"⚠️ 读取文件失败：{str(e)[:100]}")
         return
 
-    files.append(
-        {
-            "name": doc.file_name or f"input_{idx}.txt",
-            "path": tmp_path,
-            "lines": len(lines),
-            "phones": phones,
-        }
-    )
-    await state.update_data(files=files, workdir=workdir)
-
-    # 汇总信息：总行数、当前单价、预估费用
-    total = sum(f["lines"] for f in files)
-    with SessionLocal() as session:
-        cost = calc_wash_cost(session, total)
-    per = cost / total if total else 0
-    shown = "\n".join(f"· {html.escape(f['name'])}（{f['lines']:,} 行）" for f in files[:10])
-    if len(files) > 10:
-        shown += f"\n… 还有 {len(files) - 10} 个文件"
-    text = (
-        f"已收到 <b>{len(files)}</b> 个文件，共 <b>{total:,}</b> 行\n"
-        f"{shown}\n\n"
-        f"当前单价：¥{per:.6f}/行 · 预估费用：¥{cost:.4f}\n\n"
-        "继续发文件，或点「🚀 开始洗数据」。"
-    )
-
-    status_id = data.get("status_msg_id")
-    edited = False
-    if status_id:
-        try:
-            await bot.edit_message_text(
-                text, chat_id=message.chat.id, message_id=status_id,
-                reply_markup=wash_upload_kb(), parse_mode="HTML",
+    sess = _upload_session(message.from_user.id)
+    async with sess["lock"]:
+        # 锁内重新读：并发到达的其它文件可能刚写进列表
+        cur = await state.get_data()
+        files = list(cur.get("files") or [])
+        if len(files) >= WASH_MAX_FILES:
+            await message.answer(
+                f"⚠️ 一次最多 {WASH_MAX_FILES} 个文件，这个文件没有加入本批。\n"
+                "请点「🚀 开始洗数据」提交当前这批。",
+                reply_markup=wash_upload_kb(),
             )
-            edited = True
-        except Exception:
-            edited = False
-    if not edited:
-        sent = await message.answer(text, reply_markup=wash_upload_kb(), parse_mode="HTML")
-        await state.update_data(status_msg_id=sent.message_id)
+            return
+        if not cur.get("status_chat_id"):
+            cur["status_chat_id"] = message.chat.id
+        files.append(
+            {
+                "name": doc.file_name or "input.txt",
+                "path": tmp_path,
+                "lines": len(lines),
+                "phones": phones,
+            }
+        )
+        await state.update_data(
+            files=files,
+            workdir=workdir,
+            status_chat_id=cur["status_chat_id"],
+        )
+
+    await _render_upload_status(bot, state, message.chat.id, message.from_user.id)
 
 
 @router.callback_query(F.data == "wash:submit")
@@ -579,12 +719,15 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
         await cq.answer("还没收到文件，请先发送要洗的 TXT 文件。", show_alert=True)
         return
 
+    await _stop_upload_render(cq.from_user.id)
+
     total_lines = sum(f["lines"] for f in files)
     total_phones = sum(f["phones"] for f in files)
 
     # 行数和手机号数量不一致，说明文件里不只有手机号
     if total_lines != total_phones:
-        await cq.message.answer(
+        await _edit_or_answer(
+            cq,
             f"⚠️ 文件里不只有手机号！\n\n"
             f"文件总行数：{total_lines:,} 行\n"
             f"提取到手机号：{total_phones:,} 个\n\n"
@@ -600,7 +743,8 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
         quota = get_wash_quota(session)
         washed = get_washed_total(session)
     if quota > 0 and washed + total_lines > quota:
-        await cq.message.answer(
+        await _edit_or_answer(
+            cq,
             f"⚠️ 已达累计洗数据上限，无法继续洗！\n\n"
             f"累计已洗：{washed:,} 行\n"
             f"本次文件：{total_lines:,} 行\n"
@@ -616,7 +760,8 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
         cost = calc_wash_cost(session, total_lines)
         balance = get_wash_balance(session, cq.from_user.id)
     if balance < cost:
-        await cq.message.answer(
+        await _edit_or_answer(
+            cq,
             f"⚠️ 余额不足！\n\n"
             f"总行数：{total_lines:,} 行\n"
             f"本次费用：¥{cost:.4f} 元\n"
@@ -632,7 +777,8 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
     with SessionLocal() as session:
         from database import deduct_wash_balance
         if not deduct_wash_balance(session, cq.from_user.id, cost):
-            await cq.message.answer(
+            await _edit_or_answer(
+                cq,
                 f"⚠️ 余额不足！\n\n本次费用：¥{cost:.4f} 元\n当前余额：¥{balance:.4f} 元\n\n请先充值。",
                 reply_markup=wash_main_kb(balance),
             )
@@ -690,13 +836,13 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
             await temp_client.disconnect()
         except Exception as e:
             _refund_full_batch(user_id, total_lines, cost, random_code, "获取小号信息失败退款")
-            await cq.message.answer(f"⚠️ 获取小号信息失败：{str(e)[:100]}\n\n费用已原路退回。")
+            await _edit_or_answer(cq, f"⚠️ 获取小号信息失败：{str(e)[:100]}\n\n费用已原路退回。")
             await cleanup_state(state)
             return
 
     if not alt_user_id:
         _refund_full_batch(user_id, total_lines, cost, random_code, "小号未登录退款")
-        await cq.message.answer("⚠️ 小号未登录，请先在管理面板登录小号。\n\n费用已原路退回。")
+        await _edit_or_answer(cq, "⚠️ 小号未登录，请先在管理面板登录小号。\n\n费用已原路退回。")
         await cleanup_state(state)
         return
 
@@ -725,7 +871,7 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
                 )
             else:
                 tip = f"⚠️ 转发给小号失败：{send_error[:100]}"
-            await cq.message.answer(f"{tip}\n\n费用已原路退回。", reply_markup=menu_kb(user_id))
+            await _edit_or_answer(cq, f"{tip}\n\n费用已原路退回。", reply_markup=menu_kb(user_id))
             await cleanup_state(state)
             return
         # 部分已发出：只退回未发出部分的费用，已发出的继续等回传结算
@@ -758,7 +904,8 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
                 f"{user_id}:{sent_total}:{remain_cost}:{int(time.time())}:{remain_map}",
             )
             session.commit()
-        await cq.message.answer(
+        await _edit_or_answer(
+            cq,
             f"⚠️ 转发到第 {sent_ok + 1} 个文件时失败：{send_error[:100]}\n\n"
             f"已发出 <b>{sent_ok}</b> 个文件（继续处理，完成后回传）；\n"
             f"未发出的 <b>{len(unsent_files)}</b> 个文件已退回 ¥{refund:.4f}。",
@@ -767,7 +914,8 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
         await cleanup_state(state)
         return
 
-    await cq.message.answer(
+    await _edit_or_answer(
+        cq,
         f"✅ <b>已提交洗数据</b>\n\n"
         f"文件数：{sent_ok} 个\n"
         f"总行数：{total_lines:,} 行\n"
