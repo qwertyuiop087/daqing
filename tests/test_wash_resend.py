@@ -142,6 +142,29 @@ class TestWashResend(unittest.TestCase):
         self.assertEqual(n, 0)
         self.assertEqual(bot.sent, [])
 
+    def test_done_task_is_not_resent(self):
+        """已结清（done）的任务即使还有别的文件也不再补发，避免重发历史文件。"""
+        ts = int(time.time())
+        fm = json.dumps({"files": [], "charged": 2.0, "done": 1}, ensure_ascii=False)
+        with SessionLocal() as session:
+            set_config(session, "wash_pending:Rs1Scan", f"{USER_ID}:1000:2.0:{ts}:{fm}")
+
+        n, bot = self._run([make_msg("Rs1Scan_另一份结果.txt", age_seconds=300)])
+        self.assertEqual(n, 0, f"结清的任务不该再补发：{bot.sent}")
+        self.assertEqual(bot.sent, [])
+
+    def test_resent_count_limited_by_remaining(self):
+        """只剩 1 份没回传时，窗口内即使有 2 个未投递文件也只补 1 个。"""
+        ts = int(time.time())
+        fm = json.dumps({"files": [500], "charged": 1.0}, ensure_ascii=False)
+        with SessionLocal() as session:
+            set_config(session, "wash_pending:Rs1Scan", f"{USER_ID}:1000:2.0:{ts}:{fm}")
+
+        n, bot = self._run([
+            make_msg("Rs1Scan_A.txt", age_seconds=300, size=11, msg_id=11),
+            make_msg("Rs1Scan_B.txt", age_seconds=290, size=22, msg_id=12),
+        ])
+        self.assertEqual(n, 1, f"多发了：{bot.sent}")
     def test_manual_scan_works_without_pending(self):
         """手动补发放宽：任务记录已结清删除，只要随机码能查到用户也能捞回来。"""
         from database import delete_config
