@@ -1210,28 +1210,47 @@ async def alt_user_reply(message: Message, bot: Bot):
         return
 
 
-@router.message(Command("resend"))
+@router.message(Command("resend", "补发"))
 async def wash_resend_cmd(message: Message, bot: Bot):
     """管理员手动补发：/resend [随机码]
 
     不带随机码：立刻扫一轮洗数据群，把漏掉的结果文件补发，并回报扫描情况；
     带随机码：只处理这个任务。
+    任何情况下都会回复（不是管理员也会说明原因），不会静默无响应。
     """
-    from utils.roles import admin_id_list
-    if message.from_user.id not in set(admin_id_list()):
-        return
+    from utils.roles import is_admin
     from utils import wash_resend as rs
+
+    if not is_admin(message.from_user.id):
+        await message.answer(
+            "⚠️ 这个命令只有管理员能用。\n"
+            f"你的 Telegram ID：<code>{message.from_user.id}</code>"
+        )
+        return
 
     parts = (message.text or "").split(maxsplit=1)
     only = parts[1].strip() if len(parts) > 1 else ""
-    notice = await message.answer("🔍 正在扫描洗数据群…")
-    # 手动补发放宽：不要求任务记录还在，只要随机码能查到用户就捞回来
-    stat = await rs._scan(bot, only_code=only or None, require_pending=False)
-    text = rs.format_report(stat)
     try:
-        await notice.edit_text(text)
+        notice = await message.answer("🔍 正在扫描洗数据群…")
     except Exception:
-        await message.answer(text)
+        notice = None
+    try:
+        # 手动补发放宽：不要求任务记录还在，只要随机码能查到用户就捞回来
+        stat = await rs._scan(bot, only_code=only or None, require_pending=False)
+        text = rs.format_report(stat)
+    except Exception as e:
+        text = f"⚠️ 扫描失败：<code>{html.escape(str(e)[:300])}</code>"
+    if notice is not None:
+        try:
+            await notice.edit_text(text)
+            return
+        except Exception:
+            pass
+    await message.answer(text)
+
+
+# 也挂到最先注册的回传路由上：确保 /resend 不会被任何其它路由抢先吃掉
+wash_reply_router.message.register(wash_resend_cmd, Command("resend", "补发"))
 
 
 # ---------------- 兜底：文件没被任何功能接住 ----------------
