@@ -2,6 +2,7 @@
 import asyncio
 import html
 import json
+import math
 import os
 import uuid
 
@@ -197,7 +198,7 @@ async def wash_recharge_custom_amount(message: Message, state: FSMContext):
         await message.answer("金额格式错误，请输入数字，例如：10")
         return
 
-    if amount < 5:
+    if not math.isfinite(amount) or amount < 5:
         await message.answer("最少充值 5 USDT，请重新输入：")
         return
 
