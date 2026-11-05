@@ -57,22 +57,26 @@ class TestWebapp(unittest.TestCase):
                     for a in aud["items"]
                 ))
 
-                # 洗数据账单：写一条充值流水后应能查到并带汇总与余额
+                # 洗数据账单：符号统一（扣费显示为负）、汇总按绝对值统计、含余额
                 from database import SessionLocal, WashOrder, get_or_create_user, add_wash_balance
                 with SessionLocal() as s:
                     get_or_create_user(s, 123)
                     add_wash_balance(s, 123, 57.0)  # 模拟充值后余额 70 - 13 = 57
                     s.add(WashOrder(user_id=123, filename="充值 $10 USDT", row_count=0, cost=70.0, type="recharge"))
                     s.add(WashOrder(user_id=123, filename="名单.txt", row_count=10000, cost=13.0, type="deduct"))
+                    s.add(WashOrder(user_id=123, filename="网页后台手动扣费", row_count=0, cost=-5.0, type="deduct"))
+                    s.add(WashOrder(user_id=123, filename="超时退款", row_count=0, cost=-2.5, type="refund"))
                     s.commit()
                 wo = await (await client.get("/api/wash/orders")).json()
                 self.assertEqual(wo["total_recharge"], 70.0)
-                self.assertEqual(wo["total_charge"], 13.0)
+                # 扣费按绝对值汇总（自动 +13 与手动 -5 都算扣了 18）
+                self.assertEqual(wo["total_deduct"], 18.0)
+                self.assertEqual(wo["total_refund"], 2.5)
                 self.assertAlmostEqual(wo["total_balance"], 57.0)
-                self.assertTrue(any(
-                    i.get("type") == "deduct" and i.get("filename") == "名单.txt" and abs(i.get("balance", 0) - 57.0) < 1e-6
-                    for i in wo["items"]
-                ))
+                deduct_row = next(i for i in wo["items"] if i.get("filename") == "名单.txt")
+                self.assertLess(deduct_row["cost"], 0)  # 扣费展示为负数
+                manual_row = next(i for i in wo["items"] if i.get("filename") == "网页后台手动扣费")
+                self.assertLess(manual_row["cost"], 0)
 
                 # 非法输入 → 400
                 resp = await client.post("/api/config/lottery_prizes", json={"value": "天:1:60,天:2:50"})
