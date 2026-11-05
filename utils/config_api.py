@@ -244,7 +244,13 @@ def get_stats(session) -> dict:
 # ---------------- 成员管理（网页后台） ----------------
 
 def get_wash_orders(session, limit: int = 100) -> dict:
-    """洗数据账单：最近 N 条流水 + 总充值/总扣费/剩余余额汇总（供网页后台展示）。"""
+    """洗数据账单：最近 N 条流水 + 汇总（供网页后台展示）。
+
+    历史数据里扣费有正有负（自动洗数据记正数、后台手动扣费记负数），
+    因此汇总一律按「绝对值」统计，展示口径统一：
+    充值（钱进来）、扣费（钱扣掉）、退款（钱退回）、剩余余额（还在用户账上）。
+    行金额按类型带符号：充值/退款/抽奖发放为正，扣费为负。
+    """
     from sqlalchemy import func, select
 
     rows = list(
@@ -267,38 +273,45 @@ def get_wash_orders(session, limit: int = 100) -> dict:
         else:
             name = ""
             balance = 0.0
+        raw_cost = round(float(o.cost or 0), 4)
+        otype = o.type or ""
+        # 展示符号：扣费一律显示为负，其余为正
+        signed = -abs(raw_cost) if otype == "deduct" else abs(raw_cost)
         items.append(
             {
                 "id": o.id,
                 "user_id": o.user_id,
                 "user": name,
-                "type": o.type or "",
+                "type": otype,
                 "filename": o.filename or "",
                 "row_count": int(o.row_count or 0),
-                "cost": round(float(o.cost or 0), 4),
+                "cost": signed,
                 "balance": balance,
                 "time": database.beijing_str(o.created_at),
             }
         )
-    total_recharge = session.scalar(
-        select(func.coalesce(func.sum(database.WashOrder.cost), 0)).where(
-            database.WashOrder.type == "recharge"
-        )
-    ) or 0
-    # 扣费 + 退款（退款为负数金额，自然冲减）
-    total_charge = session.scalar(
-        select(func.coalesce(func.sum(database.WashOrder.cost), 0)).where(
-            database.WashOrder.type.in_(("deduct", "refund"))
-        )
-    ) or 0
-    # 全部用户当前剩余余额合计
+
+    def _sum_abs(*types: str) -> float:
+        total = session.scalar(
+            select(func.coalesce(func.sum(func.abs(database.WashOrder.cost)), 0)).where(
+                database.WashOrder.type.in_(types)
+            )
+        ) or 0
+        return round(float(total), 4)
+
+    total_recharge = _sum_abs("recharge")
+    total_deduct = _sum_abs("deduct")
+    total_refund = _sum_abs("refund")
+    total_lottery = _sum_abs("lottery")
     total_balance = session.scalar(
         select(func.coalesce(func.sum(database.User.wash_balance), 0))
     ) or 0
     return {
         "items": items,
-        "total_recharge": round(float(total_recharge), 4),
-        "total_charge": round(float(total_charge), 4),
+        "total_recharge": total_recharge,
+        "total_deduct": total_deduct,
+        "total_refund": total_refund,
+        "total_lottery": total_lottery,
         "total_balance": round(float(total_balance), 4),
     }
 
