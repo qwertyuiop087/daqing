@@ -1615,13 +1615,15 @@ async def admin_wash_orders(cq: CallbackQuery):
             select(WashOrder).order_by(desc(WashOrder.created_at)).limit(20)
         ).scalars().all()
 
-        # 统计总充值和总扣费
-        total_recharge = session.execute(
-            select(func.sum(WashOrder.cost)).where(WashOrder.type == "recharge")
-        ).scalar() or 0
-        total_deduct = session.execute(
-            select(func.sum(WashOrder.cost)).where(WashOrder.type.in_(("deduct", "refund")))
-        ).scalar() or 0
+        # 统计：历史数据里扣费有正有负，统一按绝对值汇总，口径与网页后台一致
+        def _sum_abs(*types):
+            return session.execute(
+                select(func.sum(func.abs(WashOrder.cost))).where(WashOrder.type.in_(types))
+            ).scalar() or 0
+
+        total_recharge = _sum_abs("recharge")
+        total_deduct = _sum_abs("deduct")
+        total_refund = _sum_abs("refund")
 
     if not orders:
         await cq.message.edit_text("暂无洗数据账单。", reply_markup=admin_kb(is_super=is_super_admin(cq.from_user.id)))
@@ -1633,17 +1635,19 @@ async def admin_wash_orders(cq: CallbackQuery):
         users = session.execute(select(User).where(User.id.in_(user_ids))).scalars().all()
         user_map = {u.id: (u.username or u.first_name or str(u.id)) for u in users}
 
+    type_names = {"recharge": "充值", "deduct": "扣费", "refund": "退款", "lottery": "抽奖发放"}
     lines = [
         "📊 <b>最近20条洗数据账单</b>\n",
-        f"💰 总充值：¥{total_recharge:.2f} | 总扣费：¥{total_deduct:.2f}\n",
+        f"💰 总充值：¥{total_recharge:.2f} | 总扣费：¥{total_deduct:.2f} | 总退款：¥{total_refund:.2f}\n",
         "────────────\n",
     ]
     for o in orders:
-        type_name = "充值" if o.type == "recharge" else "扣费"
-        sign = "+" if o.type == "recharge" else "-"
+        type_name = type_names.get(o.type, o.type)
+        # 扣费一律显示为负，其余为正（历史数据符号不一致，统一展示口径）
+        sign = "-" if o.type == "deduct" else "+"
         uname = user_map.get(o.user_id, str(o.user_id))
         lines.append(
-            f"[{type_name}] @{uname}({o.user_id}) | ¥{sign}{o.cost:.4f}\n"
+            f"[{type_name}] @{uname}({o.user_id}) | ¥{sign}{abs(float(o.cost or 0)):.4f}\n"
             f"  文件：{o.filename} | {o.row_count:,}行\n"
             f"  时间：{beijing_str(o.created_at)}\n"
         )
@@ -1689,12 +1693,14 @@ async def wash_download_orders(cq: CallbackQuery):
         return
 
     lines = ["洗数据账单导出", f"共 {len(orders)} 条记录", "=" * 50, ""]
+    type_names = {"recharge": "充值", "deduct": "扣费", "refund": "退款", "lottery": "抽奖发放"}
     for o in orders:
-        type_name = "充值" if o.type == "recharge" else "扣费"
-        sign = "+" if o.type == "recharge" else "-"
+        type_name = type_names.get(o.type, o.type)
+        # 统一符号：扣费显示为负，其余为正
+        sign = "-" if o.type == "deduct" else "+"
         uname = user_map.get(o.user_id, str(o.user_id))
         lines.append(f"[{type_name}] @{uname}({o.user_id})")
-        lines.append(f"  金额: ¥{sign}{o.cost:.4f}")
+        lines.append(f"  金额: ¥{sign}{abs(float(o.cost or 0)):.4f}")
         lines.append(f"  文件: {o.filename}")
         lines.append(f"  行数: {o.row_count:,}")
         lines.append(f"  时间: {beijing_str(o.created_at)}")
