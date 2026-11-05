@@ -109,6 +109,7 @@ async def _scan(bot, only_code=None, dry_run=False, require_pending=True) -> dic
         "sent": 0,
         "candidates": [],
         "error": "",
+        "dry_run": bool(dry_run),
     }
 
     userbot = telethon_client.userbot  # 运行期取值：启动时才会被赋值
@@ -144,6 +145,7 @@ async def _scan(bot, only_code=None, dry_run=False, require_pending=True) -> dic
     oldest_ok = now - timedelta(seconds=MIN_AGE_SECONDS)
 
     sent = 0
+    sent_per_code = {}
     try:
         async for msg in userbot.iter_messages(chat_id, limit=MAX_MSGS_PER_SCAN):
             if msg.date is None or msg.date < cutoff:
@@ -167,8 +169,14 @@ async def _scan(bot, only_code=None, dry_run=False, require_pending=True) -> dic
             code = m.group(1)
             if only_code and code != only_code:
                 continue
-            if require_pending and code not in codes:
-                continue
+            if require_pending:
+                # 只补「还没回传的份数」：结清（done）的任务剩余 0，不再补，
+                # 避免把之前已经成功发过的历史文件又发一遍
+                remain = codes.get(code, 0)
+                if remain <= 0:
+                    continue
+                if sent_per_code.get(code, 0) >= remain:
+                    continue
             if "号码检测" in file_name:
                 continue  # 空号检测结果走另一套流程
             if file_name in _source_names(code):
@@ -215,6 +223,7 @@ async def _scan(bot, only_code=None, dry_run=False, require_pending=True) -> dic
                 continue
 
             sent += 1
+            sent_per_code[code] = sent_per_code.get(code, 0) + 1
             stat["sent"] += 1
             wash_handlers._remember_delivery(code, dkey)
             try:
@@ -249,6 +258,8 @@ def format_report(stat: dict) -> str:
         f"跳过：源文件 {stat['src_skipped']} · 太新 {stat['too_new']} · 已发过 {stat['delivered_skipped']}",
         f"本轮补发：{stat['sent']} 个",
     ]
+    if stat.get("dry_run"):
+        lines += ["", "（这是检查模式，没有发送任何文件。要真的补发：<code>/resend 随机码</code>）"]
     if stat["error"]:
         lines += ["", f"⚠️ {stat['error']}"]
     if stat["candidates"]:
