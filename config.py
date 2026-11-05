@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.61"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.62"))
 
 
 settings = Settings()
@@ -96,6 +96,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.62",
+        [
+            "/resend 命令一定会回复：不是管理员也会说明原因并显示自己的 ID",
+            "/resend 挂到最先注册的路由上，不会被其它功能抢走命令",
+            "支持 /补发 作为同义命令",
+        ],
+    ),
     (
         "2026-10-28.61",
         [
