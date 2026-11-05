@@ -36,6 +36,11 @@ async def vcf_got(message: Message, state: FSMContext, bot: Bot):
     if message.text:
         text = message.text
     elif message.document and (message.document.file_name or "").lower().endswith((".txt", ".text")):
+        if message.document.file_size and message.document.file_size > settings.MAX_FILE_SIZE:
+            await message.answer(
+                f"⚠️ 文件太大了！TXT 文件最大支持 {settings.MAX_FILE_SIZE // 1024 // 1024}MB。"
+            )
+            return
         data = await state.get_data()
         tmp = os.path.join(data["workdir"], "phones.txt")
         file = await bot.get_file(message.document.file_id)
