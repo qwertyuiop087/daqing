@@ -5,6 +5,7 @@ import random
 from database import (
     LotteryRecord,
     SessionLocal,
+    WashOrder,
     add_lottery_tickets,
     add_user_days,
     add_wash_balance,
@@ -103,6 +104,16 @@ def _apply_prize(session, user, ptype: str, value: float) -> str:
         return f"{int(value)} 天会员"
     if ptype == "wash_balance":
         add_wash_balance(session, user.id, float(value))
+        # 记入洗数据账本，保证「充值/扣费/退款/抽奖发放」与余额能对上
+        session.add(
+            WashOrder(
+                user_id=user.id,
+                filename="抽奖获得洗数据余额",
+                row_count=0,
+                cost=float(value),
+                type="lottery",
+            )
+        )
         return f"¥{float(value):.4f} 洗数据余额"
     if ptype == "ticket":
         add_lottery_tickets(session, user.id, int(value))
