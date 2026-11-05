@@ -1,6 +1,7 @@
 """会员中心 + 管理面板（卡密生成/删除/查询/统计、成员列表、加减天数、全站广播）。"""
 import asyncio
 import html
+import math
 import os
 import time
 
@@ -745,7 +746,7 @@ async def admin_edit_plans_input(message: Message, state: FSMContext):
             days_s, price_s = item.split(":")
             days = int(days_s.strip())
             price = float(price_s.strip())
-            if days < 1 or price < 0.01:
+            if days < 1 or price < 0.01 or not math.isfinite(price):
                 raise ValueError("参数不合法")
             plans.append({"days": days, "price": price})
         if not plans:
@@ -823,7 +824,7 @@ async def admin_edit_wash_prices_input(message: Message, state: FSMContext):
             rows_s, price_s = item.split(":")
             min_rows = int(rows_s.strip())
             price_per_row = float(price_s.strip())
-            if min_rows < 0 or price_per_row <= 0:
+            if min_rows < 0 or price_per_row <= 0 or not math.isfinite(price_per_row):
                 raise ValueError("参数不合法")
             prices.append({"min_rows": min_rows, "price_per_row": price_per_row})
         if not prices:
@@ -910,7 +911,7 @@ async def admin_set_price_floor_input(message: Message, state: FSMContext):
 
     try:
         value = float(raw)
-        if value <= 0:
+        if value <= 0 or not math.isfinite(value):
             raise ValueError
     except Exception:
         await message.answer("格式错误，请输入大于 0 的数字，例如：0.0010")
