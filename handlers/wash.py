@@ -7,7 +7,7 @@ import os
 import uuid
 
 from aiogram import Bot, F, Router
-from aiogram.filters import BaseFilter
+from aiogram.filters import BaseFilter, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardMarkup, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -186,6 +186,9 @@ def _settle_wash_result(random_code: str, user_id: int, original_name: str) -> t
     settle_cost = cost
     settle_lines = line_count
     done = True
+    if file_map and file_map.get("done"):
+        # 这个任务已经结清过（补发扫描可能还会命中它），不再重复扣费
+        return (0.0, 0, True)
     if file_map and file_map.get("files"):
         rem = list(file_map["files"])
         charged = float(file_map.get("charged", 0.0))
@@ -214,12 +217,23 @@ def _settle_wash_result(random_code: str, user_id: int, original_name: str) -> t
             )
             session.commit()
 
-    # 只删/更新待记账记录；wash_code 映射必须保留：同一任务的多个结果文件
-    # 共用随机码，删了后续文件会丢失，它的过期清理由 get_washed_breakdown 处理
+    # 结清后不删记录，改成 done 标记：补发扫描在窗口内还能认出这个随机码，
+    # 「刚结清那一刻没发出去的结果文件」才补得回来；到期由 TTL 统一清理。
     with SessionLocal() as session:
         from database import delete_config, set_config
         if done:
-            delete_config(session, f"wash_pending:{random_code}")
+            if file_map is not None:
+                file_map["files"] = []
+                file_map["charged"] = cost
+                file_map["done"] = 1
+                set_config(
+                    session,
+                    f"wash_pending:{random_code}",
+                    f"{user_id}:{line_count}:{cost}:{parts[3]}:"
+                    f"{json.dumps(file_map, ensure_ascii=False)}",
+                )
+            else:
+                delete_config(session, f"wash_pending:{random_code}")
         elif file_map is not None:
             set_config(
                 session,
@@ -1194,3 +1208,46 @@ async def alt_user_reply(message: Message, bot: Bot):
         except Exception:
             pass
         return
+
+
+@router.message(Command("resend"))
+async def wash_resend_cmd(message: Message, bot: Bot):
+    """管理员手动补发：/resend [随机码]
+
+    不带随机码：立刻扫一轮洗数据群，把漏掉的结果文件补发，并回报扫描情况；
+    带随机码：只处理这个任务。
+    """
+    from utils.roles import admin_id_list
+    if message.from_user.id not in set(admin_id_list()):
+        return
+    from utils import wash_resend as rs
+
+    parts = (message.text or "").split(maxsplit=1)
+    only = parts[1].strip() if len(parts) > 1 else ""
+    notice = await message.answer("🔍 正在扫描洗数据群…")
+    # 手动补发放宽：不要求任务记录还在，只要随机码能查到用户就捞回来
+    stat = await rs._scan(bot, only_code=only or None, require_pending=False)
+    text = rs.format_report(stat)
+    try:
+        await notice.edit_text(text)
+    except Exception:
+        await message.answer(text)
+
+
+# ---------------- 兜底：文件没被任何功能接住 ----------------
+# 放在 wash.router 末尾（wash 是最先注册回传、最后注册普通路由的），
+# 只有在所有功能的状态处理器都没匹配时才会走到这里。
+# 典型场景：点了「上传文件」后机器人重启，内存里的上传状态丢失，
+# 用户再发文件就没人接——以前是完全没反应，现在给出明确提示。
+
+@router.message(F.document)
+async def document_fallback(message: Message, state: FSMContext):
+    await cleanup_state(state)
+    await message.answer(
+        "⚠️ <b>没认出这个文件要做什么</b>\n\n"
+        "可能是刚才机器人重启，上传状态丢了。\n"
+        "请从主菜单重新选择功能，再发文件：\n\n"
+        "· 洗数据：主菜单 → 🧼 洗数据 → 📤 上传文件洗数据\n"
+        "· 其它功能：主菜单里点对应按钮，再发文件",
+        reply_markup=menu_kb(message.from_user.id),
+    )
