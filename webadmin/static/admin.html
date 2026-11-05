@@ -153,6 +153,11 @@ td .tag{
   display:inline-block;padding:0 8px;height:24px;line-height:22px;border-radius:var(--r-s);
   font-size:12px;border:1px solid var(--line-2);color:var(--ink-2);background:var(--surface);
 }
+td .tag.recharge-t{color:var(--ok);border-color:rgba(63,107,79,.35);background:rgba(63,107,79,.06)}
+td .tag.refund-t{color:var(--accent);border-color:rgba(61,90,140,.35);background:rgba(61,90,140,.06)}
+.num{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;text-align:right}
+.positive{color:var(--ok)}
+.negative{color:var(--accent)}
 
 /* ---------------- 提示 ---------------- */
 #toast{position:fixed;top:24px;right:24px;z-index:99;display:flex;flex-direction:column;gap:8px}
@@ -199,6 +204,7 @@ dialog h2{font-size:15px;font-weight:600;margin-bottom:16px}
   <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><ellipse cx="12" cy="12" rx="3.8" ry="8.5"/><path d="M3.5 12h17"/></symbol>
   <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.5" cy="6.5" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="17.5" r="1"/></symbol>
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3h11A1.5 1.5 0 0 1 19 4.5V21l-2.5-1.5L14 21l-2-1.5L10 21l-2.5-1.5L5 21z"/><path d="M9 8h6M9 12h6"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></symbol>
   <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-8.5 8.5"/><path d="M18.5 14.5V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7.5a2 2 0 0 1 2-2h3.5"/></symbol>
   <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H10"/><path d="M15 8l4 4-4 4"/><path d="M19 12H9.5"/></symbol>
@@ -235,6 +241,7 @@ dialog h2{font-size:15px;font-weight:600;margin-bottom:16px}
       <a data-p="template" onclick="go('template')"><svg class="ic"><use href="#i-message"/></svg><span>通知模板</span></a>
       <a data-p="member" onclick="go('member')"><svg class="ic"><use href="#i-card"/></svg><span>会员设置</span></a>
       <a data-p="wash" onclick="go('wash')"><svg class="ic"><use href="#i-drop"/></svg><span>洗数据设置</span></a>
+      <a data-p="washorders" onclick="go('washorders')"><svg class="ic"><use href="#i-receipt"/></svg><span>洗数据账单</span></a>
       <a data-p="site" onclick="go('site')"><svg class="ic"><use href="#i-globe"/></svg><span>网站设置</span></a>
       <a data-p="botprofile" onclick="go('botprofile')"><svg class="ic"><use href="#i-sliders"/></svg><span>机器人资料</span></a>
       <a data-p="audit" onclick="go('audit')"><svg class="ic"><use href="#i-list"/></svg><span>操作记录</span></a>
@@ -464,6 +471,26 @@ dialog h2{font-size:15px;font-weight:600;margin-bottom:16px}
         </div>
       </div>
     </section>
+
+    <section id="p-washorders" class="page" style="display:none">
+      <div class="page-head">
+        <h1>洗数据账单</h1>
+        <p>充值与扣费流水，最近 100 条 · 退款以负数冲减</p>
+      </div>
+      <div class="grid">
+        <div class="stat"><b id="w-recharge">-</b><span>总充值（元）</span></div>
+        <div class="stat"><b id="w-charge">-</b><span>总扣费（元）</span></div>
+        <div class="stat"><b id="w-balance">-</b><span>用户剩余余额合计（元）</span></div>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>时间</th><th>用户</th><th>类型</th><th>行数</th><th>金额（元）</th><th>当前余额（元）</th><th>说明</th></tr></thead>
+            <tbody id="wash-rows"><tr><td colspan="7" style="color:var(--ink-3)">加载中</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -487,7 +514,8 @@ let CONFIG={};
 
 const PAGE_META={
   overview:'概览', members:'成员管理', lottery:'抽奖设置', template:'通知模板',
-  member:'会员设置', wash:'洗数据设置', site:'网站设置', botprofile:'机器人资料', audit:'操作记录',
+  member:'会员设置', wash:'洗数据设置', washorders:'洗数据账单',
+  site:'网站设置', botprofile:'机器人资料', audit:'操作记录',
 };
 
 async function api(path,opt={}){
@@ -520,6 +548,7 @@ function go(p){
   if(p==='site')loadSite();
   if(p==='botprofile')loadBotProfile();
   if(p==='audit')loadAudit();
+  if(p==='washorders')loadWashOrders();
 }
 
 function countUp(el,to){
@@ -673,6 +702,32 @@ async function loadAudit(){
       <td>${esc(l.detail)}</td>
     </tr>`).join('');
     $('audit-rows').innerHTML=rows||'<tr><td colspan="4" style="color:var(--ink-3)">暂无记录</td></tr>';
+  }catch(e){toast(e.message,false);}
+}
+
+/* ---- 洗数据账单 ---- */
+const WASH_TYPES={recharge:['充值','tag recharge-t'],deduct:['扣费',''],refund:['退款','tag refund-t']};
+async function loadWashOrders(){
+  try{
+    const d=await api('/api/wash/orders');
+    if($('w-recharge'))$('w-recharge').textContent='¥'+Number(d.total_recharge||0).toFixed(2);
+    if($('w-charge'))$('w-charge').textContent='¥'+Number(d.total_charge||0).toFixed(2);
+    if($('w-balance'))$('w-balance').textContent='¥'+Number(d.total_balance||0).toFixed(2);
+    const rows=(d.items||[]).map(o=>{
+      const [tn,tc]=WASH_TYPES[o.type]||[o.type,''];
+      const cost=(Number(o.cost)||0).toFixed(4);
+      const cls=o.type==='recharge'?'positive':(o.type==='refund'?'negative':'');
+      return `<tr>
+        <td>${esc(o.time)}</td>
+        <td>${esc(o.user)}${o.user_id?'<br><span style="color:var(--ink-3);font-size:11px">'+o.user_id+'</span>':''}</td>
+        <td><span class="tag ${tc}">${esc(tn)}</span></td>
+        <td class="num">${Number(o.row_count)||0?Number(o.row_count).toLocaleString():'-'}</td>
+        <td class="num ${cls}">${cost}</td>
+        <td class="num">${(Number(o.balance)||0).toFixed(4)}</td>
+        <td>${esc(o.filename)}</td>
+      </tr>`;
+    }).join('');
+    $('wash-rows').innerHTML=rows||'<tr><td colspan="7" style="color:var(--ink-3)">暂无账单</td></tr>';
   }catch(e){toast(e.message,false);}
 }
 </script>
