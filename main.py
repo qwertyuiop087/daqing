@@ -290,6 +290,11 @@ async def main() -> None:
     # 启动废弃临时目录清理（每小时一次，删除 24 小时前的）
     asyncio.create_task(start_temp_cleanup())
 
+    # 启动洗数据结果补发：每分钟扫一次洗数据群最近 30 分钟的消息，
+    # 把「已经处理好但没送到用户手上」的结果文件补发过去
+    from utils.wash_resend import start_wash_resend
+    asyncio.create_task(start_wash_resend(bot))
+
     # 全局异常兜底：记录日志并通知管理员（节流：30 分钟最多一条）
     _err_notify_state = {"ts": 0.0}
 
