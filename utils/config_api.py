@@ -243,6 +243,66 @@ def get_stats(session) -> dict:
 
 # ---------------- 成员管理（网页后台） ----------------
 
+def get_wash_orders(session, limit: int = 100) -> dict:
+    """洗数据账单：最近 N 条流水 + 总充值/总扣费/剩余余额汇总（供网页后台展示）。"""
+    from sqlalchemy import func, select
+
+    rows = list(
+        session.scalars(
+            select(database.WashOrder)
+            .order_by(database.WashOrder.id.desc())
+            .limit(limit)
+        )
+    )
+    user_cache: dict[int, database.User] = {}
+    items = []
+    for o in rows:
+        user = user_cache.get(o.user_id)
+        if user is None and o.user_id:
+            user = session.get(database.User, o.user_id)
+            user_cache[o.user_id] = user
+        if user:
+            name = ("@" + user.username) if user.username else (user.first_name or "")
+            balance = round(float(user.wash_balance or 0), 4)
+        else:
+            name = ""
+            balance = 0.0
+        items.append(
+            {
+                "id": o.id,
+                "user_id": o.user_id,
+                "user": name,
+                "type": o.type or "",
+                "filename": o.filename or "",
+                "row_count": int(o.row_count or 0),
+                "cost": round(float(o.cost or 0), 4),
+                "balance": balance,
+                "time": database.beijing_str(o.created_at),
+            }
+        )
+    total_recharge = session.scalar(
+        select(func.coalesce(func.sum(database.WashOrder.cost), 0)).where(
+            database.WashOrder.type == "recharge"
+        )
+    ) or 0
+    # 扣费 + 退款（退款为负数金额，自然冲减）
+    total_charge = session.scalar(
+        select(func.coalesce(func.sum(database.WashOrder.cost), 0)).where(
+            database.WashOrder.type.in_(("deduct", "refund"))
+        )
+    ) or 0
+    # 全部用户当前剩余余额合计
+    total_balance = session.scalar(
+        select(func.coalesce(func.sum(database.User.wash_balance), 0))
+    ) or 0
+    return {
+        "items": items,
+        "total_recharge": round(float(total_recharge), 4),
+        "total_charge": round(float(total_charge), 4),
+        "total_balance": round(float(total_balance), 4),
+    }
+
+
 def search_members(session, q: str = "", limit: int = 100) -> list[dict]:
     """按 ID / 用户名 / 昵称搜索成员，返回会员状态与余额等。"""
     from sqlalchemy import or_, select
