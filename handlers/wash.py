@@ -99,6 +99,137 @@ async def _alert_unmatched(bot, filename: str, code: str) -> None:
             pass
 
 
+def _washed_original_name(filename: str) -> str:
+    """去掉 7 位随机码前缀，还原给用户看的原文件名。"""
+    import re
+    return re.sub(r"^[a-zA-Z0-9]{7}_", "", filename or "").strip() or (filename or "unnamed")
+
+
+def _delivery_keys(code: str) -> list:
+    """该任务已经投递过的结果文件键（用于去重，防止重复发/重复扣）。"""
+    with SessionLocal() as session:
+        raw = get_config(session, f"wash_sent:{code}", "")
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _remember_delivery(code: str, key: str) -> None:
+    from database import set_config
+
+    keys = _delivery_keys(code)
+    if key in keys:
+        return
+    keys = (keys + [key])[-100:]
+    with SessionLocal() as session:
+        set_config(session, f"wash_sent:{code}", json.dumps(keys, ensure_ascii=False))
+
+
+def _already_delivered(code: str, key: str) -> bool:
+    return key in _delivery_keys(code)
+
+
+_last_undelivered_alert = 0.0
+
+
+async def _alert_undelivered(bot, filename: str, code: str, user_id: int) -> None:
+    """结果文件没能送达用户时私聊管理员（10 分钟节流），避免文件静默丢失。"""
+    global _last_undelivered_alert
+    import time as _time
+    now = _time.time()
+    if now - _last_undelivered_alert < 600:
+        return
+    _last_undelivered_alert = now
+    admin_ids = set(settings.ADMIN_IDS) | set(settings.SUPER_ADMIN_IDS)
+    text = (
+        "⚠️ <b>洗数据结果没能发给用户</b>\n\n"
+        f"用户：<code>{user_id}</code>\n"
+        f"文件：<code>{html.escape(filename)}</code>\n"
+        f"随机码：<code>{html.escape(code)}</code>\n\n"
+        "文件仍在洗数据群里，请手动转发给该用户；\n"
+        "本次没有结算扣费，48 小时未回传会自动按比例退款。"
+    )
+    for admin_id in admin_ids:
+        try:
+            await bot.send_message(admin_id, text)
+        except Exception:
+            pass
+
+
+def _settle_wash_result(random_code: str, user_id: int, original_name: str) -> tuple:
+    """回传成功后记账：批量任务每收到一份结算一份，全部回传才结清。
+
+    返回 (结算金额, 结算行数, 是否已结清)。只在文件真正送达用户后调用，
+    保证「没送达就不扣钱」。
+    """
+    with SessionLocal() as session:
+        pending = get_config(session, f"wash_pending:{random_code}", "")
+    if not pending:
+        return (0.0, 0, True)
+
+    parts = pending.split(":", 4)
+    if len(parts) < 3:
+        return (0.0, 0, True)
+    line_count = int(parts[1])
+    cost = float(parts[2])
+    file_map = None
+    if len(parts) >= 5:
+        try:
+            file_map = json.loads(parts[4])
+        except Exception:
+            file_map = None
+
+    settle_cost = cost
+    settle_lines = line_count
+    done = True
+    if file_map and file_map.get("files"):
+        rem = list(file_map["files"])
+        charged = float(file_map.get("charged", 0.0))
+        share = rem.pop(0)
+        if rem:
+            settle_cost = round(cost * share / line_count, 4) if line_count else 0.0
+            settle_lines = share
+            file_map["files"] = rem
+            file_map["charged"] = round(charged + settle_cost, 4)
+            done = False
+        else:
+            # 最后一个结果：把剩余金额一次结清，避免四舍五入差额
+            settle_cost = round(cost - charged, 4)
+            settle_lines = share
+
+    if settle_cost > 0:
+        with SessionLocal() as session:
+            session.add(
+                WashOrder(
+                    user_id=user_id,
+                    filename=original_name,
+                    row_count=settle_lines,
+                    cost=settle_cost,
+                    type="deduct",
+                )
+            )
+            session.commit()
+
+    # 只删/更新待记账记录；wash_code 映射必须保留：同一任务的多个结果文件
+    # 共用随机码，删了后续文件会丢失，它的过期清理由 get_washed_breakdown 处理
+    with SessionLocal() as session:
+        from database import delete_config, set_config
+        if done:
+            delete_config(session, f"wash_pending:{random_code}")
+        elif file_map is not None:
+            set_config(
+                session,
+                f"wash_pending:{random_code}",
+                f"{user_id}:{line_count}:{cost}:{parts[3]}:"
+                f"{json.dumps(file_map, ensure_ascii=False)}",
+            )
+    return (settle_cost, settle_lines, done)
+
+
 def wash_main_kb(balance: float) -> InlineKeyboardBuilder:
     b = InlineKeyboardBuilder()
     b.button(text="💳 充值洗数据", callback_data="wash:recharge")
@@ -975,6 +1106,8 @@ async def alt_user_reply(message: Message, bot: Bot):
         )
         if ok:
             print(f"✅ 已把空号检测结果发给用户 {user_id}")
+        else:
+            await _alert_undelivered(bot, filename, random_code, user_id)
         return
 
     # 判断是不是洗数据的结果
@@ -987,7 +1120,6 @@ async def alt_user_reply(message: Message, bot: Bot):
 
         with SessionLocal() as session:
             user_id_str = get_config(session, f"wash_code:{random_code}", "")
-            pending = get_config(session, f"wash_pending:{random_code}", "")
         if not user_id_str:
             print(f"⚠️ 洗数据随机码 {random_code} 没找到对应的用户")
             await _alert_unmatched(bot, filename, random_code)
@@ -996,108 +1128,58 @@ async def alt_user_reply(message: Message, bot: Bot):
         user_id = int(user_id_str.split(":")[0])
 
         # 提取原文件名：只取文件名本身，不要把消息 caption（如“蓝号(IOS/imessage/FaceTime)”）拼进去
-        original_name = re.sub(r"^[a-zA-Z0-9]{7}_", "", filename).strip() or filename
+        original_name = _washed_original_name(filename)
 
-        # 费用在提交时已预扣，这里只记账（不再扣费，避免并发任务透支余额）。
-        # 批量任务：每收到一个结果文件就结算一份费用，全部回传才结清；
-        # 一直没回传的部分，超时后由 get_washed_breakdown 按比例退款。
-        if pending:
-            parts = pending.split(":", 4)
-            # 兼容旧格式（3段）与新格式（4段/5段：第4段时间戳、第5段批量JSON）
-            if len(parts) >= 3:
-                line_count = int(parts[1])
-                cost = float(parts[2])
-                file_map = None
-                if len(parts) >= 5:
-                    try:
-                        file_map = json.loads(parts[4])
-                    except Exception:
-                        file_map = None
-
-                settle_cost = cost
-                settle_lines = line_count
-                done = True
-                if file_map and file_map.get("files"):
-                    # 批量：按结果个数结算，每份按该文件行数占总数比例计费
-                    rem = list(file_map["files"])
-                    charged = float(file_map.get("charged", 0.0))
-                    share = rem.pop(0)
-                    if rem:
-                        settle_cost = round(cost * share / line_count, 4)
-                        settle_lines = share
-                        file_map["files"] = rem
-                        file_map["charged"] = round(charged + settle_cost, 4)
-                        done = False
-                    else:
-                        # 最后一个结果：把剩余金额一次结清，避免四舍五入差额
-                        settle_cost = round(cost - charged, 4)
-                        settle_lines = share
-
-                if settle_cost > 0:
-                    with SessionLocal() as session:
-                        # 记录洗数据账单（批量任务每个结果一条，明细更清楚）
-                        session.add(
-                            WashOrder(
-                                user_id=user_id,
-                                filename=original_name,
-                                row_count=settle_lines,
-                                cost=settle_cost,
-                                type="deduct",
-                            )
-                        )
-                        session.commit()
-
-                # 只删/更新待记账记录；wash_code 映射必须保留：
-                # 同一任务的多个结果文件共用随机码，删了后续文件会丢失，
-                # 它的过期清理由 get_washed_breakdown 按时间戳统一处理
-                with SessionLocal() as session:
-                    from database import delete_config, set_config
-                    if done:
-                        delete_config(session, f"wash_pending:{random_code}")
-                    elif file_map is not None:
-                        set_config(
-                            session,
-                            f"wash_pending:{random_code}",
-                            f"{user_id}:{line_count}:{cost}:{parts[3]}:"
-                            f"{json.dumps(file_map, ensure_ascii=False)}",
-                        )
-
-                # 洗数据完成，判定隐藏掉落（2%，不限制频率）
-                try:
-                    from utils.drops import notify_drop_chat, roll_drop
-                    with SessionLocal() as session:
-                        drop_days = roll_drop(session, user_id, "洗数据", is_wash=True)
-                    if drop_days:
-                        await notify_drop_chat(bot, user_id, "洗数据", drop_days)
-                except Exception:
-                    pass
-
-        # 把洗好的文件转发给用户（带重试，避免连发时被限流丢掉）
+        # ① 先把文件交给用户：这是用户唯一关心的结果。
+        #    记账放在后面，记账只要出一点问题都不能影响交付（以前是先记账后发送，
+        #    记账一抛异常就整条 update 被全局错误处理器吞掉，用户永远收不到文件）。
+        dkey = f"{getattr(doc, 'file_unique_id', '') or ''}|{filename}"
+        if _already_delivered(random_code, dkey):
+            print(f"⚠️ 这个结果文件已经发过了，跳过重复投递: {filename}")
+            return
         ok = await _send_document_retry(
             bot,
             user_id,
             doc.file_id,
             f"✅ 你的洗数据已完成！\n原文件：{html.escape(original_name)}",
         )
-        if ok:
-            print(f"✅ 已把洗好的文件发给用户 {user_id}")
+        if not ok:
+            # 没送到用户手上：不记账（不扣钱），通知管理员人工补发
+            await _alert_undelivered(bot, filename, random_code, user_id)
+            return
+        _remember_delivery(random_code, dkey)
+        print(f"✅ 已把洗好的文件发给用户 {user_id}")
+
+        # ② 送达后再记账（费用提交时已预扣，这里只记流水，不重复扣费）
+        try:
+            settle_cost, settle_lines, done = _settle_wash_result(
+                random_code, user_id, original_name
+            )
+            print(f"💳 结算：{settle_lines} 行 / ¥{settle_cost}，本任务{'已结清' if done else '还有未回传部分'}")
+        except Exception as e:
+            print(f"[wash] settle failed for {random_code}: {e}")
+            admin_ids = set(settings.ADMIN_IDS) | set(settings.SUPER_ADMIN_IDS)
+            for admin_id in admin_ids:
+                try:
+                    await bot.send_message(
+                        admin_id,
+                        "⚠️ <b>洗数据结算失败</b>\n\n"
+                        f"用户：<code>{user_id}</code>\n"
+                        f"随机码：<code>{random_code}</code>\n"
+                        f"文件：<code>{html.escape(filename)}</code>\n"
+                        f"错误：<code>{html.escape(str(e)[:200])}</code>\n\n"
+                        "文件已发给用户，只有账单没记上，请手动核对。",
+                    )
+                except Exception:
+                    pass
+
+        # 洗数据完成，判定隐藏掉落（2%，不限制频率）
+        try:
+            from utils.drops import notify_drop_chat, roll_drop
+            with SessionLocal() as session:
+                drop_days = roll_drop(session, user_id, "洗数据", is_wash=True)
+            if drop_days:
+                await notify_drop_chat(bot, user_id, "洗数据", drop_days)
+        except Exception:
+            pass
         return
-
-
-# ---------------- 兜底：文件没被任何功能接住 ----------------
-# 放在 wash.router 末尾（wash 是最先注册回传、最后注册普通路由的），
-# 只有在所有功能的状态处理器都没匹配时才会走到这里。
-# 典型场景：点了「上传文件」后机器人重启，内存里的上传状态丢失，
-# 用户再发文件就没人接——以前是完全没反应，现在给出明确提示。
-
-@router.message(F.document)
-async def document_fallback(message: Message, state: FSMContext):
-    await cleanup_state(state)
-    await message.answer(
-        "⚠️ <b>没认出这个文件要做什么</b>\n\n"
-        "可能是刚才机器人重启，上传状态丢了。\n"
-        "请从主菜单重新选择功能，再发文件：\n\n"
-        "· 洗数据：主菜单 → 🧼 洗数据 → 📤 上传文件洗数据\n"
-        "· 其它功能：主菜单里点对应按钮，再发文件",
-        reply_markup=menu_kb(message.from_user.id),
-    )
