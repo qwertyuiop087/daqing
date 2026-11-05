@@ -703,19 +703,21 @@ async def _stop_upload_render(user_id: int) -> None:
     sess["dirty"] = False
     task = sess.get("task")
     if task is not None and not task.done():
+        # 直接取消刷新任务，最多等 0.5 秒：不能让「开始洗数据」卡在这里
+        task.cancel()
         try:
-            await asyncio.wait_for(asyncio.shield(task), timeout=3)
+            await asyncio.wait_for(asyncio.shield(task), timeout=0.5)
         except Exception:
             pass
 
 
-async def _edit_or_answer(cq: CallbackQuery, text: str, kb) -> None:
+async def _edit_or_answer(cq: CallbackQuery, text: str, reply_markup=None) -> None:
     """优先把结果写回点按钮的那条消息，改不动再发新消息。"""
     try:
-        await cq.message.edit_text(text, reply_markup=kb)
+        await cq.message.edit_text(text, reply_markup=reply_markup)
     except Exception:
         try:
-            await cq.message.answer(text, reply_markup=kb)
+            await cq.message.answer(text, reply_markup=reply_markup)
         except Exception as e:
             print(f"⚠️ 洗数据结果消息发送失败：{e}")
 
@@ -856,12 +858,34 @@ async def wash_got_file(message: Message, state: FSMContext, bot: Bot):
 
 @router.callback_query(F.data == "wash:submit")
 async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
+    """提交整批文件（外壳）：任何异常都必须让用户看到提示，不能静默无响应。"""
+    # 先立刻回一个可见的提示，避免用户点了按钮以为没反应
+    await cq.answer("正在提交，请稍等…")
+    try:
+        await _wash_submit_impl(cq, state, bot)
+    except Exception as e:
+        print(f"[wash] submit failed: {e}")
+        try:
+            await _edit_or_answer(
+                cq,
+                "⚠️ 提交失败：" + html.escape(str(e)[:150])
+                + "\n\n请再点一次「🚀 开始洗数据」；如果还是不行，重新上传一次文件。",
+                reply_markup=menu_kb(cq.from_user.id),
+            )
+        except Exception:
+            pass
+
+
+async def _wash_submit_impl(cq: CallbackQuery, state: FSMContext, bot: Bot) -> None:
     """提交整批文件：按总行数计费（档位越高单价越低），预扣费后转发到洗数据群。"""
-    await cq.answer()
     data = await state.get_data()
     files = list(data.get("files") or [])
     if not files:
-        await cq.answer("还没收到文件，请先发送要洗的 TXT 文件。", show_alert=True)
+        # 常见原因：机器人刚重启，内存里的上传状态丢了
+        await cq.answer(
+            "没找到上传的文件（可能是机器人刚重启）。\n请重新发一次文件再点开始洗数据。",
+            show_alert=True,
+        )
         return
 
     await _stop_upload_render(cq.from_user.id)
