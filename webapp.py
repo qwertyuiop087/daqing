@@ -537,6 +537,16 @@ async def audit_api(request: web.Request):
     return web.json_response({"ok": True, "items": items})
 
 
+# ---------------- 洗数据账单 ----------------
+
+async def wash_orders_api(request: web.Request):
+    """洗数据流水：充值/扣费/退款，最近 100 条 + 汇总。"""
+    _auth(request)
+    with database.SessionLocal() as session:
+        data = config_api.get_wash_orders(session, 100)
+    return web.json_response({"ok": True, **data})
+
+
 def build_app(bot=None) -> web.Application:
     global _bot
     if bot is not None:
@@ -561,4 +571,5 @@ def build_app(bot=None) -> web.Application:
     app.router.add_get("/api/bot/profile", bot_profile_api)
     app.router.add_post("/api/bot/profile", bot_profile_save_api)
     app.router.add_get("/api/audit", audit_api)
+    app.router.add_get("/api/wash/orders", wash_orders_api)
     return app
