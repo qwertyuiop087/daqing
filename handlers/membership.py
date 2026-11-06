@@ -142,14 +142,21 @@ async def admin_panel(event):
         quota = get_wash_quota(session)
         washed = get_washed_total(session)
     quota_text = f"{quota:,} 行" if quota > 0 else "不限"
-    role = "👑 总管理员" if is_super_admin(event.from_user.id) else "🔧 管理员"
+    is_super = is_super_admin(event.from_user.id)
+    role = "👑 总管理员" if is_super else "🔧 管理员"
     text = (
         f"🔧 <b>管理面板（{role}）</b>\n\n"
         f"💲 洗数据价格下限：¥{floor:.4f} 元/行\n"
-        f"📊 累计洗数据配额：{quota_text}（已洗 {washed:,} 行）\n\n"
-        "请选择操作："
+        f"📊 累计洗数据配额：{quota_text}（已洗 {washed:,} 行）\n"
     )
-    kb = admin_kb(is_super=is_super_admin(event.from_user.id))
+    if is_super:
+        text += "\n你可以控制配额、价格下限，并增删管理员。\n请选择操作："
+    else:
+        text += (
+            "\n⚠️ 「累计洗数据配额」「价格下限」「管理员管理」仅总管理员可操作，"
+            "其余功能你都可以用。\n请选择操作："
+        )
+    kb = admin_kb(is_super=is_super)
     if isinstance(event, CallbackQuery):
         await event.answer()
         await event.message.edit_text(text, reply_markup=kb)
