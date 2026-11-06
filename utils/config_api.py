@@ -243,23 +243,47 @@ def get_stats(session) -> dict:
 
 # ---------------- 成员管理（网页后台） ----------------
 
-def get_wash_orders(session, limit: int = 100) -> dict:
+def get_wash_orders(session, limit: int = 100, type_filter: str = "", q: str = "") -> dict:
     """洗数据账单：最近 N 条流水 + 汇总（供网页后台展示）。
 
     历史数据里扣费有正有负（自动洗数据记正数、后台手动扣费记负数），
     因此汇总一律按「绝对值」统计，展示口径统一：
-    充值（钱进来）、扣费（钱扣掉）、退款（钱退回）、剩余余额（还在用户账上）。
+    充值（钱进来）、抽奖发放（钱以奖品形式进来）、扣费（钱扣掉）、
+    退款（钱退回）、剩余余额（还在用户账上）。
     行金额按类型带符号：充值/退款/抽奖发放为正，扣费为负。
-    """
-    from sqlalchemy import func, select
 
-    rows = list(
-        session.scalars(
-            select(database.WashOrder)
-            .order_by(database.WashOrder.id.desc())
-            .limit(limit)
+    type_filter：只看某一类流水（recharge/deduct/refund/lottery，空为全部）
+    q：按用户 ID / 用户名 / 昵称 / 文件名 搜索
+    """
+    from sqlalchemy import func, or_, select
+
+    query = select(database.WashOrder).order_by(database.WashOrder.id.desc())
+
+    tf = (type_filter or "").strip()
+    if tf in ("recharge", "deduct", "refund", "lottery"):
+        query = query.where(database.WashOrder.type == tf)
+
+    qs = (q or "").strip()
+    if qs:
+        like = f"%{qs}%"
+        conds = [database.WashOrder.filename.ilike(like)]
+        if qs.isdigit():
+            conds.append(database.WashOrder.user_id == int(qs))
+        matched_ids = list(
+            session.scalars(
+                select(database.User.id).where(
+                    or_(
+                        database.User.username.ilike(like),
+                        database.User.first_name.ilike(like),
+                    )
+                )
+            )
         )
-    )
+        if matched_ids:
+            conds.append(database.WashOrder.user_id.in_(matched_ids))
+        query = query.where(or_(*conds))
+
+    rows = list(session.scalars(query.limit(limit)))
     user_cache: dict[int, database.User] = {}
     items = []
     for o in rows:
@@ -308,11 +332,18 @@ def get_wash_orders(session, limit: int = 100) -> dict:
     ) or 0
     return {
         "items": items,
+        "count": len(items),
+        "type_filter": tf,
+        "q": qs,
         "total_recharge": total_recharge,
         "total_deduct": total_deduct,
         "total_refund": total_refund,
         "total_lottery": total_lottery,
         "total_balance": round(float(total_balance), 4),
+        # 账目校验：充值 + 抽奖 + 退款 − 扣费，正常等于用户余额合计
+        "balance_check": round(
+            float(total_recharge + total_lottery + total_refund - total_deduct), 4
+        ),
     }
 
 
