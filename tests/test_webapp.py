@@ -77,6 +77,25 @@ class TestWebapp(unittest.TestCase):
                 self.assertLess(deduct_row["cost"], 0)  # 扣费展示为负数
                 manual_row = next(i for i in wo["items"] if i.get("filename") == "网页后台手动扣费")
                 self.assertLess(manual_row["cost"], 0)
+                # 分类筛选：只看退款
+                wo_refund = await (await client.get("/api/wash/orders?type=refund")).json()
+                self.assertEqual(wo_refund["count"], 1)
+                self.assertEqual(wo_refund["items"][0]["type"], "refund")
+                # 汇总仍是全局口径，不受筛选影响
+                self.assertEqual(wo_refund["total_recharge"], 70.0)
+
+                # 按用户搜索：ID 命中
+                wo_uid = await (await client.get("/api/wash/orders?q=123")).json()
+                self.assertGreaterEqual(wo_uid["count"], 1)
+                self.assertTrue(all(i["user_id"] == 123 for i in wo_uid["items"]))
+
+                # 按用户名搜索 + 类型组合：没有匹配项时返回空列表而不是报错
+                wo_none = await (await client.get("/api/wash/orders?q=nobody&type=lottery")).json()
+                self.assertEqual(wo_none["count"], 0)
+                self.assertEqual(wo_none["items"], [])
+
+                # 账目校验：充值 + 抽奖 + 退款 − 扣费
+                self.assertAlmostEqual(wo["balance_check"], 70.0 + 0 + 2.5 - 18.0)
 
                 # 非法输入 → 400
                 resp = await client.post("/api/config/lottery_prizes", json={"value": "天:1:60,天:2:50"})
