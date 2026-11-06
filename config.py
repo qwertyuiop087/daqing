@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.65"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.66"))
 
 
 settings = Settings()
@@ -96,6 +96,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.66",
+        [
+            "网页后台新增「管理员」页：查看/添加/删除管理员",
+            "总管理员独占：累计洗数据配额、价格下限、管理员管理；其余功能管理员都能用",
+            "没配 SUPER_ADMIN_IDS 时，ADMIN_IDS 第一个自动成为总管理员（避免没人能改配额）",
+        ],
+    ),
     (
         "2026-10-28.65",
         [
