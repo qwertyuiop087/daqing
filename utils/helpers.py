@@ -18,6 +18,23 @@ def get_workdir(tg_id: int) -> str:
     return tempfile.mkdtemp(prefix=f"bot_{tg_id}_")
 
 
+def is_benign_update_error(exc: BaseException) -> bool:
+    """这些异常是用户操作造成的正常现象，不需要当故障告警管理员。
+
+    典型：用户连点同一个按钮，机器人把一条消息改成「和现在完全一样」的内容，
+    Telegram 会返回 400 message is not modified —— 这在业务上毫无问题。
+    """
+    text = str(exc).lower()
+    benign_markers = (
+        "message is not modified",       # 连点同一按钮 / 重复刷新同一页
+        "message can't be edited",       # 超过 48 小时的老消息
+        "message to edit not found",     # 消息被删除后点旧按钮
+        "query is too old",              # 回调过期（点太久以前的按钮）
+        "message_id_invalid",
+    )
+    return any(marker in text for marker in benign_markers)
+
+
 async def cleanup_state(state: FSMContext) -> None:
     """清除状态并删除该操作产生的临时文件。
 
