@@ -537,6 +537,72 @@ async def audit_api(request: web.Request):
     return web.json_response({"ok": True, "items": items})
 
 
+# ---------------- 管理员管理（网页后台） ----------------
+# 网页后台只有站长一个登录账号，等同于总管理员权限
+
+async def admins_api(request: web.Request):
+    """管理员名单：总管理员 / 环境变量管理员 / 数据库动态管理员。"""
+    _auth(request)
+    from utils.roles import super_admin_ids
+    with database.SessionLocal() as session:
+        db_admins = database.get_admin_ids(session)
+    sups = super_admin_ids()
+    return web.json_response(
+        {
+            "ok": True,
+            "super_admins": sups,
+            "env_admins": sorted(set(settings.ADMIN_IDS) - set(sups)),
+            "db_admins": db_admins,
+            "super_configured": bool(settings.SUPER_ADMIN_IDS),
+        }
+    )
+
+
+async def admins_add_api(request: web.Request):
+    """添加管理员（写入数据库动态管理员）。"""
+    user = _auth(request)
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "参数错误", "detail": "参数错误"}, status=400)
+    raw = str(body.get("user_id") or "").strip().lstrip("@")
+    if not raw.isdigit() or int(raw) <= 0:
+        return web.json_response(
+            {"ok": False, "error": "请输入纯数字的 Telegram ID", "detail": "请输入纯数字的 Telegram ID"}, status=400
+        )
+    tg_id = int(raw)
+    with database.SessionLocal() as session:
+        added = database.add_admin_id(session, tg_id)
+        database.log_audit(session, user, "admin_add", f"添加管理员 {tg_id}")
+    return web.json_response({"ok": True, "added": added, "user_id": tg_id})
+
+
+async def admins_remove_api(request: web.Request):
+    """删除管理员（只能删数据库动态添加的，环境变量里的删不掉）。"""
+    user = _auth(request)
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "参数错误", "detail": "参数错误"}, status=400)
+    raw = str(body.get("user_id") or "").strip()
+    if not raw.isdigit():
+        return web.json_response(
+            {"ok": False, "error": "请输入纯数字的 Telegram ID", "detail": "请输入纯数字的 Telegram ID"}, status=400
+        )
+    tg_id = int(raw)
+    from utils.roles import super_admin_ids
+
+    if tg_id in super_admin_ids():
+        return web.json_response(
+            {"ok": False, "error": "总管理员不能在这里删除，请改环境变量 SUPER_ADMIN_IDS", "detail": "总管理员不能在这里删除，请改环境变量 SUPER_ADMIN_IDS"},
+            status=400,
+        )
+    with database.SessionLocal() as session:
+        removed = database.remove_admin_id(session, tg_id)
+        database.log_audit(session, user, "admin_remove", f"删除管理员 {tg_id}")
+    return web.json_response({"ok": True, "removed": removed, "user_id": tg_id})
+
+
 # ---------------- 洗数据账单 ----------------
 
 async def wash_orders_api(request: web.Request):
@@ -578,5 +644,8 @@ def build_app(bot=None) -> web.Application:
     app.router.add_get("/api/bot/profile", bot_profile_api)
     app.router.add_post("/api/bot/profile", bot_profile_save_api)
     app.router.add_get("/api/audit", audit_api)
+    app.router.add_get("/api/admins", admins_api)
+    app.router.add_post("/api/admins/add", admins_add_api)
+    app.router.add_post("/api/admins/remove", admins_remove_api)
     app.router.add_get("/api/wash/orders", wash_orders_api)
     return app
