@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.64"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.65"))
 
 
 settings = Settings()
@@ -96,6 +96,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.65",
+        [
+            "洗数据账单新增「总抽奖发放」卡片与账目校验行，一眼看出扣费为何大于充值",
+            "账单可按类型筛选：全部 / 充值 / 扣费 / 退款 / 抽奖发放",
+            "账单可按用户搜索：ID、用户名、昵称或文件名",
+        ],
+    ),
     (
         "2026-10-28.64",
         [
