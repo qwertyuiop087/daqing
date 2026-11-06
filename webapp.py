@@ -540,10 +540,17 @@ async def audit_api(request: web.Request):
 # ---------------- 洗数据账单 ----------------
 
 async def wash_orders_api(request: web.Request):
-    """洗数据流水：充值/扣费/退款，最近 100 条 + 汇总。"""
+    """洗数据流水：充值/扣费/退款/抽奖 + 汇总，可按类型与用户筛选。"""
     _auth(request)
+    type_filter = (request.query.get("type") or "").strip()
+    q = (request.query.get("q") or "").strip()[:64]
+    try:
+        limit = int(request.query.get("limit") or 100)
+    except Exception:
+        limit = 100
+    limit = max(1, min(limit, 500))
     with database.SessionLocal() as session:
-        data = config_api.get_wash_orders(session, 100)
+        data = config_api.get_wash_orders(session, limit, type_filter, q)
     return web.json_response({"ok": True, **data})
 
 
