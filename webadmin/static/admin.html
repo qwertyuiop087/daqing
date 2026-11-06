@@ -246,6 +246,7 @@ dialog h2{font-size:15px;font-weight:600;margin-bottom:16px}
       <a data-p="washorders" onclick="go('washorders')"><svg class="ic"><use href="#i-receipt"/></svg><span>洗数据账单</span></a>
       <a data-p="site" onclick="go('site')"><svg class="ic"><use href="#i-globe"/></svg><span>网站设置</span></a>
       <a data-p="botprofile" onclick="go('botprofile')"><svg class="ic"><use href="#i-sliders"/></svg><span>机器人资料</span></a>
+      <a data-p="admins" onclick="go('admins')"><svg class="ic"><use href="#i-users"/></svg><span>管理员</span></a>
       <a data-p="audit" onclick="go('audit')"><svg class="ic"><use href="#i-list"/></svg><span>操作记录</span></a>
     </nav>
     <div class="rail-foot">
@@ -459,6 +460,33 @@ dialog h2{font-size:15px;font-weight:600;margin-bottom:16px}
       </div>
     </section>
 
+    <section id="p-admins" class="page" style="display:none">
+      <div class="page-head">
+        <h1>管理员</h1>
+        <p>总管理员可管理管理员名单；管理员可用除「洗数据配额」「价格下限」「管理员管理」以外的全部功能</p>
+      </div>
+      <div class="grid">
+        <div class="stat"><b id="adm-supers">-</b><span>总管理员</span></div>
+        <div class="stat"><b id="adm-env">-</b><span>环境变量管理员</span></div>
+        <div class="stat"><b id="adm-db">-</b><span>动态管理员</span></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>添加管理员</h2><p>填入对方的 Telegram 数字 ID，对方点开机器人即可使用管理面板</p></div>
+        <div class="row" style="margin-top:0">
+          <input id="adm-input" placeholder="Telegram 数字 ID，例如 8636220421" style="flex:1;min-width:220px" onkeydown="if(event.key==='Enter')addAdmin()">
+          <button onclick="addAdmin()">添加</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>当前管理员</h2><p>环境变量里的管理员需改 Railway 变量；动态管理员可在这里删除</p></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Telegram ID</th><th>身份</th><th>来源</th><th>操作</th></tr></thead>
+            <tbody id="adm-rows"><tr><td colspan="4" style="color:var(--ink-3)">加载中</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
     <section id="p-audit" class="page" style="display:none">
       <div class="page-head">
         <h1>操作记录</h1>
@@ -564,6 +592,7 @@ function go(p){
   if(p==='botprofile')loadBotProfile();
   if(p==='audit')loadAudit();
   if(p==='washorders')loadWashOrders();
+  if(p==='admins')loadAdmins();
 }
 
 function countUp(el,to){
@@ -774,6 +803,45 @@ function setWashType(t){
     b.classList.toggle('ghost', b.dataset.wt!==washType);
   });
   loadWashOrders();
+}
+/* ---- 管理员 ---- */
+async function loadAdmins(){
+  try{
+    const d=await api('/api/admins');
+    if($('adm-supers'))$('adm-supers').textContent=(d.super_admins||[]).length;
+    if($('adm-env'))$('adm-env').textContent=(d.env_admins||[]).length;
+    if($('adm-db'))$('adm-db').textContent=(d.db_admins||[]).length;
+    const sups=new Set(d.super_admins||[]);
+    const envs=new Set(d.env_admins||[]);
+    const rows=[];
+    (d.super_admins||[]).forEach(id=>rows.push({id,role:'👑 总管理员',src:d.super_configured?'环境变量 SUPER_ADMIN_IDS':'环境变量 ADMIN_IDS（未配 SUPER_ADMIN_IDS，第一个自动成为总管理员）',can:false}));
+    (d.env_admins||[]).forEach(id=>rows.push({id,role:'🔧 管理员',src:'环境变量 ADMIN_IDS',can:false}));
+    (d.db_admins||[]).forEach(id=>rows.push({id,role:sups.has(id)?'👑 总管理员':'🔧 管理员',src:'网页后台添加',can:!sups.has(id)}));
+    $('adm-rows').innerHTML=rows.length?rows.map(r=>`<tr>
+      <td class="num">${r.id}</td>
+      <td>${esc(r.role)}</td>
+      <td style="color:var(--ink-3)">${esc(r.src)}</td>
+      <td>${r.can?`<button class="ghost" onclick="removeAdmin(${r.id})">删除</button>`:'<span style="color:var(--ink-3)">不可删</span>'}</td>
+    </tr>`).join(''):'<tr><td colspan="4" style="color:var(--ink-3)">还没有管理员</td></tr>';
+  }catch(e){toast(e.message,false);}
+}
+async function addAdmin(){
+  const id=($('adm-input').value||'').trim();
+  if(!/^\d+$/.test(id)){toast('请输入纯数字的 Telegram ID',false);return;}
+  try{
+    const d=await api('/api/admins/add',{method:'POST',body:JSON.stringify({user_id:id})});
+    toast(d.added?'已添加管理员':'该 ID 已经是管理员了');
+    $('adm-input').value='';
+    loadAdmins();
+  }catch(e){toast(e.message,false);}
+}
+async function removeAdmin(id){
+  if(!confirm('确定删除管理员 '+id+'？'))return;
+  try{
+    await api('/api/admins/remove',{method:'POST',body:JSON.stringify({user_id:String(id)})});
+    toast('已删除');
+    loadAdmins();
+  }catch(e){toast(e.message,false);}
 }
 </script>
 </body>
