@@ -301,6 +301,12 @@ async def main() -> None:
     @dp.errors()
     async def _on_global_error(event):
         exc = event.exception
+        # 用户连点按钮 / 点开很久以前的按钮这类情况，Telegram 会返回 400，
+        # 属于正常现象，不记录也不打扰管理员
+        from utils.helpers import is_benign_update_error
+        if is_benign_update_error(exc):
+            logging.debug("忽略用户操作类异常：%s", exc)
+            return
         logging.error("未处理异常：%s", exc, exc_info=(type(exc), exc, exc.__traceback__))
         now = time.time()
         if now - _err_notify_state["ts"] < 1800:
