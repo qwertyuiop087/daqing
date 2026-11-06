@@ -481,9 +481,21 @@ dialog h2{font-size:15px;font-weight:600;margin-bottom:16px}
       </div>
       <div class="grid">
         <div class="stat"><b id="w-recharge">-</b><span>总充值（元）</span></div>
+        <div class="stat"><b id="w-lottery">-</b><span>总抽奖发放（元）</span></div>
         <div class="stat"><b id="w-deduct">-</b><span>总扣费（元）</span></div>
         <div class="stat"><b id="w-refund">-</b><span>总退款（元）</span></div>
         <div class="stat"><b id="w-balance">-</b><span>用户剩余余额合计（元）</span></div>
+      </div>
+      <p id="w-check" style="color:var(--ink-3);font-size:12px;margin:-8px 0 16px"></p>
+      <div class="row" style="margin-top:0;margin-bottom:16px">
+        <input id="wash-q" placeholder="搜索 ID、用户名、昵称或文件名" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')loadWashOrders()">
+        <button onclick="loadWashOrders()"><svg class="ic ic-16"><use href="#i-search"/></svg>搜索</button>
+        <button data-wt="" onclick="setWashType('')">全部</button>
+        <button class="ghost" data-wt="recharge" onclick="setWashType('recharge')">充值</button>
+        <button class="ghost" data-wt="deduct" onclick="setWashType('deduct')">扣费</button>
+        <button class="ghost" data-wt="refund" onclick="setWashType('refund')">退款</button>
+        <button class="ghost" data-wt="lottery" onclick="setWashType('lottery')">抽奖发放</button>
+        <button class="ghost" onclick="document.getElementById('wash-q').value='';setWashType('')">重置</button>
       </div>
       <div class="card">
         <div class="table-wrap">
@@ -717,12 +729,26 @@ const WASH_TYPES={
 };
 async function loadWashOrders(){
   try{
-    const d=await api('/api/wash/orders');
+    const qs=new URLSearchParams();
+    if(washType)qs.set('type',washType);
+    const q=$('wash-q')?$('wash-q').value.trim():'';
+    if(q)qs.set('q',q);
+    const d=await api('/api/wash/orders'+(qs.toString()?'?'+qs.toString():''));
     const money=v=>'¥'+Number(v||0).toFixed(2);
     if($('w-recharge'))$('w-recharge').textContent=money(d.total_recharge);
+    if($('w-lottery'))$('w-lottery').textContent=money(d.total_lottery);
     if($('w-deduct'))$('w-deduct').textContent=money(d.total_deduct);
     if($('w-refund'))$('w-refund').textContent=money(d.total_refund);
     if($('w-balance'))$('w-balance').textContent=money(d.total_balance);
+    if($('w-check')){
+      const diff=Number(d.balance_check||0)-Number(d.total_balance||0);
+      const base='账目校验：总充值 '+money(d.total_recharge)+' + 总抽奖 '+money(d.total_lottery)
+        +' + 总退款 '+money(d.total_refund)+' − 总扣费 '+money(d.total_deduct)
+        +' = '+money(d.balance_check);
+      $('w-check').textContent=base+(Math.abs(diff)>0.02
+        ?'（比用户余额合计少 '+money(Math.abs(diff))+'：通常是早期抽奖送出的洗数据余额或人工加的余额当时没有记流水，2026-10-28.57 之后才记）'
+        :'，与用户余额合计一致');
+    }
     const rows=(d.items||[]).map(o=>{
       const [tn,tc]=WASH_TYPES[o.type]||[o.type,''];
       const v=Number(o.cost)||0;
@@ -738,8 +764,16 @@ async function loadWashOrders(){
         <td>${esc(o.filename)}</td>
       </tr>`;
     }).join('');
-    $('wash-rows').innerHTML=rows||'<tr><td colspan="7" style="color:var(--ink-3)">暂无账单</td></tr>';
+    $('wash-rows').innerHTML=rows||'<tr><td colspan="7" style="color:var(--ink-3)">没有符合条件的账单</td></tr>';
   }catch(e){toast(e.message,false);}
+}
+let washType='';
+function setWashType(t){
+  washType=t||'';
+  document.querySelectorAll('#p-washorders [data-wt]').forEach(b=>{
+    b.classList.toggle('ghost', b.dataset.wt!==washType);
+  });
+  loadWashOrders();
 }
 </script>
 </body>
