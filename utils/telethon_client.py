@@ -76,6 +76,29 @@ async def _notify_phone_check_failed(filename: str, reason: str) -> None:
     )
 
 
+def watch_chats() -> list:
+    """小号只监听这些会话，避免把无关群聊/私聊全部读进来。
+
+    - 绑定的洗数据群（wash_chat_id）
+    - 空号检测机器人（配置 phone_check_bot，默认 @haomamofang_bot）
+
+    返回 Telethon events.NewMessage 的 chats 参数；空列表表示不监听回传。
+    """
+    with SessionLocal() as session:
+        wash_raw = (get_config(session, "wash_chat_id", "") or "").strip()
+        phone_bot = (get_config(session, "phone_check_bot", "") or "").strip() or "@haomamofang_bot"
+
+    chats = []
+    if wash_raw:
+        try:
+            chats.append(int(wash_raw))
+        except ValueError:
+            print(f"⚠️ wash_chat_id 不是数字，已忽略：{wash_raw}")
+    if phone_bot and phone_bot.lower() not in ("off", "none", "-", "0"):
+        chats.append(phone_bot)
+    return chats
+
+
 def setup_handlers():
     """设置小号的事件处理器（只设置一次）。"""
     # ---------------- 1. 收到我们 bot 发的文件 → 转发到对应处理方 ----------------
@@ -178,17 +201,22 @@ def setup_handlers():
             return
 
     # ---------------- 2. 监听回传的文件 → 转发回我们的 bot ----------------
-    @userbot.on(events.NewMessage(incoming=True))
+    #     只订阅「绑定的洗数据群 + 空号检测机器人」，不再接收全部群聊消息
+    listen = watch_chats()
+    if not listen:
+        print("⚠️ 未绑定洗数据群，回传监听不启用（小号不会读取任何群聊）")
+        return
+    print(f"👀 小号只监听这些会话：{listen}")
+
+    @userbot.on(events.NewMessage(incoming=True, chats=listen))
     async def forward_back_to_bot(event):
         with SessionLocal() as session:
             wash_chat_id = get_config(session, "wash_chat_id", "")
 
         chat_id_str = str(event.chat_id)
-        chat_username = event.chat.username if event.chat else "unknown"
         filename = event.message.file.name if event.document else "无文件"
         caption = event.message.message or ""
         search_text = filename + " " + caption
-        print(f"📥 收到消息: chat_id={chat_id_str}, username={chat_username}, 文件={filename}, caption={caption[:80]}")
 
         import re
 
@@ -262,6 +290,13 @@ async def _start_userbot_inner(bot=None):
 
     try:
         await userbot.start()
+        # 预解析被监听的会话：StringSession 是新 session，没有实体缓存，
+        # 不先 get_entity 的话 chats 过滤可能匹配不到，回传会收不到
+        for target in watch_chats():
+            try:
+                await userbot.get_entity(target)
+            except Exception as e:
+                print(f"⚠️ 预解析会话失败（{target}）：{e}")
     except Exception as e:
         print(f"❌ 小号登录失败：{e}")
         await _notify_admins(
