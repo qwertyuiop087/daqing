@@ -642,7 +642,36 @@ a:focus-visible,.btn:focus-visible,summary:focus-visible{outline:2px solid rgba(
 @media(max-width:640px){
   .fcard::after,.tcard::after,.plan::after,.step-card::after,.sitem::after,.prize::after{display:none}
 }
-</style>
+/* --- 去掉 hero 里那层矩形「蓝幕」 ---
+   .aurora 是几团模糊光斑，被 overflow:hidden 裁成矩形；
+   在带 backdrop-filter 的玻璃卡背面会显出矩形边界，看起来像压了一层淡蓝滤镜。 */
+.aurora{display:none!important}
+/* 补偿一点氛围：让 hero 背后的光斑更明显 */
+.hero::after{content:"";position:absolute;left:50%;top:38%;width:760px;height:520px;transform:translate(-50%,-50%);
+  border-radius:50%;pointer-events:none;z-index:-1;
+  background:radial-gradient(circle,rgba(70,140,255,.13),rgba(60,180,255,.05) 45%,transparent 72%);
+  animation:heroGlow 12s ease-in-out infinite}
+@keyframes heroGlow{0%,100%{opacity:.75;transform:translate(-50%,-50%) scale(1)}
+  50%{opacity:1;transform:translate(-50%,-50%) scale(1.08)}}/* --- 去掉演示卡内部那层矩形高光带（玻璃上不该有直边亮块） --- */
+.mock-card::before{display:none!important}
+/* hero 主卡改用顶部柔和弧形高光，不再有矩形边界 */
+.mock-card{
+  background:
+    radial-gradient(120% 62% at 50% -18%,rgba(255,255,255,.20),rgba(255,255,255,.05) 62%,rgba(255,255,255,.03) 100%),
+    linear-gradient(158deg,rgba(255,255,255,.10),rgba(255,255,255,.035));
+}/* --- 演示卡背景改成平滑线性渐变（去掉径向渐变的台阶，那正是"一层淡蓝幕"的直边来源） --- */
+.mock-card{
+  background:linear-gradient(170deg,
+    rgba(255,255,255,.135) 0%,
+    rgba(255,255,255,.058) 38%,
+    rgba(255,255,255,.038) 100%) !important;
+}
+.dash-mock{
+  background:linear-gradient(170deg,
+    rgba(255,255,255,.115) 0%,
+    rgba(255,255,255,.05) 38%,
+    rgba(255,255,255,.032) 100%) !important;
+}</style>
 </head>
 <body>
 <div class="bg"></div><div class="grid"></div>
