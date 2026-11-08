@@ -712,7 +712,109 @@ footer{border-top:1px solid transparent;
   background:linear-gradient(180deg,transparent,rgba(255,255,255,.03));
   box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}/* 入场模糊收敛：手机端不用 blur，避免低端机卡在半模糊状态 */
 .reveal{filter:blur(8px)}
-@media(max-width:640px){.reveal{filter:none}}</style>
+@media(max-width:640px){.reveal{filter:none}}/* ============================================================
+   转盘重做：玻璃盘面 + 细分割线 + 玻璃外环 + 玻璃指针
+   （原来 8 种高饱和纯色像儿童玩具，这里收成单色系玻璃）
+   ============================================================ */
+.wheel{
+  background:
+    repeating-conic-gradient(from 0deg,
+      rgba(150,192,255,.20) 0deg 45deg,
+      rgba(255,255,255,.055) 45deg 90deg),
+    radial-gradient(circle at 50% 42%,rgba(255,255,255,.20),rgba(255,255,255,.02) 58%,rgba(90,140,255,.14) 100%) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.30),
+    inset 0 3px 22px rgba(255,255,255,.20),
+    inset 0 -40px 70px -40px rgba(3,8,20,.85),
+    0 0 0 5px rgba(255,255,255,.045),
+    0 0 0 6px rgba(255,255,255,.13),
+    0 34px 90px -34px rgba(70,130,255,.95) !important;
+  -webkit-backdrop-filter:blur(6px) saturate(150%);
+  backdrop-filter:blur(6px) saturate(150%);
+}
+/* 扇区之间的极细亮线（0.5°，靠 45° 周期重复） */
+.wheel::before{
+  content:"";position:absolute;inset:0;border-radius:50%;pointer-events:none;z-index:1;
+  background:repeating-conic-gradient(from -22.5deg,
+    transparent 0deg 44.62deg,rgba(255,255,255,.55) 44.62deg 45deg);
+  opacity:.62;
+  -webkit-mask:radial-gradient(circle,#000 0 97%,transparent 100%);
+  mask:radial-gradient(circle,#000 0 97%,transparent 100%);
+}
+/* 球面高光（保留但更柔） */
+.wheel::after{
+  background:
+    radial-gradient(circle at 34% 20%,rgba(255,255,255,.40),transparent 44%),
+    radial-gradient(circle at 68% 82%,rgba(140,190,255,.16),transparent 52%);
+  opacity:.85;
+}
+/* 扇区文字：每段都正立（相对屏幕），沿半径外圈排布 */
+.wheel .seg span{
+  color:rgba(255,255,255,.97);
+  font-size:11.5px;font-weight:800;letter-spacing:.4px;
+  text-shadow:0 1px 3px rgba(4,10,24,.8);
+  transform-origin:center;
+  white-space:nowrap;
+}
+/* 中心轴：玻璃圆钮 */
+.wheel-hub{
+  width:72px;height:72px;font-size:24px;
+  background:linear-gradient(150deg,rgba(255,255,255,.97),rgba(222,236,255,.88)) !important;
+  border:1px solid rgba(255,255,255,.95) !important;
+  box-shadow:
+    inset 0 2px 6px rgba(255,255,255,1),
+    inset 0 -10px 20px rgba(110,160,255,.30),
+    0 14px 34px -12px rgba(0,0,0,.72) !important;
+  z-index:3;
+}
+/* 指针：CSS 玻璃三角，替换掉 emoji 📍 */
+.wheel-pointer{
+  font-size:0 !important;color:transparent !important;
+  width:0;height:0;top:-16px;left:50%;transform:translateX(-50%);
+  border-left:10px solid transparent;
+  border-right:10px solid transparent;
+  border-top:24px solid rgba(255,255,255,.96);
+  filter:drop-shadow(0 8px 12px rgba(0,0,0,.65));
+  z-index:4;
+}
+.wheel-pointer::after{
+  content:"";position:absolute;left:-10px;top:-24px;
+  border-left:10px solid transparent;border-right:10px solid transparent;
+  border-top:24px solid transparent;
+  background:linear-gradient(180deg,rgba(255,255,255,.9),rgba(180,215,255,.35));
+  -webkit-mask:linear-gradient(#000,#000);
+  opacity:0;
+}
+/* 盘外一层很淡的玻璃反光盘底 */
+.wheel-wrap::before{
+  content:"";position:absolute;inset:-16px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(120,175,255,.16),transparent 68%);
+  filter:blur(18px);
+}
+/* 转盘扇区对比加强：浅蓝玻璃 / 深蓝玻璃交替，仍然低饱和 */
+.wheel{
+  background:
+    repeating-conic-gradient(from -22.5deg,
+      rgba(176,208,255,.30) 0deg 45deg,
+      rgba(16,26,50,.42) 45deg 90deg),
+    radial-gradient(circle at 50% 38%,rgba(255,255,255,.18),rgba(10,16,34,.28) 62%,rgba(60,110,220,.26) 100%) !important;
+}
+/* 扇区文字：白色玻璃标签 */
+.wheel .seg span{
+  font-size:12px;font-weight:800;letter-spacing:.6px;
+  color:rgba(255,255,255,.96);
+  text-shadow:0 1px 4px rgba(3,8,20,.85),0 0 12px rgba(120,170,255,.35);
+}/* 转盘最后一道打磨：扇区带一点冷暖倾向，中心钮再厚一点 */
+.wheel{
+  background:
+    repeating-conic-gradient(from -22.5deg,
+      rgba(158,196,255,.34) 0deg 45deg,
+      rgba(30,40,86,.46) 45deg 90deg),
+    radial-gradient(circle at 50% 36%,rgba(255,255,255,.20),rgba(8,14,34,.30) 60%,rgba(66,112,225,.30) 100%) !important;
+}
+.wheel-hub{width:76px;height:76px;font-size:26px}
+.wheel .seg span{font-size:12.5px}
+.wheel-pointer{border-left-width:11px;border-right-width:11px;border-top-width:26px}</style>
 </head>
 <body>
 <div class="bg"></div><div class="grid"></div>
@@ -1001,8 +1103,8 @@ document.addEventListener('mouseleave',()=>{glow.style.opacity='0';});
 
 /* 转盘（演示） */
 const wheel=document.getElementById('wheel');
-const segs=['1天','高级券','3天','谢谢参与','5天','余额','7天','2天'];
-wheel.innerHTML=segs.map((s,i)=>`<div class="seg" style="transform:rotate(${i*45+22.5}deg)"><span style="transform:translateY(-14px) rotate(90deg)">${s}</span></div>`).join('');
+const segs=['3天','1天','2天','5天','7天','券','余额','无奖'];
+wheel.innerHTML=segs.map((s,i)=>{const a=i*45-45;return `<div class="seg" style="transform:rotate(${a}deg)"><span style="transform:translate(-50%,-102px) rotate(${-a}deg)">${s}</span></div>`;}).join('');
 let spinDeg=0;
 document.getElementById('spinBtn').addEventListener('click',()=>{
   spinDeg+=1440+Math.floor(Math.random()*360);
