@@ -845,7 +845,149 @@ footer{border-top:1px solid transparent;
 .logo .mark svg{width:22px;height:22px;color:#eaf2ff}
 .fcard .ico svg,.sitem .ic svg,.prize .t svg{color:#c9deff}
 .bub svg{color:#7fe0b3}
-.wheel-hub svg{width:26px;height:26px}</style>
+.wheel-hub svg{width:26px;height:26px}/* ============================================================
+   面向客户的提亮版：整体更亮、更通透、更像产品官网，
+   而不是内部管理系统的深色仪表盘
+   ============================================================ */
+:root{
+  --glass:rgba(255,255,255,.145);
+  --glass-2:rgba(255,255,255,.21);
+  --glass-line:rgba(255,255,255,.30);
+  --glass-hi:rgba(255,255,255,.75);
+  --muted:#bccbe4;
+  --text:#f6f8ff;
+}
+/* 底色抬亮一档，顶部更亮、底部收深，像有自然光源 */
+.bg{
+  background:
+    radial-gradient(1500px 980px at 50% -18%,#1b2f5e 0%,rgba(15,26,52,0) 62%),
+    linear-gradient(158deg,#0d1730 0%,#152447 32%,#17275a 56%,#101a38 80%,#0b1226 100%);
+}
+.bg::before{
+  background:
+    radial-gradient(980px 700px at 78% 4%,rgba(96,170,255,.42),transparent 62%),
+    radial-gradient(820px 620px at 8% 22%,rgba(86,140,255,.38),transparent 64%),
+    radial-gradient(760px 600px at 94% 56%,rgba(150,160,255,.32),transparent 66%),
+    radial-gradient(720px 560px at 22% 84%,rgba(70,205,205,.22),transparent 68%),
+    radial-gradient(620px 480px at 62% 112%,rgba(110,160,255,.28),transparent 70%);
+}
+.grid{opacity:.18}
+/* 区块呼吸更紧凑，长页面不至于一片黑 */
+section{padding:84px 0}
+.sec-head p{color:var(--muted)}
+
+/* 首屏：标题更亮、按钮更醒目 */
+.hero h1{text-shadow:0 20px 60px rgba(20,60,140,.45)}
+.grad-text{
+  background:linear-gradient(112deg,#cfe2ff 6%,#8ed3ff 44%,#c3ccff 84%);
+  -webkit-background-clip:text;background-clip:text;
+  filter:drop-shadow(0 8px 30px rgba(120,190,255,.45));
+}
+.btn.primary{
+  background:linear-gradient(145deg,#5ba0ff,#3fc6ff);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.65),0 18px 42px -14px rgba(80,170,255,.95);
+}
+
+/* 首屏演示卡：玻璃更透亮 */
+.mock-card{
+  background:linear-gradient(170deg,
+    rgba(255,255,255,.20) 0%,
+    rgba(255,255,255,.085) 38%,
+    rgba(255,255,255,.055) 100%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.7),
+    inset 0 -1px 0 rgba(255,255,255,.12),
+    0 44px 110px -40px rgba(4,10,26,.9),
+    0 0 0 1px rgba(255,255,255,.06);
+}
+
+/* 运营后台演示：做成"产品截图"而不是深色控制台 */
+.dash-mock{
+  background:linear-gradient(170deg,
+    rgba(255,255,255,.19) 0%,
+    rgba(255,255,255,.085) 42%,
+    rgba(255,255,255,.06) 100%) !important;
+  border-radius:30px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.72),
+    0 46px 110px -44px rgba(4,10,26,.92),
+    0 0 0 1px rgba(255,255,255,.07);
+}
+.dash-top{border-bottom:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.05)}
+.dash-side{border-right:1px solid rgba(255,255,255,.13);background:rgba(255,255,255,.035)}
+.dash-side span{color:#c3d2ea}
+.dash-side span.on{
+  background:linear-gradient(140deg,rgba(110,170,255,.75),rgba(90,200,255,.45));
+  border-color:rgba(255,255,255,.42);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 8px 20px -10px rgba(70,150,255,.9);
+}
+.dstat{background:rgba(255,255,255,.115);border:1px solid rgba(255,255,255,.20)}
+.dstat b{background:linear-gradient(140deg,#dfeaff,#8fd2ff);-webkit-background-clip:text;background-clip:text}
+.dash-chart i{background:linear-gradient(180deg,#dbe9ff,rgba(120,190,255,.65));box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
+.dash-row{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);color:#c8d6ee}
+.dash-row b.t{background:rgba(52,211,153,.22);color:#8fe8c0}
+
+/* 左侧功能清单：更亮、更像卖点 */
+.sitem{background:rgba(255,255,255,.115)}
+.sitem b{color:#fff}
+.sitem p{color:#c2d0e8}
+
+/* 功能卡、评价卡、套餐卡统一提亮 */
+.fcard,.tcard,.plan,.step-card,.prize,.faq details,.compare{
+  background:rgba(255,255,255,.115);
+}
+.fcard p,.tcard p{color:#c3d1e9}
+.plan h3{color:#c9d6ee}
+.plan ul{color:#c3d1e9}
+.plan .price{background:linear-gradient(140deg,#e6efff,#8fd2ff);-webkit-background-clip:text;background-clip:text}
+
+/* 跑马灯：更明显地连成一条光带 */
+.marquee{background:linear-gradient(90deg,transparent,rgba(120,180,255,.14),transparent)}
+.marquee span{color:#b9cae6}
+
+/* 结尾 CTA：更亮 */
+.cta-band{
+  background:linear-gradient(150deg,rgba(120,180,255,.34),rgba(255,255,255,.10));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.62),0 44px 100px -44px rgba(70,150,255,.85);
+}
+footer{color:#a9b8d2}/* ============================================================
+   「运营后台」演示改成浅色产品截图：官网展示的是站长自己的后台（浅色），
+   深色仪表盘放在面向客户的页面上太像内部工具
+   ============================================================ */
+.dash-mock{
+  background:linear-gradient(170deg,#ffffff 0%,#f3f7ff 45%,#e9f0ff 100%) !important;
+  border:1px solid rgba(255,255,255,.92) !important;
+  color:#1c2b47;
+  box-shadow:
+    0 46px 110px -42px rgba(4,10,26,.9),
+    0 0 0 1px rgba(140,180,255,.22),
+    inset 0 1px 0 #fff !important;
+}
+.dash-top{background:rgba(255,255,255,.72);border-bottom:1px solid rgba(24,44,84,.09)}
+.dash-top span{color:#65789a}
+.dash-side{background:rgba(244,248,255,.86);border-right:1px solid rgba(24,44,84,.09)}
+.dash-side span{color:#5c6e8d}
+.dash-side span.on{
+  background:linear-gradient(140deg,#5ba0ff,#3fc6ff);color:#fff;
+  border-color:rgba(255,255,255,.8);
+  box-shadow:0 10px 22px -10px rgba(60,150,255,.85),inset 0 1px 0 rgba(255,255,255,.8);
+}
+.dash-side span svg{color:currentColor !important}
+.dash-main{background:linear-gradient(180deg,rgba(255,255,255,.45),rgba(238,245,255,.55))}
+.dstat{
+  background:#fff;border:1px solid rgba(24,44,84,.09);
+  box-shadow:0 8px 20px -14px rgba(20,50,110,.45) !important;
+}
+.dstat b{background:linear-gradient(140deg,#2f74e0,#22a8e0);-webkit-background-clip:text;background-clip:text;color:transparent}
+.dstat span{color:#6d7e9c}
+.dash-chart i{background:linear-gradient(180deg,#a8cdff,#4a9bff) !important;box-shadow:inset 0 1px 0 rgba(255,255,255,.9) !important}
+.dash-row{
+  background:#fff;border:1px solid rgba(24,44,84,.09);
+  color:#4b5d7a;box-shadow:0 6px 16px -12px rgba(20,50,110,.4) !important;
+}
+.dash-row b{color:#1e2f4b}
+.dash-row b.t{background:rgba(34,197,120,.15);color:#0f8b58}
+.dash-row span svg{color:currentColor !important}</style>
 </head>
 <body>
 
