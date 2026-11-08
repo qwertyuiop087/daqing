@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.68"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.69"))
 
 
 settings = Settings()
@@ -96,6 +96,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.69",
+        [
+            "修掉「整站没有动画」：系统开了减弱动态效果时，之前那条规则把全部动画压成了 0.001ms",
+            "新增动效：卡片玻璃折射高光跟随鼠标、按钮扫光、徽章与中奖条流动高光",
+            "新增动效：热门套餐旋转流光边、顶部滚动光带、背景网格漂移、后台数字滚动",
+        ],
+    ),
     (
         "2026-10-28.68",
         [
