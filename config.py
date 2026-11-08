@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.72"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.73"))
 
 
 settings = Settings()
@@ -96,6 +96,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.73",
+        [
+            "全站 emoji 换成内联 SVG 线性图标（26 个），风格统一、随主题色变化",
+            "抽奖转盘中心、奖品卡、后台演示列表、通知浮层同步换图标",
+            "后台自定义 logo 图标仍可作文字显示，不影响原有配置",
+        ],
+    ),
     (
         "2026-10-28.72",
         [
