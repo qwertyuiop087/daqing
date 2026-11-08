@@ -1148,7 +1148,11 @@ nav.scrolled .btn{background:transparent !important;border-color:rgba(200,225,25
 .btn.primary.glow{animation:none !important}
 nav .btn.primary,nav.scrolled .btn{background:transparent !important;border-color:rgba(255,255,255,.55) !important}
 /* 顺带把顶部小标签也做透明 */
-.badge{background:transparent !important;border-color:rgba(255,255,255,.28) !important}</style>
+.badge{background:transparent !important;border-color:rgba(255,255,255,.28) !important}
+/* 价值承诺卡：4 列，手机上单列（复用 .fcard 的玻璃样式） */
+#promise .features{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+
+</style>
 </head>
 <body>
 
@@ -1260,42 +1264,18 @@ nav .btn.primary,nav.scrolled .btn{background:transparent !important;border-colo
   </div>
 </section>
 
-<section id="showcase">
+<section id="promise">
   <div class="wrap">
     <div class="sec-head reveal">
-      <span class="kicker">Admin Panel</span>
-      <h2>运营后台，一切尽在掌握</h2>
-      <p>抽奖奖品、会员套餐、洗数据定价、成员管理…… 网页后台随时改，机器人立即生效。</p>
+      <span class="kicker">Why us</span>
+      <h2>麻烦事交给我们，你只管拿结果</h2>
+      <p>不用装软件、不用学复杂工具，在 Telegram 里发个文件就完事。</p>
     </div>
-    <div class="showcase-grid">
-      <div class="showcase-list">
-        <div class="sitem reveal"><span class="ic"><svg class="ii" aria-hidden="true"><use href="#i-ticket"/></svg></span><div><b>抽奖奖品与概率</b><p>普通/高级奖池、兑换价目表，改完即生效。</p></div></div>
-        <div class="sitem reveal" style="--d:.08s"><span class="ic"><svg class="ii" aria-hidden="true"><use href="#i-gem"/></svg></span><div><b>套餐与欢迎语</b><p>会员套餐价格、欢迎语随时调整。</p></div></div>
-        <div class="sitem reveal" style="--d:.16s"><span class="ic"><svg class="ii" aria-hidden="true"><use href="#i-users"/></svg></span><div><b>成员天数与余额</b><p>搜索成员，一键加扣会员天数、洗数据余额。</p></div></div>
-        <div class="sitem reveal" style="--d:.24s"><span class="ic"><svg class="ii" aria-hidden="true"><use href="#i-chart"/></svg></span><div><b>数据与抽奖记录</b><p>用户数、会员数、抽奖记录一目了然。</p></div></div>
-      </div>
-      <div class="dash-mock reveal">
-        <div class="dash-top"><i></i><i></i><i></i><span>运营后台 · 数据概览</span></div>
-        <div class="dash-body">
-          <div class="dash-side">
-            <span class="on"><svg class="ii" aria-hidden="true"><use href="#i-chart"/></svg> 概览</span>
-            <span><svg class="ii" aria-hidden="true"><use href="#i-users"/></svg> 成员管理</span>
-            <span><svg class="ii" aria-hidden="true"><use href="#i-ticket"/></svg> 抽奖设置</span>
-            <span><svg class="ii" aria-hidden="true"><use href="#i-gem"/></svg> 会员设置</span>
-            <span><svg class="ii" aria-hidden="true"><use href="#i-drop"/></svg> 洗数据</span>
-          </div>
-          <div class="dash-main">
-            <div class="dash-stats">
-              <div class="dstat"><b>1,286</b><span>注册用户</span></div>
-              <div class="dstat"><b>862</b><span>有效会员</span></div>
-              <div class="dstat"><b>154</b><span>今日抽奖</span></div>
-            </div>
-            <div class="dash-chart"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-            <div class="dash-row"><span><svg class="ii" aria-hidden="true"><use href="#i-sparkle"/></svg> 王*二 抽中 3 天会员</span><b class="t">已到账</b></div>
-            <div class="dash-row"><span><svg class="ii" aria-hidden="true"><use href="#i-wallet"/></svg> 李* 充值 ¥50 洗数据余额</span><b class="t">已到账</b></div>
-          </div>
-        </div>
-      </div>
+    <div class="features">
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-bolt"/></svg></span><h3>秒级处理</h3><p>十几万行的文件几分钟出结果，不用守着电脑等。</p></div>
+      <div class="fcard reveal" style="--d:.08s"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-send"/></svg></span><h3>结果自动回传</h3><p>处理完直接发回你的聊天；万一半路断了，也会自动补发。</p></div>
+      <div class="fcard reveal" style="--d:.16s"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-wallet"/></svg></span><h3>洗数据按行计费</h3><p>行数越多单价越低，抽奖赢的余额也能直接抵扣。</p></div>
+      <div class="fcard reveal" style="--d:.24s"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-check"/></svg></span><h3>数据不留存</h3><p>文件只用于本次处理，结束后临时文件自动清理。</p></div>
     </div>
   </div>
 </section>
