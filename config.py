@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.71"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.72"))
 
 
 settings = Settings()
@@ -96,6 +96,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.72",
+        [
+            "抽奖转盘重做：玻璃盘面 + 细亮分割线 + 玻璃外环 + 玻璃三角指针，去掉彩虹色",
+            "扇区文字改成每段正立、沿外圈均匀排布，不再歪着读",
+            "指针正好指着一个扇区中线，中心钮换成厚玻璃圆钮",
+        ],
+    ),
     (
         "2026-10-28.71",
         [
