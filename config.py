@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.69"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.70"))
 
 
 settings = Settings()
@@ -96,6 +96,13 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.70",
+        [
+            "去掉英雄区那层矩形「淡蓝幕」：模糊光斑被裁成直边、卡片径向渐变有台阶",
+            "演示卡与后台卡背景改为平滑线性玻璃渐变，不再出现直边亮块",
+        ],
+    ),
     (
         "2026-10-28.69",
         [
