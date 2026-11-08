@@ -767,7 +767,7 @@ footer{border-top:1px solid transparent;
     0 14px 34px -12px rgba(0,0,0,.72) !important;
   z-index:3;
 }
-/* 指针：CSS 玻璃三角，替换掉 emoji 📍 */
+/* 指针：CSS 玻璃三角（不用 emoji） */
 .wheel-pointer{
   font-size:0 !important;color:transparent !important;
   width:0;height:0;top:-16px;left:50%;transform:translateX(-50%);
@@ -814,20 +814,80 @@ footer{border-top:1px solid transparent;
 }
 .wheel-hub{width:76px;height:76px;font-size:26px}
 .wheel .seg span{font-size:12.5px}
-.wheel-pointer{border-left-width:11px;border-right-width:11px;border-top-width:26px}</style>
+.wheel-pointer{border-left-width:11px;border-right-width:11px;border-top-width:26px}
+/* ---------------- 线性图标（替换掉全部 emoji） ---------------- */
+.ii,.ico svg,.ic svg,.t svg,.av svg,.mark svg,.mini .ic svg,.toast .ico svg,
+.bub svg,.win-chip svg,.dash-side span svg,.dash-row span svg,.btn svg{
+  fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
+}
+.ii{width:1em;height:1em;display:inline-block;vertical-align:-.14em}
+.mark svg{width:20px;height:20px;color:#e2ecff}
+.mock-card .head .av svg{width:22px;height:22px;color:#dbe8ff}
+.fcard .ico svg{width:22px;height:22px;color:#cfe1ff}
+.sitem .ic svg{width:22px;height:22px;color:#cfe1ff}
+.prize .t svg{width:22px;height:22px;color:#d6e6ff}
+.mini .ic svg{width:16px;height:16px;color:#bcd6ff}
+.btn svg{width:16px;height:16px;color:currentColor}
+.bub svg{width:15px;height:15px;margin-right:5px;vertical-align:-3px;color:#8fe0c0}
+.win-chip svg{width:16px;height:16px;margin-right:6px;vertical-align:-3px;color:#b9d4ff}
+.dash-side span svg{width:14px;height:14px;margin-right:6px;vertical-align:-2px;color:#bcd3ff}
+.dash-row span svg{width:14px;height:14px;margin-right:6px;vertical-align:-2px;color:#bcd3ff}
+.wheel-hub svg{width:30px;height:30px;color:#2b4066}
+.toast .ico svg{width:22px;height:22px;color:#a9c8ff}
+/* 容器里原来的 emoji 字号不再需要 */
+.fcard .ico,.sitem .ic,.prize .t,.mini .ic,.logo .mark,.mock-card .head .av{font-size:0}
+.fcard .ico,.sitem .ic,.prize .t,.mini .ic{line-height:0}
+
+/* 后台自定义的 logo 图标仍可作为文字显示 */
+.logo .mark.has-text{font-size:16px;color:#e6efff;font-weight:800}
+.logo .mark.has-text svg{display:none}
+.bub svg{color:#a9dcff}/* 图标细节微调 */
+.logo .mark svg{width:22px;height:22px;color:#eaf2ff}
+.fcard .ico svg,.sitem .ic svg,.prize .t svg{color:#c9deff}
+.bub svg{color:#7fe0b3}
+.wheel-hub svg{width:26px;height:26px}</style>
 </head>
 <body>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="i-logo" viewBox="0 0 24 24"><path d="M12 2.8l8 4.6v9.2l-8 4.6-8-4.6V7.4z"/><path d="M12 8.2l4 2.3v4.6l-4 2.3-4-2.3v-4.6z"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M20.5 3.5 3.8 10.2l6.3 2.6 2.6 6.3z"/><path d="M20.5 3.5 10.1 12.8"/></symbol>
+  <symbol id="i-cut" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="M8.2 7.5 20 18M8.2 16.5 20 6"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></symbol>
+  <symbol id="i-rename" viewBox="0 0 24 24"><path d="M4 20h4l9-9a2.1 2.1 0 0 0-3-3l-9 9z"/><path d="M13.5 6.5l4 4"/></symbol>
+  <symbol id="i-contact" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="11" r="2.2"/><path d="M6 17c.6-1.8 1.7-2.6 3-2.6s2.4.8 3 2.6"/><path d="M15 10h4M15 14h3"/></symbol>
+  <symbol id="i-dedupe" viewBox="0 0 24 24"><rect x="3" y="3" width="12" height="12" rx="2.5"/><rect x="9" y="9" width="12" height="12" rx="2.5" opacity=".6"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2.5" width="12" height="19" rx="3"/><path d="M10 5.5h4"/><path d="M12 18.2h.01"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.4 2.5 3.6 5.3 3.6 8.5s-1.2 6-3.6 8.5c-2.4-2.5-3.6-5.3-3.6-8.5S9.6 6 12 3.5z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20z"/><path d="M9 4v13.5M15 6.5V20"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+  <symbol id="i-merge" viewBox="0 0 24 24"><path d="M12 3.5v7.5"/><path d="M8.5 7.5 12 11l3.5-3.5"/><rect x="3.5" y="14.5" width="17" height="6" rx="2.5"/><path d="M7.5 17.5h9"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/></symbol>
+  <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5V20M15 9.5V20"/></symbol>
+  <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3.5c3.2 3.7 5.2 6.5 5.2 9a5.2 5.2 0 1 1-10.4 0c0-2.5 2-5.3 5.2-9z"/><path d="M9.6 13.6c.3 1.6 1.3 2.4 2.6 2.4"/></symbol>
+  <symbol id="i-ticket" viewBox="0 0 24 24"><path d="M3 8.5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1.4a2.6 2.6 0 0 0 0 5.2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1.9a2.6 2.6 0 0 0 0-5.2z"/><path d="M12 8v8" stroke-dasharray="2 2.6"/></symbol>
+  <symbol id="i-gem" viewBox="0 0 24 24"><path d="M7 3.5h10l3.5 5.2L12 20.5 3.5 8.7z"/><path d="M3.5 8.7h17M9 8.7 12 20.5l3-11.8"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2.5 5.5 13.5H11l-1 8 8-11.5h-5.5z"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c.9-3.2 3-4.8 5.5-4.8s4.6 1.6 5.5 4.8"/><path d="M16 6.2a3 3 0 0 1 0 5.8"/><path d="M17.5 14.6c2 .6 3.2 2.1 3.8 4.4"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4.5 20V10M10 20V4.5M15.5 20v-6.5M21 20V7.5"/><path d="M3 20h18"/></symbol>
+  <symbol id="i-crown" viewBox="0 0 24 24"><path d="M3.5 8.5l4 3.5 4.5-6 4.5 6 4-3.5-1.5 10.5h-14z"/><path d="M6 19.5h12"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18"/><circle cx="16.5" cy="14.5" r="1.3"/></symbol>
+  <symbol id="i-gift" viewBox="0 0 24 24"><rect x="3.5" y="9" width="17" height="11" rx="2"/><path d="M3.5 13h17M12 9v11"/><path d="M12 9C10.5 5.5 8 4.5 7 5.6S7.2 9 12 9zM12 9c1.5-3.5 4-4.5 5-3.4S16.8 9 12 9z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5l4.5 4.5 10.5-10.5"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M11 3.5l1.6 4.6 4.6 1.6-4.6 1.6L11 15.9 9.4 11.3 4.8 9.7l4.6-1.6z"/><path d="M18 14.5l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></symbol>
+</svg>
+
 <div class="bg"></div><div class="grid"></div>
 <div class="orb v"></div><div class="orb c"></div>
 <div class="cursor-glow" id="cursorGlow"></div>
 
 <nav id="nav">
   <div class="wrap">
-    <a class="logo" href="#"><span class="mark" id="logoIcon">🃏</span><span id="brandText">错落雨</span><em id="logoSuffix"> CUOLUOYU</em></a>
+    <a class="logo" href="#"><span class="mark" id="logoIcon"><svg class="ii" aria-hidden="true"><use href="#i-logo"/></svg></span><span id="brandText">错落雨</span><em id="logoSuffix"> CUOLUOYU</em></a>
     <div class="nav-links">
       <a href="#features">功能</a><a href="#lottery">抽奖系统</a><a href="#plans">会员套餐</a><a href="#faq">常见问题</a>
     </div>
-    <a class="btn primary bot-link" href="https://t.me/sechou_bot" target="_blank" rel="noopener">✈️ 打开机器人</a>
+    <a class="btn primary bot-link" href="https://t.me/sechou_bot" target="_blank" rel="noopener"><svg class="ii" aria-hidden="true"><use href="#i-send"/></svg> 打开机器人</a>
   </div>
 </nav>
 
@@ -837,7 +897,7 @@ footer{border-top:1px solid transparent;
     <h1>号码数据处理<br>一站式的 <span class="grad-text" id="heroHighlight">错落雨分包机器人</span></h1>
     <p class="sub" id="heroSubtitle">文件切割、号码去重、空号检测、催收分包、洗数据…… 上传即处理，结果秒回。内置抽奖系统与会员体系，运营一步到位。</p>
     <div class="cta">
-      <a class="btn primary glow bot-link" href="https://t.me/sechou_bot" target="_blank" rel="noopener">✈️ 立即开始使用</a>
+      <a class="btn primary glow bot-link" href="https://t.me/sechou_bot" target="_blank" rel="noopener"><svg class="ii" aria-hidden="true"><use href="#i-send"/></svg> 立即开始使用</a>
       <a class="btn ghost" href="#features">浏览全部功能 ↓</a>
     </div>
     <p class="note">联系<span class="c1label">错落雨</span> <a class="contact1" href="https://t.me/mmmg" target="_blank" rel="noopener">@mmmmg</a> · <span class="c2label">客服</span> <a class="contact2" href="https://t.me/kefu686" target="_blank" rel="noopener">@kefu686</a></p>
@@ -848,17 +908,17 @@ footer{border-top:1px solid transparent;
       <div class="aurora"><i></i><i></i><i></i></div>
       <div class="mock-card">
         <div class="head">
-          <span class="av">🃏</span>
+          <span class="av"><svg class="ii" aria-hidden="true"><use href="#i-logo"/></svg></span>
           <div><b id="mockName">错落雨分包机器人</b><span id="mockStatus">● 在线 · 秒级响应</span></div>
         </div>
         <div class="msg me"><div class="bub">文件切割</div></div>
-        <div class="msg bot"><div class="bub">✅ 已切割 12 份，开始发送…</div></div>
+        <div class="msg bot"><div class="bub"><svg class="ii" aria-hidden="true"><use href="#i-check"/></svg> 已切割 12 份，开始发送…</div></div>
         <div class="msg me"><div class="bub">抽奖</div></div>
-        <div class="win-chip">🎰 恭喜抽中 <b>3 天会员</b>，已自动到账 ✨</div>
-        <div class="msg bot"><div class="bub">💎 会员有效期已累加，感谢使用～</div></div>
+        <div class="win-chip"><svg class="ii" aria-hidden="true"><use href="#i-ticket"/></svg> 恭喜抽中 <b>3 天会员</b>，已自动到账</div>
+        <div class="msg bot"><div class="bub"><svg class="ii" aria-hidden="true"><use href="#i-gem"/></svg> 会员有效期已累加，感谢使用～</div></div>
       </div>
-      <div class="mini m1"><span class="ic">🎡</span> <span id="mockChip1">转盘抽奖</span></div>
-      <div class="mini m2"><span class="ic">⚡</span> <span id="mockChip2">秒级处理</span></div>
+      <div class="mini m1"><span class="ic"><svg class="ii" aria-hidden="true"><use href="#i-ticket"/></svg></span> <span id="mockChip1">转盘抽奖</span></div>
+      <div class="mini m2"><span class="ic"><svg class="ii" aria-hidden="true"><use href="#i-bolt"/></svg></span> <span id="mockChip2">秒级处理</span></div>
     </div>
   </div>
 </header>
@@ -878,21 +938,21 @@ footer{border-top:1px solid transparent;
       <p>从原始数据到交付格式，每一步都有对应的自动化工具。</p>
     </div>
     <div class="features">
-      <div class="fcard reveal"><span class="ico">✂️</span><h3>文件切割</h3><p>按行数切割 TXT，可选随机插入手机号并输出插入报告。</p></div>
-      <div class="fcard reveal"><span class="ico">🗜️</span><h3>解压提取</h3><p>ZIP 安全解压，自动提取其中全部 TXT。</p></div>
-      <div class="fcard reveal"><span class="ico">✏️</span><h3>批量重命名</h3><p>多文件统一前缀重命名。</p></div>
-      <div class="fcard reveal"><span class="ico">📇</span><h3>号码转 VCF</h3><p>号码列表一键转通讯录文件。</p></div>
-      <div class="fcard reveal"><span class="ico">🔄</span><h3>号码去重</h3><p>按纯数字智能去重，忽略空格/横杠/括号。</p></div>
-      <div class="fcard reveal"><span class="ico">📱</span><h3>提取手机号</h3><p>从 TXT / Excel 批量提取 11 位手机号。</p></div>
-      <div class="fcard reveal"><span class="ico">🇨🇳</span><h3>加区号</h3><p>批量补充 +86，自动跳过已有区号。</p></div>
-      <div class="fcard reveal"><span class="ico">🗺️</span><h3>号码分类</h3><p>51 万号段库，按运营商 / 省份 / 城市分组。</p></div>
-      <div class="fcard reveal"><span class="ico">🔍</span><h3>空号检测</h3><p>批量检测活跃号 / 空号 / 沉默号。</p></div>
-      <div class="fcard reveal"><span class="ico">📚</span><h3>合并文本</h3><p>多文件一键合并，导出文件名自定义。</p></div>
-      <div class="fcard reveal"><span class="ico">📋</span><h3>催收分包</h3><p>自动识别字段，按指定顺序重排。</p></div>
-      <div class="fcard reveal"><span class="ico">📊</span><h3>Excel 转 TXT</h3><p>内容原样保真转换。</p></div>
-      <div class="fcard reveal"><span class="ico">🧼</span><h3>洗数据</h3><p>按行计费的专业清洗，自动回传。</p></div>
-      <div class="fcard reveal"><span class="ico">🎰</span><h3>抽奖系统</h3><p>每日抽奖 + 高级抽奖 + 奖品兑换。</p></div>
-      <div class="fcard reveal"><span class="ico">💎</span><h3>会员体系</h3><p>卡密兑换 + USDT 购买。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-cut"/></svg></span><h3>文件切割</h3><p>按行数切割 TXT，可选随机插入手机号并输出插入报告。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-archive"/></svg></span><h3>解压提取</h3><p>ZIP 安全解压，自动提取其中全部 TXT。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-rename"/></svg></span><h3>批量重命名</h3><p>多文件统一前缀重命名。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-contact"/></svg></span><h3>号码转 VCF</h3><p>号码列表一键转通讯录文件。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-dedupe"/></svg></span><h3>号码去重</h3><p>按纯数字智能去重，忽略空格/横杠/括号。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-phone"/></svg></span><h3>提取手机号</h3><p>从 TXT / Excel 批量提取 11 位手机号。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-globe"/></svg></span><h3>加区号</h3><p>批量补充 +86，自动跳过已有区号。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-map"/></svg></span><h3>号码分类</h3><p>51 万号段库，按运营商 / 省份 / 城市分组。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-search"/></svg></span><h3>空号检测</h3><p>批量检测活跃号 / 空号 / 沉默号。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-merge"/></svg></span><h3>合并文本</h3><p>多文件一键合并，导出文件名自定义。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-list"/></svg></span><h3>催收分包</h3><p>自动识别字段，按指定顺序重排。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-sheet"/></svg></span><h3>Excel 转 TXT</h3><p>内容原样保真转换。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-drop"/></svg></span><h3>洗数据</h3><p>按行计费的专业清洗，自动回传。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-ticket"/></svg></span><h3>抽奖系统</h3><p>每日抽奖 + 高级抽奖 + 奖品兑换。</p></div>
+      <div class="fcard reveal"><span class="ico"><svg class="ii" aria-hidden="true"><use href="#i-gem"/></svg></span><h3>会员体系</h3><p>卡密兑换 + USDT 购买。</p></div>
     </div>
   </div>
 </section>
@@ -906,20 +966,20 @@ footer{border-top:1px solid transparent;
     </div>
     <div class="showcase-grid">
       <div class="showcase-list">
-        <div class="sitem reveal"><span class="ic">🎰</span><div><b>抽奖奖品与概率</b><p>普通/高级奖池、兑换价目表，改完即生效。</p></div></div>
-        <div class="sitem reveal" style="--d:.08s"><span class="ic">💎</span><div><b>套餐与欢迎语</b><p>会员套餐价格、欢迎语随时调整。</p></div></div>
-        <div class="sitem reveal" style="--d:.16s"><span class="ic">👥</span><div><b>成员天数与余额</b><p>搜索成员，一键加扣会员天数、洗数据余额。</p></div></div>
-        <div class="sitem reveal" style="--d:.24s"><span class="ic">📊</span><div><b>数据与抽奖记录</b><p>用户数、会员数、抽奖记录一目了然。</p></div></div>
+        <div class="sitem reveal"><span class="ic"><svg class="ii" aria-hidden="true"><use href="#i-ticket"/></svg></span><div><b>抽奖奖品与概率</b><p>普通/高级奖池、兑换价目表，改完即生效。</p></div></div>
+        <div class="sitem reveal" style="--d:.08s"><span class="ic"><svg class="ii" aria-hidden="true"><use href="#i-gem"/></svg></span><div><b>套餐与欢迎语</b><p>会员套餐价格、欢迎语随时调整。</p></div></div>
+        <div class="sitem reveal" style="--d:.16s"><span class="ic"><svg class="ii" aria-hidden="true"><use href="#i-users"/></svg></span><div><b>成员天数与余额</b><p>搜索成员，一键加扣会员天数、洗数据余额。</p></div></div>
+        <div class="sitem reveal" style="--d:.24s"><span class="ic"><svg class="ii" aria-hidden="true"><use href="#i-chart"/></svg></span><div><b>数据与抽奖记录</b><p>用户数、会员数、抽奖记录一目了然。</p></div></div>
       </div>
       <div class="dash-mock reveal">
         <div class="dash-top"><i></i><i></i><i></i><span>运营后台 · 数据概览</span></div>
         <div class="dash-body">
           <div class="dash-side">
-            <span class="on">📊 概览</span>
-            <span>👥 成员管理</span>
-            <span>🎰 抽奖设置</span>
-            <span>💎 会员设置</span>
-            <span>🧼 洗数据</span>
+            <span class="on"><svg class="ii" aria-hidden="true"><use href="#i-chart"/></svg> 概览</span>
+            <span><svg class="ii" aria-hidden="true"><use href="#i-users"/></svg> 成员管理</span>
+            <span><svg class="ii" aria-hidden="true"><use href="#i-ticket"/></svg> 抽奖设置</span>
+            <span><svg class="ii" aria-hidden="true"><use href="#i-gem"/></svg> 会员设置</span>
+            <span><svg class="ii" aria-hidden="true"><use href="#i-drop"/></svg> 洗数据</span>
           </div>
           <div class="dash-main">
             <div class="dash-stats">
@@ -928,8 +988,8 @@ footer{border-top:1px solid transparent;
               <div class="dstat"><b>154</b><span>今日抽奖</span></div>
             </div>
             <div class="dash-chart"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-            <div class="dash-row"><span>🎉 王*二 抽中 3 天会员</span><b class="t">已到账</b></div>
-            <div class="dash-row"><span>💰 李* 充值 ¥50 洗数据余额</span><b class="t">已到账</b></div>
+            <div class="dash-row"><span><svg class="ii" aria-hidden="true"><use href="#i-sparkle"/></svg> 王*二 抽中 3 天会员</span><b class="t">已到账</b></div>
+            <div class="dash-row"><span><svg class="ii" aria-hidden="true"><use href="#i-wallet"/></svg> 李* 充值 ¥50 洗数据余额</span><b class="t">已到账</b></div>
           </div>
         </div>
       </div>
@@ -947,16 +1007,16 @@ footer{border-top:1px solid transparent;
     <div class="lottery-grid">
       <div class="wheel-box reveal">
         <div class="wheel-wrap">
-          <div class="wheel-pointer">📍</div>
+          <div class="wheel-pointer"></div>
           <div class="wheel" id="wheel"></div>
-          <div class="wheel-hub">🎰</div>
+          <div class="wheel-hub"><svg class="ii" aria-hidden="true"><use href="#i-sparkle"/></svg></div>
         </div>
-        <a class="btn primary" id="spinBtn" href="javascript:void(0)">🎡 试一下手气（演示）</a>
+        <a class="btn primary" id="spinBtn" href="javascript:void(0)"><svg class="ii" aria-hidden="true"><use href="#i-sparkle"/></svg> 试一下手气（演示）</a>
         <div class="prize-cards">
-          <div class="prize"><span class="t">🎫</span><div><b>高级抽奖券</b><span>普通抽奖掉落</span></div></div>
-          <div class="prize"><span class="t">👑</span><div><b>会员天数</b><span>1 ~ 365 天</span></div></div>
-          <div class="prize"><span class="t">💰</span><div><b>洗数据余额</b><span>直接到账</span></div></div>
-          <div class="prize"><span class="t">🛍️</span><div><b>奖品兑换</b><span>券换固定奖品</span></div></div>
+          <div class="prize"><span class="t"><svg class="ii" aria-hidden="true"><use href="#i-ticket"/></svg></span><div><b>高级抽奖券</b><span>普通抽奖掉落</span></div></div>
+          <div class="prize"><span class="t"><svg class="ii" aria-hidden="true"><use href="#i-crown"/></svg></span><div><b>会员天数</b><span>1 ~ 365 天</span></div></div>
+          <div class="prize"><span class="t"><svg class="ii" aria-hidden="true"><use href="#i-wallet"/></svg></span><div><b>洗数据余额</b><span>直接到账</span></div></div>
+          <div class="prize"><span class="t"><svg class="ii" aria-hidden="true"><use href="#i-gift"/></svg></span><div><b>奖品兑换</b><span>券换固定奖品</span></div></div>
         </div>
       </div>
       <div class="lottery-info reveal">
@@ -964,7 +1024,7 @@ footer{border-top:1px solid transparent;
         <div class="step"><div class="n">1</div><div><b>普通抽奖 · 每日一次</b><p>会员每天可抽一次，奖品池概率由后台配置，中奖直接到账。</p></div></div>
         <div class="step"><div class="n">2</div><div><b>高级抽奖 · 更大奖池</b><p>抽中「高级券」解锁高级抽奖，30 天、90 天、365 天会员等你开。</p></div></div>
         <div class="step"><div class="n">3</div><div><b>直接兑换 · 不靠运气</b><p>不想赌？用高级券按后台价目表直接兑换固定奖品。</p></div></div>
-        <a class="btn primary bot-link" href="https://t.me/sechou_bot" target="_blank" rel="noopener">🎰 去机器人里抽一次</a>
+        <a class="btn primary bot-link" href="https://t.me/sechou_bot" target="_blank" rel="noopener"><svg class="ii" aria-hidden="true"><use href="#i-ticket"/></svg> 去机器人里抽一次</a>
       </div>
     </div>
   </div>
@@ -1055,9 +1115,9 @@ footer{border-top:1px solid transparent;
 <section>
   <div class="wrap">
     <div class="cta-band reveal">
-      <h2>现在就试试你的手气 🎰</h2>
+      <h2>现在就试试你的手气</h2>
       <p>打开机器人，每天一次抽奖，会员天数、高级券等你拿。</p>
-      <a class="btn primary glow bot-link" href="https://t.me/sechou_bot" target="_blank" rel="noopener">✈️ 打开 @sechou_bot</a>
+      <a class="btn primary glow bot-link" href="https://t.me/sechou_bot" target="_blank" rel="noopener"><svg class="ii" aria-hidden="true"><use href="#i-send"/></svg> 打开 @sechou_bot</a>
       <p style="margin-top:22px;font-size:14px;color:var(--muted)">联系<span class="c1label">错落雨</span> <a class="contact1" href="https://t.me/mmmg" target="_blank" rel="noopener">@mmmmg</a> · <span class="c2label">客服</span> <a class="contact2" href="https://t.me/kefu686" target="_blank" rel="noopener">@kefu686</a></p>
     </div>
   </div>
@@ -1113,7 +1173,7 @@ document.getElementById('spinBtn').addEventListener('click',()=>{
 
 /* 中奖通知流：优先读真实数据 */
 let SITE_CFG={};
-const demoFeed=[['🎉','@chen**','3 天会员'],['🎁','@liu**','高级抽奖券 ×1'],['👑','@wang**','30 天会员'],['💰','@zhao**','¥20 洗数据余额'],['🎉','@sun**','7 天会员'],['🎁','@zhou**','高级抽奖券 ×1']];
+const demoFeed=[['sparkle','@chen**','3 天会员'],['gift','@liu**','高级抽奖券 ×1'],['crown','@wang**','30 天会员'],['wallet','@zhao**','¥20 洗数据余额'],['sparkle','@sun**','7 天会员'],['gift','@zhou**','高级抽奖券 ×1']];
 let feed=demoFeed;
 async function loadRealFeed(){
   try{
@@ -1121,7 +1181,7 @@ async function loadRealFeed(){
     if(!r.ok)return;
     const d=await r.json();
     if(d&&Array.isArray(d.items)&&d.items.length){
-      const icon=t=>t.indexOf('余额')>-1?'💰':t.indexOf('券')>-1?'🎁':'🎉';
+      const icon=t=>t.indexOf('余额')>-1?'wallet':t.indexOf('券')>-1?'gift':'sparkle';
       feed=d.items.map(it=>[icon(it.prize),'@'+it.user,it.prize]);
     }
   }catch(e){}
@@ -1136,7 +1196,7 @@ function pushToast(){
   const footer=SITE_CFG.toast_footer||'刚刚 · 错落雨分包机器人';
   const t=document.createElement('div');
   t.className='toast';
-  const ti=document.createElement('span');ti.className='ico';ti.textContent=ico;
+  const ti=document.createElement('span');ti.className='ico';ti.innerHTML='<svg class="ii" aria-hidden="true"><use href="#i-'+ico+'"/></svg>';
   const tw=document.createElement('div');
   const tb=document.createElement('b');tb.textContent=`${user} ${prefix} ${prize}`;
   const ts=document.createElement('span');ts.textContent=footer;
@@ -1186,7 +1246,7 @@ async function loadSiteConfig(){
     SITE_CFG=s;
     if(s.site_title) document.title=s.site_title;
     if(s.brand){const e=document.getElementById('brandText'); if(e)e.textContent=s.brand;}
-    if(s.logo_icon){const e=document.getElementById('logoIcon'); if(e)e.textContent=s.logo_icon;}
+    if(s.logo_icon){const e=document.getElementById('logoIcon'); if(e){e.textContent=s.logo_icon;e.classList.add('has-text');}}
     if(s.logo_suffix){const e=document.getElementById('logoSuffix'); if(e)e.textContent=s.logo_suffix;}
     if(s.hero_highlight){const e=document.getElementById('heroHighlight'); if(e)e.textContent=s.hero_highlight;}
     if(s.hero_subtitle){const e=document.getElementById('heroSubtitle'); if(e)e.textContent=s.hero_subtitle;}
