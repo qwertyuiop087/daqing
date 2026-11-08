@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.76"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.77"))
 
 
 settings = Settings()
@@ -96,6 +96,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.77",
+        [
+            "管理后台改成液态玻璃：淡蓝紫渐变背景 + 白色磨砂玻璃卡片与侧栏",
+            "后台按钮统一成透明底 + 细描边（和官网一致），输入框也做磨砂玻璃",
+            "表格悬停、类型标签、提示条同步玻璃化，文字对比度保持清楚",
+        ],
+    ),
     (
         "2026-10-28.76",
         [
