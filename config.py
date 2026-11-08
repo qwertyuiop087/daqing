@@ -86,7 +86,7 @@ class Settings:
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.78"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.79"))
 
 
 settings = Settings()
@@ -96,6 +96,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.79",
+        [
+            "小号只监听「绑定的洗数据群」和空号检测机器人，不再读取所有群聊与私聊",
+            "绑定洗数据群后自动重启小号监听，换群立即生效",
+            "日志不再刷无关消息，内存也不缓存无关会话",
+        ],
+    ),
     (
         "2026-10-28.78",
         [
