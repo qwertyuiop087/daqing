@@ -191,7 +191,112 @@ dialog h2{font-size:15px;font-weight:600;margin-bottom:16px}
   .card,.stat{padding:16px}
   .page-head h1{font-size:24px}
 }
-</style>
+/* ============================================================
+   液态玻璃版（与官网同一套视觉语言，但保持浅色以便长时间看表格）
+   ============================================================ */
+:root{
+  --bg:#E9EFFA;
+  --surface:rgba(255,255,255,.66);
+  --surface-2:rgba(255,255,255,.46);
+  --ink:#16203A;
+  --ink-2:#4C5875;
+  --ink-3:#7A879F;
+  --line:rgba(22,32,58,.10);
+  --line-2:rgba(22,32,58,.17);
+  --accent:#2F5FA8;
+  --r-s:10px;--r-m:14px;--r-l:22px;
+}
+body{
+  background:
+    radial-gradient(1000px 700px at 10% -14%,#D8E7FF 0%,rgba(216,231,255,0) 62%),
+    radial-gradient(900px 620px at 96% 4%,#E6E1FF 0%,rgba(230,225,255,0) 64%),
+    radial-gradient(800px 560px at 50% 112%,#DCEBFF 0%,rgba(220,235,255,0) 66%),
+    linear-gradient(162deg,#EEF3FC 0%,#E8EEFA 52%,#E9EFF9 100%);
+  background-attachment:fixed;
+  color:var(--ink);
+}
+/* 玻璃卡：白色半透明 + 模糊 + 上沿高光 */
+.card,.stat,.login-box,#toast div,dialog{
+  background:rgba(255,255,255,.62);
+  border:1px solid rgba(255,255,255,.9);
+  -webkit-backdrop-filter:blur(20px) saturate(150%);
+  backdrop-filter:blur(20px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.95),
+    0 22px 46px -30px rgba(18,38,86,.38);
+}
+.card:hover,.stat:hover{background:rgba(255,255,255,.72)}
+/* 侧栏：更薄的玻璃 */
+.rail{
+  background:rgba(255,255,255,.46);
+  border-right:1px solid rgba(255,255,255,.85);
+  -webkit-backdrop-filter:blur(22px) saturate(150%);
+  backdrop-filter:blur(22px) saturate(150%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9);
+}
+.brand-mark{background:rgba(22,32,58,.9);box-shadow:0 10px 24px -14px rgba(18,38,86,.8)}
+.rail a[data-p]{color:var(--ink-2)}
+.rail a[data-p]:hover{background:rgba(255,255,255,.6);color:var(--ink)}
+.rail a[data-p].on{
+  background:rgba(255,255,255,.85);
+  color:var(--ink);
+  box-shadow:inset 0 1px 0 #fff,0 10px 24px -18px rgba(18,38,86,.5);
+}
+.rail-foot a:hover{background:rgba(255,255,255,.6)}
+/* 按钮：透明底 + 细描边（和官网一致，不再实心） */
+button{
+  background:transparent;
+  border:1px solid rgba(22,32,58,.55);
+  color:var(--ink);
+  box-shadow:none;
+}
+button:hover{background:rgba(22,32,58,.06);border-color:rgba(22,32,58,.7)}
+button:active{background:rgba(22,32,58,.12)}
+button.ghost{background:transparent;border-color:rgba(22,32,58,.26);color:var(--ink-2)}
+button.ghost:hover{background:rgba(255,255,255,.6);border-color:rgba(22,32,58,.4);color:var(--ink)}
+button.ghost:active{background:rgba(22,32,58,.08)}
+/* 输入框：磨砂玻璃 */
+input,textarea{
+  background:rgba(255,255,255,.6);
+  border:1px solid rgba(22,32,58,.15);
+  -webkit-backdrop-filter:blur(10px);
+  backdrop-filter:blur(10px);
+}
+input:focus,textarea:focus{border-color:rgba(47,95,168,.65);background:rgba(255,255,255,.85)}
+/* 表格：行 hover 玻璃 */
+thead th{color:var(--ink-3);border-bottom:1px solid rgba(22,32,58,.12)}
+td{border-bottom:1px solid rgba(22,32,58,.08);color:var(--ink-2)}
+tbody tr:hover td{background:rgba(255,255,255,.55)}
+td .tag{background:rgba(255,255,255,.7);border-color:rgba(22,32,58,.14)}
+/* 提示条 */
+.hint{background:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.8)}
+.hint code{background:rgba(22,32,58,.07)}
+/* 登录页 */
+#login{background:transparent}
+#toast div{-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+/* 页面标题 */
+.page-head h1{letter-spacing:-.2px}/* 层次加强：背景光斑更明显，玻璃卡更白，边界清楚 */
+body{
+  background:
+    radial-gradient(1100px 760px at 6% -16%,#BFD6FB 0%,rgba(191,214,251,0) 60%),
+    radial-gradient(980px 680px at 98% 0%,#D3CCFF 0%,rgba(211,204,255,0) 62%),
+    radial-gradient(900px 620px at 46% 116%,#BFE0FF 0%,rgba(191,224,255,0) 64%),
+    linear-gradient(160deg,#E6EEFB 0%,#DFE8F7 50%,#E4EBF8 100%) !important;
+  background-attachment:fixed !important;
+}
+.card,.stat,.login-box,#toast div,dialog{
+  background:rgba(255,255,255,.78) !important;
+  border:1px solid rgba(255,255,255,.95) !important;
+  -webkit-backdrop-filter:blur(22px) saturate(160%) !important;
+  backdrop-filter:blur(22px) saturate(160%) !important;
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 1px 2px rgba(18,38,86,.05),
+    0 26px 50px -34px rgba(18,38,86,.45) !important;
+}
+.card:hover,.stat:hover{background:rgba(255,255,255,.88) !important}
+.rail{background:rgba(255,255,255,.62) !important}
+.rail a[data-p].on{background:#fff !important}</style>
 </head>
 <body>
 
