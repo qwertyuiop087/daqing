@@ -1217,11 +1217,18 @@ async def admin_bind_wash_got(message: Message, state: FSMContext):
     with SessionLocal() as session:
         set_config(session, "wash_chat_id", chat_id)
 
+    # 小号只监听「绑定的群」，换群后要重启小号才能重新订阅
+    try:
+        from utils.telethon_client import start_userbot
+        await start_userbot(message.bot)
+    except Exception as e:
+        print(f"⚠️ 重启小号监听失败：{e}")
+
     await message.answer(
         f"✅ 已绑定洗数据群！\n\n"
         f"群名称：{chat_title}\n"
         f"群ID：{chat_id}\n\n"
-        "用户上传的洗数据文件会自动转发到这个群。",
+        "用户上传的洗数据文件会自动转发到这个群。\n（小号已切换为只监听这个群）",
     )
     # 私聊里发提示
     try:
