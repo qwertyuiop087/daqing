@@ -512,10 +512,135 @@ footer a{color:var(--cyan)}
   .prize-cards{grid-template-columns:1fr}
 }
 
-/* ---------------- 尊重系统减弱动效 ---------------- */
-@media(prefers-reduced-motion:reduce){
-  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
-  html{scroll-behavior:auto}
+/* ============================================================
+   液态玻璃 2.0：更强的玻璃质感 + 全站动效
+   （覆盖前面的同名规则，只增强不破坏结构）
+   ============================================================ */
+:root{
+  --glass:rgba(255,255,255,.11);
+  --glass-2:rgba(255,255,255,.175);
+  --glass-line:rgba(255,255,255,.22);
+  --glass-hi:rgba(255,255,255,.62);
+  --sat:190%;
+}
+
+/* --- 1. 更亮更厚的玻璃：双高光 + 内壁反光 + 深投影 --- */
+.mock-card,.dash-mock,.fcard,.sitem,.tcard,.step-card,.plan,.compare,
+.faq details,.prize,.cta-band,.toast,.badge,.mini,.dstat,.dash-row,.btn{
+  border-color:var(--glass-line);
+  box-shadow:
+    inset 0 1px 0 var(--glass-hi),            /* 顶部切面亮线 */
+    inset 0 -1px 0 rgba(255,255,255,.10),      /* 底部反光 */
+    inset 0 0 0 1px rgba(255,255,255,.05),     /* 玻璃内壁 */
+    inset 0 -26px 44px -30px rgba(255,255,255,.20), /* 下半部漫反射 */
+    0 24px 60px -26px rgba(0,0,0,.78),
+    0 3px 10px rgba(0,0,0,.30);
+}
+
+/* --- 2. 卡片：鼠标跟随高光（玻璃折射感） --- */
+.fcard,.tcard,.plan,.step-card,.sitem,.prize{position:relative;isolation:isolate}
+.fcard::after,.tcard::after,.plan::after,.step-card::after,.sitem::after,.prize::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:0;
+  background:radial-gradient(240px circle at var(--gx,50%) var(--gy,0%),
+    rgba(255,255,255,.26),rgba(255,255,255,.07) 44%,transparent 70%);
+  opacity:0;transition:opacity .35s ease;
+}
+.fcard:hover::after,.tcard:hover::after,.plan:hover::after,
+.step-card:hover::after,.sitem:hover::after,.prize:hover::after{opacity:1}
+.fcard>*,.tcard>*,.plan>*,.step-card>*,.sitem>*,.prize>*{position:relative;z-index:1}
+
+/* --- 3. 入场：模糊 + 缩放 + 上浮（像玻璃从雾里浮出来） --- */
+.reveal{
+  opacity:0;transform:translateY(34px) scale(.985);filter:blur(10px);
+  transition:opacity .85s cubic-bezier(.2,.8,.3,1),transform .85s cubic-bezier(.2,.8,.3,1),filter .85s ease;
+  transition-delay:var(--d,0s);
+}
+.reveal.show{opacity:1;transform:none;filter:none}
+
+/* --- 4. 按钮：悬停扫光 + 按下回弹 --- */
+.btn{transform:translateZ(0)}
+.btn::before{
+  content:"";position:absolute;top:0;bottom:0;left:-70%;width:50%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);
+  transform:skewX(-18deg);opacity:0;pointer-events:none;
+}
+.btn:hover::before{animation:sheen .95s ease}
+@keyframes sheen{
+  0%{opacity:.95;transform:skewX(-18deg) translateX(0)}
+  100%{opacity:0;transform:skewX(-18deg) translateX(420%)}
+}
+.btn:active{transform:scale(.955)}
+
+/* --- 5. 徽章 / 中奖条：慢速流动高光（液态感） --- */
+.badge,.win-chip{position:relative;overflow:hidden}
+.badge::after,.win-chip::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.38) 50%,transparent 70%);
+  transform:translateX(-130%);animation:shine 5s ease-in-out infinite;
+}
+@keyframes shine{
+  0%,50%{transform:translateX(-130%)}
+  82%,100%{transform:translateX(130%)}
+}
+
+/* --- 6. 热门套餐：旋转流光边 --- */
+@property --ang{syntax:'<angle>';inherits:false;initial-value:0deg}
+.plan.hot{animation:hotBreath 5s ease-in-out infinite}
+@keyframes hotBreath{
+  0%,100%{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 34px 74px -30px rgba(59,130,246,.7)}
+  50%{box-shadow:inset 0 1px 0 rgba(255,255,255,.75),0 40px 90px -26px rgba(96,190,255,.95)}
+}
+.plan.hot::before{
+  content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;padding:1.5px;
+  background:conic-gradient(from var(--ang),
+    rgba(255,255,255,.08),rgba(150,205,255,.95) 18%,rgba(255,255,255,.10) 42%,
+    rgba(150,205,255,.55) 62%,rgba(255,255,255,.08));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+  animation:angSpin 7s linear infinite;z-index:2;opacity:.9;
+}
+@keyframes angSpin{to{--ang:360deg}}
+
+/* --- 7. 背景：网格缓慢流动 + 光斑呼吸 --- */
+@keyframes gridDrift{to{background-position:64px 64px,64px 64px}}
+.grid{animation:gridDrift 26s linear infinite}
+@keyframes orbFloatA{
+  0%,100%{transform:translate(0,0) scale(1)}
+  50%{transform:translate(-40px,46px) scale(1.14)}
+}
+@keyframes orbFloatB{
+  0%,100%{transform:translate(0,0) scale(1.05)}
+  50%{transform:translate(38px,-38px) scale(.94)}
+}
+.orb.v{animation:orbFloatA 19s ease-in-out infinite}
+.orb.c{animation:orbFloatB 25s ease-in-out infinite}
+
+/* --- 8. 导航：滚动态滑入 --- */
+nav.scrolled{animation:navIn .5s cubic-bezier(.2,.8,.3,1)}
+@keyframes navIn{from{transform:translateY(-14px);opacity:.45}to{transform:none;opacity:1}}
+
+/* --- 9. 转盘：中心轴呼吸 + 悬停提亮 --- */
+@keyframes hubPulse{
+  0%,100%{box-shadow:inset 0 2px 4px rgba(255,255,255,1),0 14px 34px -12px rgba(0,0,0,.7)}
+  50%{box-shadow:inset 0 2px 4px rgba(255,255,255,1),0 18px 48px -10px rgba(120,180,255,.75)}
+}
+.wheel-hub{animation:hubPulse 3.4s ease-in-out infinite}
+.wheel{transition:transform 3.6s cubic-bezier(.15,.9,.2,1),filter .5s ease}
+.wheel-wrap:hover .wheel{filter:brightness(1.07) saturate(1.06)}
+
+/* --- 10. 图表条：进入视口后才生长（配合 reveal） --- */
+.dash-chart i{transform-origin:bottom;animation:barGrow 1.1s cubic-bezier(.2,.8,.3,1) both}
+
+/* --- 11. 滚动条 / 焦点态也做成玻璃 --- */
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.28);background-clip:padding-box}
+a:focus-visible,.btn:focus-visible,summary:focus-visible{outline:2px solid rgba(150,205,255,.9);outline-offset:3px;border-radius:14px}
+
+/* --- 12. 手机端：少一点模糊，动画保留 --- */
+@media(max-width:640px){
+  .fcard::after,.tcard::after,.plan::after,.step-card::after,.sitem::after,.prize::after{display:none}
 }
 </style>
 </head>
@@ -908,6 +1033,93 @@ async function loadSiteConfig(){
   }catch(e){}
 }
 loadSiteConfig();
+/* ===== 液态玻璃增强：交互与动效 ===== */
+
+/* 1) 卡片上的玻璃折射高光跟随鼠标 */
+(() => {
+  const cards = document.querySelectorAll('.fcard,.tcard,.plan,.step-card,.sitem,.prize');
+  cards.forEach(el => {
+    el.addEventListener('pointermove', e => {
+      const r = el.getBoundingClientRect();
+      el.style.setProperty('--gx', ((e.clientX - r.left) / r.width * 100).toFixed(1) + '%');
+      el.style.setProperty('--gy', ((e.clientY - r.top) / r.height * 100).toFixed(1) + '%');
+    }, { passive: true });
+    el.addEventListener('pointerleave', () => {
+      el.style.setProperty('--gx', '50%');
+      el.style.setProperty('--gy', '0%');
+    }, { passive: true });
+  });
+})();
+
+/* 2) 后台演示里的数字滚动 */
+(() => {
+  const nums = document.querySelectorAll('.dstat b');
+  if (!nums.length) return;
+  const fmt = n => n.toLocaleString('en-US');
+  const run = el => {
+    const target = Number((el.textContent || '').replace(/[^\d]/g, '')) || 0;
+    if (!target) return;
+    let t0 = null;
+    const step = ts => {
+      if (t0 === null) t0 = ts;
+      const p = Math.min(1, (ts - t0) / 950);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = fmt(Math.round(target * eased));
+      if (p < 1) requestAnimationFrame(step);
+    };
+    el.textContent = '0';
+    requestAnimationFrame(step);
+  };
+  const io2 = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    run(e.target);
+    io2.unobserve(e.target);
+  }), { threshold: 0.4 });
+  nums.forEach(el => io2.observe(el));
+})();
+
+/* 3) 转盘：点击时给一圈光，让"液态玻璃"有反馈 */
+(() => {
+  const btn = document.getElementById('spinBtn');
+  const wheel = document.getElementById('wheel');
+  if (!btn || !wheel) return;
+  btn.addEventListener('click', () => {
+    wheel.animate(
+      [{ filter: 'brightness(1.25) saturate(1.25)' }, { filter: 'brightness(1) saturate(1)' }],
+      { duration: 700, easing: 'ease-out' }
+    );
+  });
+})();
+
+/* 4) 区块标题：进入视口时渐显（原本只有卡片有 .reveal，标题也补上） */
+(() => {
+  const heads = document.querySelectorAll('.sec-head:not(.reveal)');
+  heads.forEach(h => h.classList.add('reveal'));
+  const io3 = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('show'); io3.unobserve(e.target); }
+  }), { threshold: 0.15 });
+  document.querySelectorAll('.reveal:not(.show)').forEach(el => io3.observe(el));
+})();
+
+/* 5) 顶部进度条：滚动时一条玻璃光带（很 iPhone 的细节） */
+(() => {
+  const bar = document.createElement('div');
+  bar.id = 'scrollGlass';
+  bar.style.cssText = 'position:fixed;left:0;top:0;height:2px;width:0;z-index:80;pointer-events:none;' +
+    'background:linear-gradient(90deg,rgba(120,190,255,.2),rgba(160,220,255,.95),rgba(190,210,255,.4));' +
+    'box-shadow:0 0 12px rgba(140,200,255,.8);transition:width .1s linear,opacity .4s';
+  document.body.appendChild(bar);
+  const upd = () => {
+    const h = document.documentElement;
+    const max = h.scrollHeight - h.clientHeight;
+    const p = max > 0 ? (h.scrollTop || document.body.scrollTop) / max : 0;
+    bar.style.width = (p * 100).toFixed(2) + '%';
+    bar.style.opacity = p > 0.005 ? '1' : '0';
+  };
+  addEventListener('scroll', upd, { passive: true });
+  addEventListener('resize', upd);
+  upd();
+})();
 </script>
 </body>
 </html>
