@@ -671,7 +671,48 @@ a:focus-visible,.btn:focus-visible,summary:focus-visible{outline:2px solid rgba(
     rgba(255,255,255,.115) 0%,
     rgba(255,255,255,.05) 38%,
     rgba(255,255,255,.032) 100%) !important;
-}</style>
+}/* ============================================================
+   背景 2.0：给玻璃一层「有内容」的底 —— 更丰富的柔光 + 滚动视差
+   （全部用径向柔光，不用矩形色块，避免又出现"蓝幕"）
+   ============================================================ */
+.bg{
+  background:
+    radial-gradient(1400px 900px at 50% -10%,#0d1830 0%,transparent 60%),
+    linear-gradient(155deg,#070c18 0%,#0a1226 34%,#0b1330 58%,#080e1e 82%,#060a14 100%);
+}
+.bg::before{
+  background:
+    radial-gradient(920px 640px at 80% 6%,rgba(56,189,248,.30),transparent 62%),
+    radial-gradient(780px 580px at 10% 26%,rgba(70,120,255,.30),transparent 64%),
+    radial-gradient(700px 560px at 92% 58%,rgba(129,140,248,.26),transparent 66%),
+    radial-gradient(680px 520px at 26% 86%,rgba(45,190,190,.16),transparent 68%),
+    radial-gradient(560px 420px at 60% 112%,rgba(90,140,255,.20),transparent 70%);
+  will-change:transform;
+}
+/* 背景光随滚动缓慢位移：同一屏不会一直是同一块色 */
+.bg::before{transform:translate3d(0,calc(var(--sy,0px) * -.06),0)}
+/* 网格压淡一点，别抢玻璃的戏 */
+.grid{opacity:.26}
+/* 区块之间的硬边框改成渐隐光带，去掉"条带感" */
+.lottery{
+  border-top:none;border-bottom:none;
+  background:
+    radial-gradient(900px 420px at 50% 0%,rgba(56,189,248,.10),transparent 70%),
+    linear-gradient(180deg,transparent,rgba(70,120,255,.06) 30%,rgba(56,189,248,.05) 68%,transparent);
+  position:relative;
+}
+.lottery::before,.lottery::after{
+  content:"";position:absolute;left:8%;right:8%;height:1px;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(160,200,255,.28),transparent);
+}
+.lottery::before{top:0}
+.lottery::after{bottom:0}
+/* 页脚顶部同理 */
+footer{border-top:1px solid transparent;
+  background:linear-gradient(180deg,transparent,rgba(255,255,255,.03));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}/* 入场模糊收敛：手机端不用 blur，避免低端机卡在半模糊状态 */
+.reveal{filter:blur(8px)}
+@media(max-width:640px){.reveal{filter:none}}</style>
 </head>
 <body>
 <div class="bg"></div><div class="grid"></div>
@@ -1149,6 +1190,16 @@ loadSiteConfig();
   addEventListener('resize', upd);
   upd();
 })();
-</script>
+/* 6) 背景柔光随滚动缓慢位移（视差），让玻璃每一屏折射的东西都不一样 */
+(() => {
+  const root = document.documentElement;
+  let raf = false;
+  const upd = () => {
+    raf = false;
+    root.style.setProperty('--sy', String(window.scrollY || document.documentElement.scrollTop || 0) + 'px');
+  };
+  addEventListener('scroll', () => { if (!raf) { raf = true; requestAnimationFrame(upd); } }, { passive: true });
+  upd();
+})();</script>
 </body>
 </html>
