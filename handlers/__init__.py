@@ -10,6 +10,7 @@ from handlers import (
     lottery,
     membership,
     merge,
+    okaypay,
     phone_check,
     plate,
     rename,
@@ -29,6 +30,7 @@ def register_all_routers(dp: Dispatcher) -> None:
     dp.include_router(start.router)
     dp.include_router(membership.router)
     dp.include_router(buy.router)
+    dp.include_router(okaypay.router)
     dp.include_router(lottery.router)
     dp.include_router(phone_check.router)
     dp.include_router(extract.router)
