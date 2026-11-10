@@ -274,6 +274,7 @@ def wash_recharge_kb() -> InlineKeyboardBuilder:
     b.button(text="🔙 返回", callback_data="menu:wash")
     b.adjust(3, 1, 1)
     return b.as_markup()
+@router.callback_query(F.data == "menu:wash")
 async def menu_wash(cq: CallbackQuery, state: FSMContext):
     await cq.answer()
     with SessionLocal() as session:
