@@ -259,12 +259,21 @@ def wash_recharge_kb() -> InlineKeyboardBuilder:
     b.button(text="50 USDT", callback_data="wash:recharge:50")
     b.button(text="100 USDT", callback_data="wash:recharge:100")
     b.button(text="✏️ 自定义金额", callback_data="wash:recharge_custom")
+    # OKPay 收款（配了商户号才显示）
+    okpay_ready = False
+    try:
+        from utils.okaypay_client import is_configured as _okpay_ready
+        okpay_ready = _okpay_ready()
+    except Exception:
+        okpay_ready = False
+    if okpay_ready:
+        b.button(text="🔵 OKPay 充值", callback_data="okpay:topup")
+        b.button(text="🔙 返回", callback_data="menu:wash")
+        b.adjust(3, 1, 1, 1)
+        return b.as_markup()
     b.button(text="🔙 返回", callback_data="menu:wash")
     b.adjust(3, 1, 1)
     return b.as_markup()
-
-
-@router.callback_query(F.data == "menu:wash")
 async def menu_wash(cq: CallbackQuery, state: FSMContext):
     await cq.answer()
     with SessionLocal() as session:
