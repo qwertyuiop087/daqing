@@ -85,8 +85,12 @@ class Settings:
     # 会话字符串（登录后自动存数据库，不用手动填）
     TELETHON_SESSION: str = _clean_env(os.getenv("TELETHON_SESSION", ""))
 
+    # OKPay 收款（可在网页后台覆盖：okpay_shop_id / okpay_token / okpay_callback_url）
+    OKPAY_SHOP_ID: str = _clean_env(os.getenv("OKPAY_SHOP_ID", ""))
+    OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
+    OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.80"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.81"))
 
 
 settings = Settings()
@@ -96,6 +100,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.81",
+        [
+            "新增 OKPay（okaypay.me）收款：充值洗数据余额、购买会员都能用",
+            "回调 /okpay/callback 验签入账 + 定时查单兜底，付款后自动到账",
+            "后台「会员设置」里填商户号/密钥/回调地址，机器人立即出现支付入口",
+        ],
+    ),
     (
         "2026-10-28.80",
         [
