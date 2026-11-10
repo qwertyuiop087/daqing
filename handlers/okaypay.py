@@ -128,7 +128,7 @@ async def okpay_topup_amount(message: Message, state: FSMContext, bot: Bot):
             message.from_user.id, raw, "USDT", 0, f"洗数据充值 ${raw}"
         )
     except Exception as e:
-        await message.answer(f"⚠️ 创建支付订单失败：{str(e)[:120]}", reply_markup=menu_kb(message.from_user.id))
+        await message.answer(f"⚠️ 创建支付订单失败：{str(e)[:160]}\n\n请稍后重试，或联系管理员检查 OKPay 配置。", reply_markup=menu_kb(message.from_user.id))
         return
 
     await message.answer(
@@ -196,7 +196,7 @@ async def okpay_buy(cq: CallbackQuery):
             cq.from_user.id, amount_raw, "USDT", days, f"会员{days}天"
         )
     except Exception as e:
-        await cq.answer(f"创建支付订单失败：{str(e)[:100]}", show_alert=True)
+        await cq.answer(f"创建支付订单失败：{str(e)[:150]}", show_alert=True)
         return
 
     await cq.answer()
