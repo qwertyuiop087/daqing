@@ -497,7 +497,7 @@ body{
         <input id="okpay_token" type="text" placeholder="仅用于本地算签名，不会随请求外传">
         <label>回调地址（需公网可访问）</label>
         <input id="okpay_callback_url" type="text" placeholder="https://你的域名/okpay/callback">
-        <div class="row"><button onclick="saveOkpay()">保存 OKPay 配置</button><button class="ghost" onclick="fillOkpayCallback()">用当前域名自动填回调地址</button></div>
+        <div class="row"><button onclick="saveOkpay()">保存 OKPay 配置</button><button class="ghost" onclick="testOkpay()">测试连接</button><button class="ghost" onclick="fillOkpayCallback()">用当前域名自动填回调地址</button></div><p id="okpay-test-result" style="margin-top:12px;font-size:12.5px;color:var(--ink-2);white-space:pre-wrap"></p>
       </div>
       </div>
     </section>
@@ -975,6 +975,22 @@ document.addEventListener('DOMContentLoaded',()=>{
   const el=$('okpay_shop_id');
   if(el) el.addEventListener('focus',()=>autoFillOkpayCallback());
 });
+async function testOkpay(){
+  const box=$('okpay-test-result');
+  if(box) box.textContent='正在用 OKPay 的余额接口测试…';
+  try{
+    const d=await api('/api/okpay/test',{method:'POST',body:'{}'});
+    if(box){
+      box.textContent=(d.ok?'✅ ':'⚠️ ')+(d.msg||'');
+      box.style.color=d.ok?'var(--ok)':'var(--danger)';
+    }
+    toast(d.ok?'OKPay 连接正常':'OKPay 连接失败');
+  }catch(e){
+    if(box){box.textContent='⚠️ '+e.message;box.style.color='var(--danger)';}
+    toast(e.message,false);
+  }
+}
+
 function fillOkpayCallback(){
   const el=$('okpay_callback_url');
   if(!el)return;
