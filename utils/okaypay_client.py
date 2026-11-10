@@ -91,17 +91,58 @@ class OkayPayError(RuntimeError):
     pass
 
 
+USER_AGENT = "okpay-python-sdk/1.0"
+
+
+def _error_message(body: str) -> str:
+    """从错误响应体里取出可读原因（JSON 里有 msg，HTML 就截一段）。"""
+    text = (body or "").strip()
+    if not text:
+        return ""
+    try:
+        obj = json.loads(text)
+        if isinstance(obj, dict):
+            return str(obj.get("msg") or obj.get("message") or obj.get("error") or "")[:200]
+    except Exception:
+        pass
+    return " ".join(text.split())[:160]
+
+
 def _post(path: str, params: dict) -> dict:
     url = BASE_URL + PREFIX + path
     data = urllib.parse.urlencode(params).encode("utf-8")
     req = urllib.request.Request(
         url,
         data=data,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            # 默认的 Python-urllib UA 常被 Cloudflare 之类直接 403，这里显式声明
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json",
+        },
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-        raw = resp.read().decode("utf-8", "replace")
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            raw = resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8", "replace")
+        except Exception:
+            pass
+        msg = _error_message(body)
+        if e.code == 403:
+            raise OkayPayError(
+                "OKPay 拒绝访问（403）"
+                + (f"：{msg}" if msg else "")
+                + "｜常见原因：商户 IP 白名单没加入当前服务器 IP，或商户号/密钥不对"
+            ) from e
+        if e.code == 429:
+            raise OkayPayError("OKPay 限流（429）：请求太频繁，稍后再试") from e
+        raise OkayPayError(f"OKPay 返回 HTTP {e.code}" + (f"：{msg}" if msg else "")) from e
+    except urllib.error.URLError as e:
+        raise OkayPayError(f"连不上 OKPay：{e.reason}") from e
     try:
         return json.loads(raw)
     except Exception as e:
@@ -195,3 +236,22 @@ def get_config_values() -> tuple[str, str, str]:
 def is_configured() -> bool:
     shop_id, token, _ = get_config_values()
     return bool(shop_id and token)
+
+def test_connection() -> tuple[bool, str]:
+    """自检：用 /balance 调一次，返回 (是否成功, 说明)。
+
+    失败时把 OKPay 的真实原因带回来，方便在后台一眼看出是签名、
+    白名单还是凭据问题。
+    """
+    shop_id, token, _cb = get_config_values()
+    if not (shop_id and token):
+        return False, "还没填商户号和密钥"
+    try:
+        data = call("/balance", {}, shop_id, token)
+    except OkayPayError as e:
+        return False, str(e)[:300]
+    except Exception as e:  # pragma: no cover - 网络异常兜底
+        return False, f"{type(e).__name__}: {e}"[:300]
+    return True, "连接正常，商户余额：" + "、".join(
+        f"{k.upper()} {v}" for k, v in (data or {}).items()
+    )
