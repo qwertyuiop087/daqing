@@ -537,6 +537,71 @@ async def audit_api(request: web.Request):
     return web.json_response({"ok": True, "items": items})
 
 
+# ---------------- OKPay 收款回调 ----------------
+
+async def okpay_callback(request: web.Request):
+    """OKPay 充值成功回调：验签 → 幂等入账 → 返回 200。
+
+    OKPay 要求：处理成功返回 HTTP 200，否则会重试（最多约 5 次）。
+    """
+    from utils import okaypay_client as okpay
+    from utils.pay_credit import credit_order
+
+    shop_id, token, _cb = okpay.get_config_values()
+    if not (shop_id and token):
+        return web.json_response({"ok": False, "error": "okpay not configured"}, status=503)
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"ok": False, "error": "bad json"}, status=400)
+    if not okpay.verify(body, token):
+        return web.json_response({"ok": False, "error": "bad sign"}, status=400)
+
+    data = body.get("data") or {}
+    if str(data.get("type")) != "deposit" or str(data.get("status")) != "1":
+        return web.json_response({"ok": True, "ignored": True})
+
+    order_id = str(data.get("unique_id") or "").strip()
+    if not order_id:
+        return web.json_response({"ok": True, "ignored": True})
+    try:
+        amount = float(data.get("amount") or 0)
+    except Exception:
+        amount = 0.0
+
+    from sqlalchemy import select
+
+    from database import PaymentOrder, SessionLocal, get_usdt_rate_async
+
+    notify_text = None
+    user_id = None
+    with SessionLocal() as session:
+        order = session.scalar(
+            select(PaymentOrder)
+            .where(PaymentOrder.order_id == order_id)
+            .with_for_update()
+        )
+        if order is None:
+            # 不是本系统的订单：返回 200，避免平台反复重试
+            return web.json_response({"ok": True, "unknown_order": order_id})
+        rate = await get_usdt_rate_async(session)
+        notify_text = credit_order(
+            session, order, amount or float(order.amount or 0), rate,
+            str(data.get("order_id") or ""),
+        )
+        if notify_text is None:
+            return web.json_response({"ok": True, "already": True})
+        user_id = order.user_id
+        session.commit()
+
+    if _bot and notify_text and user_id:
+        try:
+            await _bot.send_message(user_id, notify_text, parse_mode="HTML")
+        except Exception:
+            pass
+    return web.json_response({"ok": True})
+
+
 # ---------------- 管理员管理（网页后台） ----------------
 # 网页后台只有站长一个登录账号，等同于总管理员权限
 
@@ -644,6 +709,7 @@ def build_app(bot=None) -> web.Application:
     app.router.add_get("/api/bot/profile", bot_profile_api)
     app.router.add_post("/api/bot/profile", bot_profile_save_api)
     app.router.add_get("/api/audit", audit_api)
+    app.router.add_post("/okpay/callback", okpay_callback)
     app.router.add_get("/api/admins", admins_api)
     app.router.add_post("/api/admins/add", admins_add_api)
     app.router.add_post("/api/admins/remove", admins_remove_api)
