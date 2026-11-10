@@ -296,7 +296,36 @@ body{
 }
 .card:hover,.stat:hover{background:rgba(255,255,255,.88) !important}
 .rail{background:rgba(255,255,255,.62) !important}
-.rail a[data-p].on{background:#fff !important}</style>
+.rail a[data-p].on{background:#fff !important}
+/* ============================================================
+   大数字不再被裁切：统计卡里的金额/行数可能很长
+   （例如「已洗数据」1,234,567 行、余额 ¥265,191.20）
+   ============================================================ */
+.grid{grid-template-columns:repeat(auto-fit,minmax(172px,1fr)) !important}
+.stat{min-width:0;overflow:visible}
+.stat b{
+  font-size:clamp(19px,2vw,27px) !important;
+  line-height:1.28 !important;
+  letter-spacing:-.01em;
+  white-space:nowrap;
+  max-width:100%;
+}
+.stat span{line-height:1.5;overflow-wrap:anywhere}
+/* 表格里的数字列不被压缩换行，放不下就横向滚动 */
+td.num,.num,td .num{white-space:nowrap}
+table{min-width:100%}
+@media(max-width:1100px){
+  .grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr)) !important}
+  .stat b{font-size:clamp(17px,2.4vw,22px) !important}
+}
+@media(max-width:640px){
+  .grid{grid-template-columns:repeat(auto-fit,minmax(132px,1fr)) !important}
+  .stat{padding:14px 12px}
+  .stat b{font-size:19px !important}
+  .stat span{font-size:11.5px}
+}
+
+</style>
 </head>
 <body>
 
@@ -708,6 +737,7 @@ function go(p){
   if(p==='audit')loadAudit();
   if(p==='washorders')loadWashOrders();
   if(p==='admins')loadAdmins();
+  if(p==='overview')setTimeout(fitStatNumbers,500);
 }
 
 function countUp(el,to){
@@ -961,6 +991,48 @@ async function removeAdmin(id){
     loadAdmins();
   }catch(e){toast(e.message,false);}
 }
+
+/* ---- 统计卡数字自适应 ----
+   先保留完整千分位数字，字号自动缩小；
+   实在放不下（超过卡片宽度）才换成「万 / 亿」紧凑写法，
+   鼠标悬停可看到精确原值，保证永远不出现被裁掉的半截数字。 */
+function fitStatNumbers(){
+  document.querySelectorAll('.stat b').forEach(el=>{
+    if(el.dataset.raw===undefined) el.dataset.raw=el.textContent.trim();
+    const raw=el.dataset.raw;
+    el.textContent=raw;
+    el.style.fontSize='';
+    el.title=raw;
+    const base=parseFloat(getComputedStyle(el).fontSize)||24;
+    let size=base;
+    let guard=0;
+    while(el.scrollWidth>el.clientWidth+1 && size>14 && guard++<24){
+      size-=1;
+      el.style.fontSize=size+'px';
+    }
+    if(el.scrollWidth>el.clientWidth+1){
+      const n=Number(String(raw).replace(/[^\d.-]/g,''));
+      if(isFinite(n) && n>=10000){
+        const compact = n>=100000000
+          ? (n/100000000).toFixed(2).replace(/\.?0+$/,'')+' 亿'
+          : (n/10000).toFixed(1).replace(/\.0$/,'')+' 万';
+        el.textContent=compact;
+        el.style.fontSize='';
+        let s2=base;
+        let g2=0;
+        while(el.scrollWidth>el.clientWidth+1 && s2>13 && g2++<20){
+          s2-=1;
+          el.style.fontSize=s2+'px';
+        }
+      }
+    }
+  });
+}
+addEventListener('resize',()=>fitStatNumbers());
+document.addEventListener('DOMContentLoaded',()=>{
+  setTimeout(fitStatNumbers,600);
+  setTimeout(fitStatNumbers,1800);
+});
 /* ---- OKPay 收款配置 ---- */
 /* 自动填回调地址：进入后台就把「当前域名 + /okpay/callback」放进去，空着才填 */
 function autoFillOkpayCallback(){
