@@ -123,6 +123,10 @@ def get_all_config(session) -> dict:
         "usdt_rate": database.get_config(session, "usdt_rate", ""),
         "welcome_text": database.get_config(session, "welcome_text", database.DEFAULT_WELCOME_TEXT),
         "lottery_notify_template": database.get_lottery_notify_template(session),
+        # OKPay 收款（商户号 / 密钥 / 回调地址）
+        "okpay_shop_id": database.get_config(session, "okpay_shop_id", ""),
+        "okpay_token": database.get_config(session, "okpay_token", ""),
+        "okpay_callback_url": database.get_config(session, "okpay_callback_url", ""),
     }
 
 
@@ -173,6 +177,15 @@ def save_config(session, key: str, value: str) -> None:
         database.set_config(session, "welcome_text", value)
         # 网页编辑不带消息实体（emoji/加粗），清掉 entities，机器人会按 HTML 渲染
         database.set_config(session, "welcome_entities", "")
+    elif key in ("okpay_shop_id", "okpay_token", "okpay_callback_url"):
+        val = value.strip()
+        if key == "okpay_shop_id" and val and not val.isdigit():
+            raise ValueError("商户号需为纯数字")
+        if key == "okpay_token" and val and len(val) < 8:
+            raise ValueError("密钥看起来太短，请检查是否复制完整")
+        if key == "okpay_callback_url" and val and not val.startswith(("http://", "https://")):
+            raise ValueError("回调地址需以 http:// 或 https:// 开头")
+        database.set_config(session, key, val)
     elif key == "lottery_notify_template":
         if not value.strip():
             raise ValueError("模板不能为空")
