@@ -102,3 +102,7 @@ class WashStates(StatesGroup):
 
 class AddAreaCodeStates(StatesGroup):
     waiting_file = State()      # 等待上传txt文件
+
+
+class OkayPayStates(StatesGroup):
+    waiting_amount = State()  # OKPay 充值：等待输入金额
