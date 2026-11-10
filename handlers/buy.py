@@ -31,6 +31,15 @@ def plans_kb(plans: list[dict]) -> InlineKeyboardBuilder:
             text=f"{p['days']}天 - {p['price']} USDT",
             callback_data=f"buy:plan:{p['days']}:{p['price']}",
         )
+    # OKPay 收款入口（配了商户号才显示）
+    okpay_ready = False
+    try:
+        from utils.okaypay_client import is_configured as _okpay_ready
+        okpay_ready = _okpay_ready()
+    except Exception:
+        okpay_ready = False
+    if okpay_ready:
+        b.button(text="🔵 用 OKPay 支付", callback_data="okpay:plans")
     b.button(text="🔙 返回主菜单", callback_data="menu:home")
     b.adjust(2)
     return b.as_markup()
