@@ -90,7 +90,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.84"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.85"))
 
 
 settings = Settings()
@@ -100,6 +100,13 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.85",
+        [
+            "修复「洗数据点不进去」：改充值键盘时误删了 menu:wash 的路由装饰器",
+            "新增路由回归测试：洗数据/OKPay 的每个按钮都必须有 handler",
+        ],
+    ),
     (
         "2026-10-28.84",
         [
