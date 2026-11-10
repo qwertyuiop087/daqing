@@ -90,7 +90,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.81"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.82"))
 
 
 settings = Settings()
@@ -100,6 +100,12 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.82",
+        [
+            "OKPay 回调地址可一键自动填入（用当前后台域名 + /okpay/callback）",
+        ],
+    ),
     (
         "2026-10-28.81",
         [
