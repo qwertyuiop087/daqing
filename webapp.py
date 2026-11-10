@@ -537,6 +537,17 @@ async def audit_api(request: web.Request):
     return web.json_response({"ok": True, "items": items})
 
 
+# ---------------- OKPay 配置自检 ----------------
+
+async def okpay_test_api(request: web.Request):
+    """用 /balance 试调一次，把 OKPay 的真实原因带回来给后台看。"""
+    _auth(request)
+    from utils import okaypay_client as okpay
+
+    ok, msg = await asyncio.to_thread(okpay.test_connection)
+    return web.json_response({"ok": ok, "msg": msg})
+
+
 # ---------------- OKPay 收款回调 ----------------
 
 async def okpay_callback(request: web.Request):
@@ -709,6 +720,7 @@ def build_app(bot=None) -> web.Application:
     app.router.add_get("/api/bot/profile", bot_profile_api)
     app.router.add_post("/api/bot/profile", bot_profile_save_api)
     app.router.add_get("/api/audit", audit_api)
+    app.router.add_post("/api/okpay/test", okpay_test_api)
     app.router.add_post("/okpay/callback", okpay_callback)
     app.router.add_get("/api/admins", admins_api)
     app.router.add_post("/api/admins/add", admins_add_api)
