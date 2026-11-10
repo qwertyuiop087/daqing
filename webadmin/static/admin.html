@@ -489,6 +489,16 @@ body{
         <div class="card-head"><h2>USDT 固定汇率</h2><p>实时汇率获取失败时使用，留空则使用内置默认 6.8</p></div>
         <input id="usdt_rate" type="text" placeholder="6.8">
         <div class="row"><button onclick="save('usdt_rate')">保存</button><button class="ghost" onclick="reset('usdt_rate')">清空</button></div>
+      <div class="card">
+        <div class="card-head"><h2>OKPay 收款</h2><p>填好商户号与密钥后，机器人里会出现 OKPay 支付入口（充值洗数据余额 / 购买会员）</p></div>
+        <label>商户号（App ID）</label>
+        <input id="okpay_shop_id" type="text" placeholder="例如 10001">
+        <label>密钥（Token）</label>
+        <input id="okpay_token" type="text" placeholder="仅用于本地算签名，不会随请求外传">
+        <label>回调地址（需公网可访问）</label>
+        <input id="okpay_callback_url" type="text" placeholder="https://你的域名/okpay/callback">
+        <div class="row"><button onclick="saveOkpay()">保存 OKPay 配置</button></div>
+      </div>
       </div>
     </section>
 
@@ -724,6 +734,9 @@ const KEY_TO_EL={
   wash_price_floor:'wash_price_floor',
   wash_quota:'wash_quota',
   usdt_rate:'usdt_rate',
+  okpay_shop_id:'okpay_shop_id',
+  okpay_token:'okpay_token',
+  okpay_callback_url:'okpay_callback_url',
 };
 
 async function loadAll(){
@@ -946,6 +959,17 @@ async function removeAdmin(id){
     await api('/api/admins/remove',{method:'POST',body:JSON.stringify({user_id:String(id)})});
     toast('已删除');
     loadAdmins();
+  }catch(e){toast(e.message,false);}
+}
+/* ---- OKPay 收款配置 ---- */
+async function saveOkpay(){
+  const pairs=[['okpay_shop_id','okpay_shop_id'],['okpay_token','okpay_token'],['okpay_callback_url','okpay_callback_url']];
+  try{
+    for(const [key,el] of pairs){
+      const node=$(el); if(!node)continue;
+      await api('/api/config/'+key,{method:'POST',body:JSON.stringify({value:node.value.trim()})});
+    }
+    toast('OKPay 配置已保存，机器人里已出现支付入口');
   }catch(e){toast(e.message,false);}
 }
 </script>
