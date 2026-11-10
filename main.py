@@ -35,6 +35,7 @@ from database import (
 )
 from handlers import register_all_routers
 from utils.dali_client import get_client
+from utils.pay_credit import credit_order
 
 logging.basicConfig(level=logging.INFO)
 
@@ -48,10 +49,49 @@ AUTO_CREDIT_MAX_ORDERS = 50        # 每轮最多处理订单数
 _last_checked: dict[str, float] = {}
 
 
-async def _sweep_payments(bot) -> None:
+async def _query_paid(order) -> tuple[bool, float, str]:
+    """查单：返回 (是否已支付, USDT 金额, txid)。按订单渠道自动选择。"""
+    if (order.coin or "").lower().startswith("okpay"):
+        from utils import okaypay_client as okpay
+
+        shop_id, token, _cb = okpay.get_config_values()
+        if not (shop_id and token):
+            return False, 0.0, ""
+        try:
+            data = await asyncio.to_thread(okpay.check_deposit, shop_id, token, order.order_id)
+        except Exception as e:
+            logging.warning("⚠️ OKPay 查单失败 %s：%s", order.order_id, e)
+            return False, 0.0, ""
+        if str(data.get("status", "0")) != "1":
+            return False, 0.0, ""
+        try:
+            amount = float(data.get("amount") or order.amount or 0)
+        except Exception:
+            amount = float(order.amount or 0)
+        return True, amount, str(data.get("order_id") or "")
+
     client = get_client()
     if not client:
-        return
+        return False, 0.0, ""
+    try:
+        result = await asyncio.to_thread(
+            client.call, "/merchant/checkDeposit", {"userOrder": order.order_id}
+        )
+    except Exception:
+        return False, 0.0, ""
+    if not result.get("ok"):
+        return False, 0.0, ""
+    data = result.get("data") or {}
+    if data.get("statusText") != "paid":
+        return False, 0.0, ""
+    try:
+        amount = float(data.get("amount") or 0)
+    except Exception:
+        amount = 0.0
+    return True, amount, data.get("txid", "") or ""
+
+
+async def _sweep_payments(bot) -> None:
     now = time.time()
     timeout_cutoff = utcnow() - timedelta(seconds=ORDER_TIMEOUT_SECONDS)
 
@@ -65,19 +105,20 @@ async def _sweep_payments(bot) -> None:
             )
         )
     for order in orders:
-        # 1) 超时判定：过期订单在标记无效前，最后查一次支付状态；
-        #    已付款的照常入账，未付款的才标记超时（防止误杀已付款订单）
         expired = order.created_at is not None and order.created_at < timeout_cutoff
-        data = None
-        txid = ""
-        if expired:
-            try:
-                result = await asyncio.to_thread(
-                    client.call, "/merchant/checkDeposit", {"userOrder": order.order_id}
-                )
-            except Exception:
-                result = {"ok": False}
-            if not result.get("ok") or (result.get("data") or {}).get("statusText") != "paid":
+
+        # 节流：同一订单最多每 5 秒查一次（过期订单不节流，直接查最后一次）
+        if not expired:
+            last = _last_checked.get(order.order_id, 0.0)
+            if now - last < ORDER_CHECK_EVERY:
+                continue
+            _last_checked[order.order_id] = now
+
+        paid, amount, txid = await _query_paid(order)
+
+        # 1) 超时且未付款：标记失效并提醒用户
+        if not paid:
+            if expired:
                 with SessionLocal() as session:
                     fresh = session.scalar(
                         select(PaymentOrder)
@@ -97,78 +138,24 @@ async def _sweep_payments(bot) -> None:
                             )
                         except Exception:
                             pass
-                continue
-            data = result.get("data") or {}
-            txid = data.get("txid", "") or ""
+            continue
 
-        # 2) 节流：同一订单最多每 5 秒查一次（过期且已付款的订单跳过节流直接入账）
-        if not expired:
-            last = _last_checked.get(order.order_id, 0.0)
-            if now - last < ORDER_CHECK_EVERY:
-                continue
-            _last_checked[order.order_id] = now
-
-            # 3) 查支付状态
-            try:
-                result = await asyncio.to_thread(
-                    client.call, "/merchant/checkDeposit", {"userOrder": order.order_id}
-                )
-            except Exception:
-                continue
-            if not result.get("ok"):
-                continue
-            data = result.get("data", {})
-            if data.get("statusText") != "paid":
-                continue
-            txid = data.get("txid", "") or ""
-        amount = float(data.get("amount", 0) or 0)
-
-        # 4) 自动入账
+        # 2) 已付款：行锁 + 幂等入账（与「我已支付」按钮互斥）
         notify_text = None
         with SessionLocal() as session:
-            # 行锁：与用户手动点击「我已支付」互斥，防止同一订单被重复入账
             fresh = session.scalar(
                 select(PaymentOrder)
                 .where(PaymentOrder.order_id == order.order_id)
                 .with_for_update()
             )
-            if fresh is None or fresh.status == "paid":
+            if fresh is None:
                 continue
-            fresh.status = "paid"
-            fresh.txid = txid or fresh.txid
-            if fresh.days > 0:
-                user = session.get(User, fresh.user_id)
-                if user is not None:
-                    add_user_days(session, user, fresh.days)
-                session.commit()
-                notify_text = (
-                    "🎉 <b>支付成功，会员已自动到账！</b>\n\n"
-                    f"套餐：<b>{fresh.days}</b> 天会员\n"
-                    f"金额：{fresh.amount} USDT\n\n"
-                    "感谢购买，祝你使用愉快～"
-                )
-            else:
-                rate = await get_usdt_rate_async(session)
-                rmb = amount * rate
-                add_wash_balance(session, fresh.user_id, rmb)
-                balance = get_wash_balance(session, fresh.user_id)
-                session.add(
-                    WashOrder(
-                        user_id=fresh.user_id,
-                        filename=f"充值 ${amount} USDT（自动到账）",
-                        row_count=0,
-                        cost=rmb,
-                        type="recharge",
-                    )
-                )
-                session.commit()
-                notify_text = (
-                    "💰 <b>洗数据充值已自动到账！</b>\n\n"
-                    f"充值金额：${amount} USDT\n"
-                    f"换算汇率：1 USDT = {rate} 元\n"
-                    f"到账余额：¥{rmb:.4f} 元\n"
-                    f"当前余额：¥{balance:.4f} 元"
-                )
+            rate = await get_usdt_rate_async(session)
+            notify_text = credit_order(session, fresh, amount, rate, txid)
+            if notify_text is None:
+                continue
+            session.commit()
+
         if notify_text:
             try:
                 await bot.send_message(fresh.user_id, notify_text, parse_mode="HTML")
