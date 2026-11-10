@@ -149,6 +149,24 @@ def balance(shop_id, token: str) -> dict:
 
 # ---------------- 配置 ----------------
 
+def guess_callback_url() -> str:
+    """自动推断回调地址：云平台域名 + /okpay/callback。
+
+    后台不填也能用：Railway 会注入 RAILWAY_PUBLIC_DOMAIN，
+    其它平台可自己设 PUBLIC_BASE_URL。
+    """
+    import os
+
+    for key in ("PUBLIC_BASE_URL", "RAILWAY_STATIC_URL", "RAILWAY_PUBLIC_DOMAIN"):
+        value = (os.getenv(key) or "").strip()
+        if not value:
+            continue
+        if not value.startswith(("http://", "https://")):
+            value = "https://" + value
+        return value.rstrip("/") + "/okpay/callback"
+    return ""
+
+
 def get_config_values() -> tuple[str, str, str]:
     """读取商户配置：优先数据库后台配置，其次环境变量。
 
@@ -170,6 +188,7 @@ def get_config_values() -> tuple[str, str, str]:
     shop_id = shop_id or str(getattr(settings, "OKPAY_SHOP_ID", "") or "").strip()
     token = token or str(getattr(settings, "OKPAY_TOKEN", "") or "").strip()
     callback = callback or str(getattr(settings, "OKPAY_CALLBACK_URL", "") or "").strip()
+    callback = callback or guess_callback_url()
     return shop_id, token, callback
 
 
