@@ -90,7 +90,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.87"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.88"))
 
 
 settings = Settings()
@@ -100,6 +100,13 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.88",
+        [
+            "车牌分包支持多文件：一次发多个，全部发完点「完成上传」，合并成一批再分包",
+            "输出字段只保留 名字 / 车牌 / 手机号，顺序可自选或自定义组合",
+        ],
+    ),
     (
         "2026-10-28.87",
         [
