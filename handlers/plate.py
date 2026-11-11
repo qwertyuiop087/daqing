@@ -1,4 +1,5 @@
-"""车牌分包：上传文件（不限格式）→ 自动识别车牌 / 手机号 / 名字 → 按用户指定顺序与行数输出 TXT。"""
+"""车牌分包：支持一次上传多个文件，自动识别 名字 / 车牌 / 手机号，
+按用户指定顺序与行数整理成 TXT 发回。"""
 import os
 import re
 
@@ -20,22 +21,23 @@ from services.file_ops import (
 from states import PlateStates
 from utils.drops import maybe_drop
 from utils.helpers import cleanup_state, ensure_member, get_workdir, send_files_in_batches
-from utils.keyboards import cancel_kb, menu_kb
+from utils.keyboards import cancel_kb, finish_upload_kb, menu_kb
 from utils.phone_db import extract_phones
 
 router = Router(name="plate")
 
+# 只保留三种字段，顺序可自定义
 _FIELD_KEYS = {"手机号": "phone", "车牌": "plate", "名字": "name"}
 _FIELD_LABELS = {"phone": "手机号", "plate": "车牌", "name": "名字"}
 _ORDER_PRESETS = {
-    "phone": ["phone", "plate", "name"],
+    "name": ["name", "plate", "phone"],
     "plate": ["plate", "phone", "name"],
-    "name": ["name", "phone", "plate"],
+    "phone": ["phone", "plate", "name"],
 }
 
 
 def _parse_order(text: str):
-    """解析顺序输入，如「手机号 车牌 名字」。返回 (keys, 错误字段)。"""
+    """解析顺序输入，如「名字 车牌 手机号」。返回 (keys, 错误字段)。"""
     keys = []
     for part in re.split(r"[\s,，、/]+", (text or "").strip()):
         if not part:
@@ -61,11 +63,32 @@ def _read_to_lines(path: str, filename: str) -> list[str]:
     return decode_bytes(data).splitlines()
 
 
+def parse_records(lines: list[str]) -> list[dict]:
+    """从文本行里提取 名字/车牌/手机号，返回记录列表。"""
+    records = []
+    for ln in lines:
+        ln = (ln or "").strip()
+        if not ln:
+            continue
+        phones = extract_phones(ln)
+        plates = extract_plates(ln)
+        nm = extract_name(ln)
+        if phones or plates or nm:
+            records.append(
+                {
+                    "phone": phones[0] if phones else "",
+                    "plate": plates[0] if plates else "",
+                    "name": nm,
+                }
+            )
+    return records
+
+
 def _order_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    b.button(text="📱 手机号 车牌 名字", callback_data="plate:order:phone")
+    b.button(text="👤 名字 车牌 手机号", callback_data="plate:order:name")
     b.button(text="🚗 车牌 手机号 名字", callback_data="plate:order:plate")
-    b.button(text="👤 名字 手机号 车牌", callback_data="plate:order:name")
+    b.button(text="📱 手机号 车牌 名字", callback_data="plate:order:phone")
     b.button(text="✍️ 自定义顺序", callback_data="plate:order:custom")
     b.button(text="❌ 取消", callback_data="cancel")
     b.adjust(1)
@@ -85,15 +108,14 @@ def _split_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
-def _generate_outputs(records, order, per_file, src_name, workdir):
+def generate_outputs(records, order, per_file, stem, workdir):
     """按顺序与行数生成输出文件，返回 [(路径, 文件名)]。"""
-    # 空字段直接过滤，保证字段之间只有一个空格（无连续空格/首尾空格）
+    # 空字段直接过滤，保证字段之间只有一个空格
     out_lines = [
         " ".join(p for p in (r.get(k, "") for k in order) if p)
         for r in records
     ]
 
-    stem = os.path.splitext(src_name)[0]
     order_tag = "_".join(_FIELD_LABELS[k] for k in order)
 
     outputs: list[tuple[str, str]] = []
@@ -118,17 +140,17 @@ def _generate_outputs(records, order, per_file, src_name, workdir):
 async def menu_plate(cq: CallbackQuery, state: FSMContext):
     if not await ensure_member(cq):
         return
-    await state.update_data(workdir=get_workdir(cq.from_user.id))
+    await state.update_data(workdir=get_workdir(cq.from_user.id), files=[], total_records=0)
     await state.set_state(PlateStates.waiting_file)
     await cq.answer()
     await cq.message.edit_text(
-        "🚗 <b>车牌分包</b>\n\n"
-        "上传文件，我会自动识别里面的<b>车牌号</b>、<b>手机号</b>和<b>名字</b>，"
+        "🚗 <b>车牌分包（支持多文件）</b>\n\n"
+        "把文件一次性发过来，我会自动识别 <b>名字 / 车牌 / 手机号</b>，"
         "再按你指定的顺序与行数整理成 TXT 发回。\n\n"
-        "支持格式：<b>txt / csv / xlsx / xls / zip</b>\n"
-        f"单个文件最大 {settings.MAX_FILE_SIZE // 1024 // 1024}MB。\n\n"
-        "请发送文件：",
-        reply_markup=cancel_kb(),
+        "· 可以一次发多个文件，全部发完点「✅ 完成上传」\n"
+        "· 支持格式：<b>txt / csv / xlsx / xls / zip</b>\n"
+        f"· 单个文件最大 {settings.MAX_FILE_SIZE // 1024 // 1024}MB",
+        reply_markup=finish_upload_kb("plate"),
     )
 
 
@@ -137,52 +159,100 @@ async def plate_got_file(message: Message, state: FSMContext, bot: Bot):
     doc = message.document
     name = sanitize_filename(doc.file_name or "input.txt")
     if doc.file_size and doc.file_size > settings.MAX_FILE_SIZE:
-        await message.answer(f"⚠️ 文件过大，最大支持 {settings.MAX_FILE_SIZE // 1024 // 1024}MB。")
+        await message.answer(
+            f"⚠️ <code>{name}</code> 太大，单个文件最大 {settings.MAX_FILE_SIZE // 1024 // 1024}MB。"
+        )
         return
 
     data = await state.get_data()
-    path = os.path.join(data["workdir"], name)
-    file = await bot.get_file(doc.file_id)
-    await bot.download_file(file.file_path, destination=path)
-
-    try:
-        lines = _read_to_lines(path, name)
-    except Exception as e:
-        await message.answer(f"⚠️ 无法读取该文件：{str(e)[:100]}")
-        await cleanup_state(state)
+    files = list(data.get("files") or [])
+    if len(files) >= settings.MAX_UPLOAD_FILES:
+        await message.answer(
+            f"⚠️ 最多 {settings.MAX_UPLOAD_FILES} 个文件，请先点「✅ 完成上传」。",
+            reply_markup=finish_upload_kb("plate"),
+        )
         return
 
-    records = []
-    for ln in lines:
-        ln = ln.strip()
-        if not ln:
-            continue
-        phones = extract_phones(ln)
-        plates = extract_plates(ln)
-        nm = extract_name(ln)
-        if phones or plates or nm:
-            records.append(
-                {
-                    "phone": phones[0] if phones else "",
-                    "plate": plates[0] if plates else "",
-                    "name": nm,
-                }
-            )
+    workdir = data.get("workdir") or get_workdir(message.from_user.id)
+    # 序号前缀：避免同名文件互相覆盖
+    path = os.path.join(workdir, f"plate_{len(files) + 1}_{name}")
 
+    try:
+        file = await bot.get_file(doc.file_id)
+        await bot.download_file(file.file_path, destination=path)
+        lines = _read_to_lines(path, name)
+    except Exception as e:
+        await message.answer(f"⚠️ <code>{name}</code> 读取失败：{str(e)[:100]}")
+        return
+
+    records = parse_records(lines)
     if not records:
-        await message.answer("⚠️ 未识别到车牌、手机号或名字，请检查文件内容。", reply_markup=cancel_kb())
+        await message.answer(
+            f"⚠️ <code>{name}</code> 里没识别到名字 / 车牌 / 手机号，已跳过。",
+            reply_markup=finish_upload_kb("plate"),
+        )
         return
 
     both = sum(1 for r in records if r["phone"] and r["plate"])
     has_name = sum(1 for r in records if r["name"])
+    files.append(
+        {
+            "name": name,
+            "path": path,
+            "records": len(records),
+            "both": both,
+            "has_name": has_name,
+        }
+    )
+    total_records = sum(f["records"] for f in files)
+    await state.update_data(files=files, total_records=total_records, workdir=workdir)
 
-    await state.update_data(records=records, src_name=name)
-    await state.set_state(PlateStates.waiting_order)
     await message.answer(
-        f"✅ 已识别 <b>{len(records)}</b> 条记录：\n"
-        f"· 手机号+车牌配对：<b>{both}</b> 条\n"
-        f"· 识别到名字：<b>{has_name}</b> 条\n\n"
-        "请选择输出顺序（可用「自定义」自由组合 手机号/车牌/名字）：",
+        f"✅ 已接收第 <b>{len(files)}</b> 个文件：<code>{name}</code>\n"
+        f"　本文件识别：<b>{len(records)}</b> 条（手机号+车牌 {both} · 有名字 {has_name}）\n"
+        f"　累计：{len(files)} 个文件 / <b>{total_records:,}</b> 条记录\n\n"
+        "可继续发送，全部发完点「✅ 完成上传」。",
+        reply_markup=finish_upload_kb("plate"),
+    )
+
+
+@router.callback_query(PlateStates.waiting_file, F.data == "plate:done")
+async def plate_done_cb(cq: CallbackQuery, state: FSMContext):
+    await cq.answer()
+    await _ask_order(cq.message, state)
+
+
+@router.message(PlateStates.waiting_file, F.text)
+async def plate_done_text(message: Message, state: FSMContext):
+    """发文字「完成」也能触发下一步。"""
+    if (message.text or "").strip() in ("完成", "done", "ok", "OK", "好"):
+        await _ask_order(message, state)
+
+
+async def _ask_order(event, state: FSMContext):
+    data = await state.get_data()
+    files = list(data.get("files") or [])
+    if not files:
+        await event.answer(
+            "⚠️ 还没收到文件，请先发送要处理的文件。",
+            reply_markup=finish_upload_kb("plate"),
+        )
+        return
+
+    total_records = sum(f["records"] for f in files)
+    both = sum(f["both"] for f in files)
+    has_name = sum(f["has_name"] for f in files)
+    shown = "\n".join(f"· {f['name']}（{f['records']:,} 条）" for f in files[:8])
+    if len(files) > 8:
+        shown += f"\n… 还有 {len(files) - 8} 个文件"
+
+    await state.set_state(PlateStates.waiting_order)
+    await event.answer(
+        f"✅ 共收到 <b>{len(files)}</b> 个文件、<b>{total_records:,}</b> 条记录\n"
+        f"{shown}\n\n"
+        f"· 手机号+车牌配对：<b>{both:,}</b> 条\n"
+        f"· 识别到名字：<b>{has_name:,}</b> 条\n\n"
+        "请选择输出顺序（三种字段可任意排列，也可以自定义）：",
         reply_markup=_order_kb(),
     )
 
@@ -193,8 +263,8 @@ async def plate_order_pick(cq: CallbackQuery, state: FSMContext):
     await cq.answer()
     if val == "custom":
         await cq.message.edit_text(
-            "请发送你想要的顺序，例如：\n<code>手机号 车牌 名字</code>\n\n"
-            "可用字段：<b>手机号 / 车牌 / 名字</b>（空格分隔，可任意排列）。",
+            "请发送你想要的顺序，例如：\n<code>名字 车牌 手机号</code>\n\n"
+            "可用字段：<b>名字 / 车牌 / 手机号</b>（空格分隔，可任意排列）。",
             reply_markup=cancel_kb(),
         )
         return
@@ -208,10 +278,12 @@ async def plate_order_pick(cq: CallbackQuery, state: FSMContext):
 async def plate_order_text(message: Message, state: FSMContext):
     order, bad = _parse_order(message.text or "")
     if bad is not None:
-        await message.answer(f"❌ 无法识别字段「<b>{bad}</b>」。可选：手机号 / 车牌 / 名字。请重新发送。")
+        await message.answer(
+            f"❌ 无法识别字段「<b>{bad}</b>」。可选：名字 / 车牌 / 手机号。请重新发送。"
+        )
         return
     if not order:
-        await message.answer("请输入至少一个字段，例如：手机号 车牌 名字。")
+        await message.answer("请输入至少一个字段，例如：名字 车牌 手机号。")
         return
     await _ask_split(message, state, order)
 
@@ -261,24 +333,52 @@ async def plate_split_pick(cq: CallbackQuery, state: FSMContext):
 
 async def _do_finish(event, state: FSMContext, per_file: int):
     data = await state.get_data()
-    records = data.get("records", [])
-    order = data.get("order", ["phone", "plate", "name"])
-    src_name = data.get("src_name", "output")
+    files = list(data.get("files") or [])
+    order = data.get("order", ["name", "plate", "phone"])
     workdir = data["workdir"]
 
-    if not records:
+    if not files:
         await event.answer("⚠️ 会话异常，请重新开始。")
         await cleanup_state(state)
         return
 
-    outputs = _generate_outputs(records, order, per_file, src_name, workdir)
+    progress = await event.answer(f"⏳ 正在整理 {len(files)} 个文件…")
+
+    # 多个文件合并成一批再分包：记录跨文件连续编号，分包不会切断某一份
+    records: list[dict] = []
+    failed = 0
+    for f in files:
+        try:
+            lines = _read_to_lines(f["path"], f["name"])
+            records.extend(parse_records(lines))
+        except Exception:
+            failed += 1
+            continue
+
+    if not records:
+        await progress.edit_text("⚠️ 没有可用记录，请重新上传文件。")
+        await cleanup_state(state)
+        return
+
+    # 只有一个文件时沿用原文件名，多文件时统一命名
+    stem = (
+        os.path.splitext(files[0]["name"])[0] if len(files) == 1 else "车牌分包"
+    )
+    outputs = generate_outputs(records, order, per_file, stem, workdir)
     order_str = " → ".join(_FIELD_LABELS[k] for k in order)
     split_note = "一个文件" if len(outputs) == 1 else f"共 {len(outputs)} 个文件（每份 {per_file} 行）"
 
-    await event.answer(
-        f"✅ 完成！共 <b>{len(records)}</b> 条，顺序：<b>{order_str}</b>\n"
+    summary = (
+        f"✅ 完成！共 <b>{len(records):,}</b> 条记录"
+        + (f"（{failed} 个文件读取失败）" if failed else "")
+        + f"\n顺序：<b>{order_str}</b>\n"
         f"输出：<b>{split_note}</b>（空格分隔），开始发送："
     )
+    try:
+        await progress.edit_text(summary)
+    except Exception:
+        await event.answer(summary)
+
     await send_files_in_batches(event, outputs)
     await maybe_drop(event, "车牌分包")
     await event.answer("✅ 全部完成！", reply_markup=menu_kb(event.from_user.id))
