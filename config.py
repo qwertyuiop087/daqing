@@ -90,7 +90,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.86"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.87"))
 
 
 settings = Settings()
@@ -100,6 +100,13 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.87",
+        [
+            "加区号支持多文件：一次发完所有文件，点「完成上传」批量处理并逐个回传",
+            "每个文件独立结果+行数统计，已有 +86 的自动跳过，身份证数字不会被误加",
+        ],
+    ),
     (
         "2026-10-28.86",
         [
