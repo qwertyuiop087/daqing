@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import math
 import os
+import re
 import time
 from pathlib import Path
 
@@ -56,16 +57,26 @@ _rate_hits: dict[str, list[float]] = {}
 _public_cache: dict[str, tuple[float, dict]] = {}
 
 
+TRUST_PROXY = os.getenv("TRUST_PROXY", "").strip() in ("1", "true", "yes")
+
+
 def _client_ip(request: web.Request) -> str:
-    """取客户端 IP：只信任代理链里最后一跳（Railway 等边缘代理追加的那一段），
-    客户端可以伪造 X-Forwarded-For 前面的部分，但伪造不了最后一跳。"""
+    """取客户端 IP。
+
+    默认**只信 TCP 对端**：X-Forwarded-For / X-Real-IP 是客户端可以随便写的，
+    直连或反代没重写时用它等于让攻击者自己填 IP（绕过登录限流和白名单）。
+    确认部署在可信反代后面时，把环境变量 TRUST_PROXY 设成 1 才启用。
+    """
+    remote = request.remote or "unknown"
+    if not TRUST_PROXY:
+        return remote
     value = request.headers.get("X-Forwarded-For")
     if value:
-        return value.split(",")[-1].strip() or (request.remote or "unknown")
+        return value.split(",")[-1].strip() or remote
     value = request.headers.get("X-Real-IP")
     if value:
         return value.strip()
-    return request.remote or "unknown"
+    return remote
 
 
 def _rate_ok(ip: str, limit: int) -> bool:
@@ -80,11 +91,36 @@ def _rate_ok(ip: str, limit: int) -> bool:
     return len(hits) <= limit
 
 
+def _same_origin(request: web.Request) -> bool:
+    """判断写请求是否来自本后台自己的页面（防 CSRF）。"""
+    site = (request.headers.get("Sec-Fetch-Site") or "").lower()
+    if site and site not in ("same-origin", "none"):
+        return False
+    origin = request.headers.get("Origin") or request.headers.get("Referer") or ""
+    if not origin:
+        return True  # 非浏览器客户端（curl/脚本）没有 Origin，靠 cookie 鉴权
+    host = request.headers.get("Host") or ""
+    return host and origin.split("//")[-1].split("/")[0] == host
+
+
 @web.middleware
 async def guard_middleware(request: web.Request, handler):
-    """全站基础防护：按 IP 限流，登录接口更严格。"""
+    """全站基础防护：限流 + 写接口防 CSRF。"""
     if not _rate_ok(_client_ip(request), LOGIN_RATE_MAX if request.path == "/api/login" else RATE_MAX):
         raise web.HTTPTooManyRequests(text="请求过于频繁，请稍后再试")
+
+    # 后台写接口：必须是同源 + JSON，挡住「同站页面自动提交表单」这类 CSRF
+    if (
+        request.method in ("POST", "PUT", "PATCH", "DELETE")
+        and request.path.startswith("/api/")
+        and request.path != "/api/login"
+    ):
+        if not _same_origin(request):
+            raise web.HTTPForbidden(text="跨站请求被拒绝")
+        ctype = (request.headers.get("Content-Type") or "").lower()
+        if request.can_read_body and "application/json" not in ctype:
+            raise web.HTTPUnsupportedMediaType(text="只接受 application/json")
+
     return await handler(request)
 
 
@@ -99,8 +135,37 @@ def _cached(key: str, builder):
     return data
 
 
+_session_secret_cache: bytes | None = None
+
+
 def _secret() -> bytes:
-    return hashlib.sha256(ADMIN_PASSWORD.encode("utf-8")).digest()
+    """登录令牌的签名密钥。
+
+    优先用环境变量 SESSION_SECRET（推荐）；没配就随机生成一份存数据库，
+    绝不再直接用 sha256(密码) —— 那样拿到一个 cookie 就能离线爆破密码。
+    """
+    global _session_secret_cache
+    if _session_secret_cache:
+        return _session_secret_cache
+    env_secret = (os.getenv("SESSION_SECRET") or "").strip()
+    if env_secret:
+        _session_secret_cache = hashlib.sha256(env_secret.encode("utf-8")).digest()
+        return _session_secret_cache
+    try:
+        import secrets as _secrets
+
+        with database.SessionLocal() as session:
+            stored = database.get_config(session, "web_session_secret", "")
+            if not stored:
+                stored = _secrets.token_hex(32)
+                database.set_config(session, "web_session_secret", stored)
+        _session_secret_cache = hashlib.sha256(stored.encode("utf-8")).digest()
+    except Exception:
+        # 数据库不可用时退回密码派生，保证后台还能用
+        _session_secret_cache = hashlib.sha256(
+            ("dqs:" + ADMIN_PASSWORD).encode("utf-8")
+        ).digest()
+    return _session_secret_cache
 
 
 def _make_token(username: str = "admin") -> str:
@@ -126,6 +191,9 @@ def _check_token(token) -> str | None:
     if expires < int(time.time()):
         return None
     msg = f"{exp_s}.{user}".encode()
+    # 签名必须是 64 位十六进制：非 ASCII 走 compare_digest 会抛 TypeError
+    if not re.fullmatch(r"[0-9a-f]{64}", sig or ""):
+        return None
     if not hmac.compare_digest(sig, hmac.new(_secret(), msg, hashlib.sha256).hexdigest()):
         return None
     return user
@@ -214,7 +282,9 @@ async def login(request: web.Request):
     # 用户名 + 密码双验证（用户名未配置时默认 admin）
     username = str(data.get("username", "")).strip()
     password = str(data.get("password", ""))
-    ok_user = bool(ADMIN_USERNAME) and hmac.compare_digest(username, ADMIN_USERNAME)
+    ok_user = bool(ADMIN_USERNAME) and hmac.compare_digest(
+        username.encode("utf-8"), ADMIN_USERNAME.encode("utf-8")
+    )
     ok_pass = bool(ADMIN_PASSWORD) and hmac.compare_digest(password, ADMIN_PASSWORD)
     if not (ok_user and ok_pass):
         ip_fails.append(now)
@@ -228,7 +298,14 @@ async def login(request: web.Request):
     with database.SessionLocal() as session:
         database.log_audit(session, username, "login", f"后台登录成功（IP: {ip}）")
     resp = web.json_response({"ok": True})
-    resp.set_cookie(COOKIE_NAME, _make_token(username), max_age=COOKIE_TTL, httponly=True, samesite="lax")
+    # 只有 https 访问才打 secure：线上（Railway/反代）用 X-Forwarded-Proto 判断，
+    # 本地 http 调试不加，否则浏览器根本不会保存登录 cookie
+    proto = (request.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip().lower()
+    is_https = request.scheme == "https" or proto == "https"
+    resp.set_cookie(
+        COOKIE_NAME, _make_token(username), max_age=COOKIE_TTL,
+        httponly=True, samesite="lax", secure=is_https,
+    )
     return resp
 
 
@@ -259,7 +336,9 @@ async def save_config_api(request: web.Request):
             config_api.save_config(session, key, value)
         except ValueError as e:
             raise web.HTTPBadRequest(text=str(e))
-        database.log_audit(session, admin, "config_save", f"{key} = {value[:120]}")
+        # 密钥类配置不落明文到审计表
+        shown = "******" if key in ("okpay_token",) else value[:120]
+        database.log_audit(session, admin, "config_save", f"{key} = {shown}")
     return web.json_response({"ok": True})
 
 
