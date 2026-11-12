@@ -1,6 +1,8 @@
 """抽奖系统：奖品池按概率抽取、兑换价目表，中奖直接到账并留痕。"""
 import math
-import random
+import secrets
+
+_rng = secrets.SystemRandom()  # 抽奖用系统安全随机，避免序列被预测
 
 from database import (
     LotteryRecord,
@@ -123,7 +125,7 @@ def _apply_prize(session, user, ptype: str, value: float) -> str:
 
 def _pick(prizes: list[dict]):
     """按概率抽取一条奖品，未命中返回 None（谢谢参与）。"""
-    r = random.uniform(0, 100)
+    r = _rng.uniform(0, 100)
     cum = 0.0
     for p in prizes:
         cum += float(p.get("prob", 0))
