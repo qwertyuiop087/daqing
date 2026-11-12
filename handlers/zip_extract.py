@@ -109,7 +109,9 @@ async def zip_got_file(message: Message, state: FSMContext, bot: Bot):
         return
 
     # 每个 zip 单独一个子目录，避免不同包内同名 txt 互相覆盖
-    out_dir = os.path.join(workdir, "out", f"z{len(zips) + 1}")
+    out_dir = os.path.join(
+        workdir, "out", f"z{len(zips_now) + 1}_{int(time.time() * 1000)}"
+    )
     os.makedirs(out_dir, exist_ok=True)
     files: list[dict] = []
     used: set = set()
