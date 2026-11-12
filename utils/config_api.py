@@ -125,7 +125,8 @@ def get_all_config(session) -> dict:
         "lottery_notify_template": database.get_lottery_notify_template(session),
         # OKPay 收款（商户号 / 密钥 / 回调地址）
         "okpay_shop_id": database.get_config(session, "okpay_shop_id", ""),
-        "okpay_token": database.get_config(session, "okpay_token", ""),
+        # 密钥只回掩码，避免明文下发到浏览器/日志；前端留空表示"不修改"
+        "okpay_token": "******" if database.get_config(session, "okpay_token", "") else "",
         "okpay_callback_url": database.get_config(session, "okpay_callback_url", ""),
     }
 
@@ -354,8 +355,10 @@ def get_wash_orders(session, limit: int = 100, type_filter: str = "", q: str = "
         "total_lottery": total_lottery,
         "total_balance": round(float(total_balance), 4),
         # 账目校验：充值 + 抽奖 + 退款 − 扣费，正常等于用户余额合计
+        # 退款已经退给用户（钱不在账上），所以是减项；写成加项会让
+        # 校验差额凭空多出两倍退款额，把真实资金缺口掩盖掉。
         "balance_check": round(
-            float(total_recharge + total_lottery + total_refund - total_deduct), 4
+            float(total_recharge + total_lottery - total_deduct - total_refund), 4
         ),
     }
 
