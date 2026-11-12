@@ -155,3 +155,22 @@ async def send_files_in_batches(
 async def send_menu(message: Message, text: str) -> None:
     """发送主菜单。"""
     await message.answer(text, reply_markup=menu_kb(message.from_user.id))
+
+# ---------------- 按用户的串行锁 ----------------
+# 媒体组/多选上传时，Telegram 会把多个文件几乎同时推过来；
+# aiogram 默认每个 update 一个 task 并发处理，不加锁的话几个 handler
+# 会各自读到空的文件列表再互相覆盖，最终只剩最后一个文件
+# （表现就是「累计永远是 1 个文件」）。
+_user_locks: dict[int, asyncio.Lock] = {}
+
+
+def user_lock(uid: int) -> asyncio.Lock:
+    """取当前用户的串行锁：同一用户的上传处理排队执行。"""
+    lock = _user_locks.get(uid)
+    if lock is None:
+        if len(_user_locks) > 2000:
+            for key in [k for k, v in _user_locks.items() if not v.locked()][:1000]:
+                _user_locks.pop(key, None)
+        lock = asyncio.Lock()
+        _user_locks[uid] = lock
+    return lock
