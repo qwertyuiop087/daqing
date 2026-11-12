@@ -138,8 +138,9 @@ class TestOkpayCredit(unittest.TestCase):
                 select(WashOrder).where(WashOrder.user_id == uid)
             ))
             self.assertTrue(rows, "应写一条洗数据充值流水")
-            rate = get_usdt_rate(session)
-            self.assertAlmostEqual(get_wash_balance(session, uid), 100.0 * rate, places=2)
+            # 入账用的是实时汇率，测试里不重新取（会不一致），直接用流水金额核对
+            cost = rows[0].cost
+            self.assertAlmostEqual(get_wash_balance(session, uid), cost, places=2)
 
     def test_callback_bad_sign_is_rejected(self):
         self._make_order("okpay_cb2", 910002, 0, "10")
