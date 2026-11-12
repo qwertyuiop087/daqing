@@ -42,7 +42,7 @@ logging.basicConfig(level=logging.INFO)
 # ---------------- 支付自动到账（内联在本文件，避免依赖单独模块） ----------------
 
 AUTO_CREDIT_INTERVAL = 1           # 扫描间隔（秒）
-ORDER_TIMEOUT_SECONDS = 5 * 60     # 订单 5 分钟内未支付视为无效
+ORDER_TIMEOUT_SECONDS = 24 * 3600  # 链上确认/渠道延迟很常见，5 分钟就判死会让用户付钱拿不到货     # 订单 5 分钟内未支付视为无效
 ORDER_CHECK_EVERY = 5              # 同一订单最多每 5 秒查一次支付状态
 AUTO_CREDIT_MAX_ORDERS = 50        # 每轮最多处理订单数
 
@@ -88,6 +88,12 @@ async def _query_paid(order) -> tuple[bool, float, str]:
         amount = float(data.get("amount") or 0)
     except Exception:
         amount = 0.0
+    if amount <= 0:
+        # 渠道没给金额：回退到订单金额，避免"付了钱按 0 入账"
+        try:
+            amount = float(order.amount or 0)
+        except Exception:
+            amount = 0.0
     return True, amount, data.get("txid", "") or ""
 
 
@@ -133,7 +139,7 @@ async def _sweep_payments(bot) -> None:
                                 fresh.user_id,
                                 "⚠️ <b>订单已超时</b>\n\n"
                                 f"订单号：<code>{fresh.order_id}</code>\n"
-                                "5 分钟内未完成支付，订单已失效，请重新下单。",
+                                "24 小时内未完成支付，订单已失效，请重新下单。\n（已付款但刚确认的订单会自动补上，无需担心）",
                                 parse_mode="HTML",
                             )
                         except Exception:
@@ -142,15 +148,19 @@ async def _sweep_payments(bot) -> None:
 
         # 2) 已付款：行锁 + 幂等入账（与「我已支付」按钮互斥）
         notify_text = None
+        # 汇率是网络请求，必须在进入行锁事务之前取好：
+        # 在事务里 await 外部 HTTP 会长时间持锁，SQLite 下 FOR UPDATE 又形同虚设，
+        # 容易导致同一订单被并发入账两次。
+        with SessionLocal() as session:
+            rate = await get_usdt_rate_async(session)
         with SessionLocal() as session:
             fresh = session.scalar(
                 select(PaymentOrder)
                 .where(PaymentOrder.order_id == order.order_id)
                 .with_for_update()
             )
-            if fresh is None:
+            if fresh is None or fresh.status == "paid":
                 continue
-            rate = await get_usdt_rate_async(session)
             notify_text = credit_order(session, fresh, amount, rate, txid)
             if notify_text is None:
                 continue
