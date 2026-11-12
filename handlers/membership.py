@@ -1050,10 +1050,20 @@ def _admin_manage_kb():
     return b.as_markup()
 
 
+def _has_explicit_super() -> bool:
+    """是否显式配置了总管理员。没配时不允许增删管理员，避免普通管理员互相提权。"""
+    from config import settings as _s
+
+    return bool(_s.SUPER_ADMIN_IDS)
+
+
 @router.callback_query(F.data == "admin:manage_admins")
 async def admin_manage_admins(cq: CallbackQuery):
-    if not is_super_admin(cq.from_user.id):
-        await cq.answer("⛔ 仅总管理员可用", show_alert=True)
+    if not is_super_admin(cq.from_user.id) or not _has_explicit_super():
+        await cq.answer(
+            "⛔ 需要在 Railway 变量里配置 SUPER_ADMIN_IDS 才能管理管理员",
+            show_alert=True,
+        )
         return
     await cq.answer()
 
@@ -1662,7 +1672,7 @@ async def admin_wash_orders(cq: CallbackQuery):
         uname = user_map.get(o.user_id, str(o.user_id))
         lines.append(
             f"[{type_name}] @{uname}({o.user_id}) | ¥{sign}{abs(float(o.cost or 0)):.4f}\n"
-            f"  文件：{o.filename} | {o.row_count:,}行\n"
+            f"  文件：{html.escape(str(o.filename))} | {o.row_count:,}行\n"
             f"  时间：{beijing_str(o.created_at)}\n"
         )
 
