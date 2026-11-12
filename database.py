@@ -243,21 +243,39 @@ def get_wash_balance(session, tg_id: int) -> float:
 
 
 def add_wash_balance(session, tg_id: int, amount: float) -> None:
-    """给用户增加洗数据余额。"""
-    user = session.get(User, tg_id)
-    if user:
-        user.wash_balance = (user.wash_balance or 0) + amount
-        session.commit()
+    """给用户增加洗数据余额（原子更新，并发不会丢钱）。"""
+    from sqlalchemy import update
+
+    session.execute(
+        update(User)
+        .where(User.id == tg_id)
+        .values(wash_balance=func_coalesce(User.wash_balance) + amount)
+    )
+    session.commit()
 
 
 def deduct_wash_balance(session, tg_id: int, amount: float) -> bool:
-    """扣除用户洗数据余额，余额不足返回 False。"""
-    user = session.get(User, tg_id)
-    if not user or (user.wash_balance or 0) < amount:
-        return False
-    user.wash_balance -= amount
+    """扣除用户洗数据余额，余额不足返回 False。
+
+    用「条件更新」一次完成判断与扣减：并发提交多个任务时不会因为
+    同时读到同一个余额而把余额扣成负数（那样等于白送洗数据）。
+    """
+    from sqlalchemy import update
+
+    result = session.execute(
+        update(User)
+        .where(User.id == tg_id, func_coalesce(User.wash_balance) >= amount)
+        .values(wash_balance=func_coalesce(User.wash_balance) - amount)
+    )
     session.commit()
-    return True
+    return result.rowcount == 1
+
+
+def func_coalesce(col):
+    """COALESCE(col, 0)，兼容 SQLite / Postgres。"""
+    from sqlalchemy import func
+
+    return func.coalesce(col, 0)
 
 
 def remaining_days(user: User) -> int:
@@ -271,9 +289,17 @@ def remaining_days(user: User) -> int:
 
 
 def _gen_code() -> str:
-    """生成卡密：XXXX-XXXX-XXXX（去掉易混淆字符 0/O/1/I）。"""
+    """生成卡密：XXXX-XXXX-XXXX（去掉易混淆字符 0/O/1/I）。
+
+    用 secrets 而不是 random：random 是 Mersenne Twister，输出序列可预测，
+    卡密属于凭据，必须用密码学安全随机源。
+    """
+    import secrets
+
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-    return "-".join("".join(random.choices(alphabet, k=4)) for _ in range(3))
+    return "-".join(
+        "".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(3)
+    )
 
 
 def create_cards(session, count: int, days: int, admin_id: int) -> list[str]:
@@ -343,18 +369,23 @@ def get_user_by_id(session, user_id: int):
 
 
 def add_user_days(session, user: User, days: int) -> str:
-    """给用户添加会员天数（在原到期时间基础上累加，已过期则从现在起算）。"""
+    """给用户添加会员天数（在原到期时间基础上累加，已过期则从现在起算）。
+
+    行锁：并发入账（支付回调 + 手动加天数）不会互相覆盖导致少加天数。
+    """
+    locked = session.get(User, user.id, with_for_update=True) or user
     now = utcnow()
     base = (
-        user.membership_expires_at
-        if user.membership_expires_at and user.membership_expires_at > now
+        locked.membership_expires_at
+        if locked.membership_expires_at and locked.membership_expires_at > now
         else now
     )
-    user.membership_expires_at = base + timedelta(days=days)
+    locked.membership_expires_at = base + timedelta(days=days)
+    expires_text = beijing_str(locked.membership_expires_at)
     session.commit()
     return (
-        f"✅ 已为 <b>{user.id}</b> 添加 {days} 天会员。\n"
-        f"当前到期时间：{beijing_str(user.membership_expires_at)}（北京时间）。"
+        f"✅ 已为 <b>{locked.id}</b> 添加 {days} 天会员。\n"
+        f"当前到期时间：{expires_text}（北京时间）。"
     )
 
 
