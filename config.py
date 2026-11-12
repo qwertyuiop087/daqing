@@ -90,7 +90,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.91"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.92"))
 
 
 settings = Settings()
@@ -100,6 +100,16 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.92",
+        [
+            "安全加固：会员入账必须核对实付金额，付款金额被改小不再能拿整档会员",
+            "洗数据余额扣减改原子操作，并发提交不会把余额扣成负数",
+            "解压 zip 改流式读取并校验压缩比，防压缩炸弹把服务打挂；Excel 改只读模式加上限",
+            "后台写接口加同源校验，登录 IP 默认不信 X-Forwarded-For，会话密钥与登录密码分离",
+            "加区号按位置插入 +86（修掉替换错位），车牌分包输出文件数加上限",
+        ],
+    ),
     (
         "2026-10-28.91",
         [
