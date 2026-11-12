@@ -1,5 +1,6 @@
 """车牌分包：支持一次上传多个文件，自动识别 名字 / 车牌 / 手机号，
 按用户指定顺序与行数整理成 TXT 发回。"""
+import math
 import os
 import re
 import time
@@ -32,6 +33,8 @@ from utils.keyboards import cancel_kb, finish_upload_kb, menu_kb
 from utils.phone_db import extract_phones
 
 router = Router(name="plate")
+
+MAX_OUTPUT_FILES = 300  # 单次最多生成多少个结果文件
 
 # 只保留三种字段，顺序可自定义
 _FIELD_KEYS = {"手机号": "phone", "车牌": "plate", "名字": "name"}
@@ -124,6 +127,11 @@ def generate_outputs(records, order, per_file, stem, workdir):
     ]
 
     order_tag = "_".join(_FIELD_LABELS[k] for k in order)
+    if per_file > 0 and math.ceil(len(out_lines) / per_file) > MAX_OUTPUT_FILES:
+        raise ValueError(
+            f"按每份 {per_file} 行会生成 {math.ceil(len(out_lines) / per_file)} 个文件，"
+            f"超过单次上限 {MAX_OUTPUT_FILES}，请把每份行数调大一些"
+        )
 
     outputs: list[tuple[str, str]] = []
     if per_file <= 0 or per_file >= len(out_lines):
