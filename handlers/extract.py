@@ -12,7 +12,7 @@ from config import settings
 from services.file_ops import decode_bytes, sanitize_filename, xlsx_to_lines
 from states import ExtractStates
 from utils.drops import maybe_drop
-from utils.helpers import cleanup_state, ensure_member, get_workdir
+from utils.helpers import cleanup_state, ensure_member, get_workdir, user_lock
 from utils.keyboards import finish_upload_kb, menu_kb
 
 router = Router(name="extract")
@@ -124,14 +124,18 @@ async def extract_got_file(message: Message, state: FSMContext, bot: Bot):
     with open(list_path, "w", encoding="utf-8") as f:
         f.write("\n".join(phones))
 
-    files.append({"name": raw_name, "count": len(phones), "path": list_path})
-    total = sum(f["count"] for f in files)
-    await state.update_data(files=files, total_phones=total, workdir=workdir)
+    async with user_lock(message.from_user.id):
+        data = await state.get_data()
+        files = list(data.get("files") or [])
+        files.append({"name": raw_name, "count": len(phones), "path": list_path})
+        total = sum(f["count"] for f in files)
+        await state.update_data(files=files, total_phones=total, workdir=workdir)
+        idx = len(files)
 
     await message.answer(
-        f"✅ 已处理第 <b>{len(files)}</b> 个文件：<code>{raw_name}</code>\n"
+        f"✅ 已处理第 <b>{idx}</b> 个文件：<code>{raw_name}</code>\n"
         f"　本文件：<b>{len(phones):,}</b> 个手机号\n"
-        f"　累计：{len(files)} 个文件 / <b>{total:,}</b> 个手机号\n\n"
+        f"　累计：{idx} 个文件 / <b>{total:,}</b> 个手机号\n\n"
         "可继续发送，全部发完点「✅ 完成上传」。",
         reply_markup=finish_upload_kb("extract"),
     )
