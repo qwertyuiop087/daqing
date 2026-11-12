@@ -8,7 +8,7 @@ from aiogram.types import CallbackQuery, FSInputFile, Message
 from config import settings
 from services.file_ops import decode_bytes, merge_texts, read_file, sanitize_filename
 from states import MergeStates
-from utils.helpers import cleanup_state, ensure_member, get_workdir
+from utils.helpers import cleanup_state, ensure_member, get_workdir, user_lock
 from utils.drops import maybe_drop
 from utils.keyboards import cancel_kb, finish_upload_kb, menu_kb, merge_skip_filename_kb
 
@@ -57,15 +57,14 @@ async def merge_got_file(message: Message, state: FSMContext, bot: Bot):
     content = decode_bytes(read_file(path))
     lines = len(content.splitlines())
 
-    files.append((name, path))
-
-    # 重新统计所有文件的总行数（保证准确）
-    total_lines = 0
-    for f_name, f_path in files:
-        f_content = decode_bytes(read_file(f_path))
-        total_lines += len(f_content.splitlines())
-
-    await state.update_data(files=files, total_lines=total_lines)
+    # 行数增量累加：以前每收一个文件就把之前所有文件重读一遍，
+    # 100 个 20MB 文件会白读 100GB；同时加用户锁，多选同时到达不会互相覆盖。
+    async with user_lock(message.from_user.id):
+        data = await state.get_data()
+        files = list(data.get("files") or [])
+        total_lines = int(data.get("total_lines") or 0) + lines
+        files.append((name, path))
+        await state.update_data(files=files, total_lines=total_lines)
 
     await message.answer(
         f"✅ 已接收第 <b>{len(files)}</b> 个文件：<code>{name}</code>\n"
