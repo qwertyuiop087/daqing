@@ -201,7 +201,12 @@ async def _scan(bot, only_code=None, dry_run=False, require_pending=True) -> dic
             if dry_run:
                 continue
 
-            original_name = wash_handlers._washed_original_name(file_name)
+            from services.file_ops import sanitize_filename
+
+            # 群里的文件名是别人可控的：去掉路径分隔符与 ..，防止越界写文件
+            original_name = sanitize_filename(
+                wash_handlers._washed_original_name(file_name)
+            )
             workdir = get_workdir(user_id)
             tmp_path = os.path.join(workdir, f"resend_{msg.id}_{original_name}")
             try:
