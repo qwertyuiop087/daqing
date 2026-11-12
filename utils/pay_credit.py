@@ -17,6 +17,23 @@ def credit_order(session, order, amount_usdt: float, rate: float, txid: str = ""
 
     from database import User, WashOrder, add_user_days, add_wash_balance, get_wash_balance
 
+    # 实付金额校验：会员权益不能只看"渠道说已支付"，
+    # 否则用户把支付金额改小（USDT 转账可改额）就能拿到整档会员。
+    try:
+        paid_amount = float(amount_usdt or 0)
+        expect_amount = float(order.amount or 0)
+    except (TypeError, ValueError):
+        paid_amount, expect_amount = 0.0, float(order.amount or 0)
+    if expect_amount > 0 and paid_amount + 1e-6 < expect_amount:
+        order.status = "underpaid"
+        session.commit()
+        return (
+            "⚠️ <b>支付金额不足</b>\n\n"
+            f"订单应付：{expect_amount:g} USDT\n"
+            f"实际收到：{paid_amount:g} USDT\n\n"
+            "订单已转人工核对，请联系客服处理。"
+        )
+
     order.status = "paid"
     if txid:
         order.txid = txid
