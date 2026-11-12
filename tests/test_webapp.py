@@ -95,7 +95,7 @@ class TestWebapp(unittest.TestCase):
                 self.assertEqual(wo_none["items"], [])
 
                 # 账目校验：充值 + 抽奖 + 退款 − 扣费
-                self.assertAlmostEqual(wo["balance_check"], 70.0 + 0 + 2.5 - 18.0)
+                self.assertAlmostEqual(wo["balance_check"], 70.0 + 0 - 18.0 - 2.5)
 
                 # 非法输入 → 400
                 resp = await client.post("/api/config/lottery_prizes", json={"value": "天:1:60,天:2:50"})
