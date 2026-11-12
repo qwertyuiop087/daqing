@@ -103,7 +103,7 @@ class TestAutoCredit(unittest.TestCase):
             with SessionLocal() as s:
                 get_or_create_user(s, 222, "u2", "U")
                 o = PaymentOrder(order_id="old_1", user_id=222, days=30, amount="3", status="pending")
-                o.created_at = utcnow() - timedelta(minutes=6)
+                o.created_at = utcnow() - timedelta(hours=25)
                 s.add(o)
                 s.commit()
 
@@ -125,7 +125,7 @@ class TestAutoCredit(unittest.TestCase):
             with SessionLocal() as s:
                 get_or_create_user(s, 333, "u3", "U")
                 o = PaymentOrder(order_id="late_1", user_id=333, days=30, amount="3", status="pending")
-                o.created_at = utcnow() - timedelta(minutes=6)
+                o.created_at = utcnow() - timedelta(hours=25)
                 s.add(o)
                 s.commit()
 
