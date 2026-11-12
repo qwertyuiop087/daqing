@@ -2,6 +2,7 @@
 按用户指定顺序与行数整理成 TXT 发回。"""
 import os
 import re
+import time
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
@@ -181,7 +182,7 @@ async def plate_got_file(message: Message, state: FSMContext, bot: Bot):
 
     workdir = data.get("workdir") or get_workdir(message.from_user.id)
     # 序号前缀：避免同名文件互相覆盖
-    path = os.path.join(workdir, f"plate_{len(files) + 1}_{name}")
+    path = os.path.join(workdir, f"plate_{len(files) + 1}_{int(time.time() * 1000)}_{name}")
 
     try:
         file = await bot.get_file(doc.file_id)
