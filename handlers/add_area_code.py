@@ -1,6 +1,7 @@
 """加区号：给 txt 里的手机号前面加 +86（支持一次上传多个文件）。"""
 import asyncio
 import os
+import time
 import re
 
 from aiogram import Bot, F, Router
@@ -117,7 +118,7 @@ async def add_code_got_file(message: Message, state: FSMContext, bot: Bot):
     workdir = data.get("workdir") or get_workdir(message.from_user.id)
     name = doc.file_name or f"file{len(files) + 1}.txt"
     safe = sanitize_filename(name)
-    path = os.path.join(workdir, f"ac_{len(files) + 1}_{safe}")
+    path = os.path.join(workdir, f"ac_{len(files) + 1}_{int(time.time() * 1000)}_{safe}")
 
     try:
         file = await bot.get_file(doc.file_id)
