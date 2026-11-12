@@ -5,7 +5,9 @@
 - 天数加权随机：越大概率越小（权重 = 1/天）。
 - 通知内容由管理员在管理面板自定义模板（占位符见 get_drop_notify_template 说明）。
 """
-import random
+import secrets
+
+_rng = secrets.SystemRandom()
 
 from database import (
     DropRecord,
@@ -28,7 +30,7 @@ WASH_DAYS_RANGE = (3, 25)
 def _weighted_days(low: int, high: int) -> int:
     """加权随机掉落天数：越大概率越小（权重 = 1/天）。"""
     weights = [1.0 / d for d in range(low, high + 1)]
-    return random.choices(range(low, high + 1), weights=weights)[0]
+    return _rng.choices(range(low, high + 1), weights=weights)[0]
 
 
 def roll_drop(session, tg_id: int, feature: str, is_wash: bool = False) -> int:
