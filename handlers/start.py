@@ -16,6 +16,10 @@ router = Router(name="start")
 
 @router.message(Command("version"))
 async def cmd_version(message: Message):
+    from utils.roles import is_admin
+    if not is_admin(message.from_user.id):
+        await message.answer("机器人已部署最新版本。")
+        return
     """显示当前部署版本与该版本的更新内容，用来确认 Railway 上跑的是不是最新包。"""
     notes = None
     for ver, items in CHANGELOG:
