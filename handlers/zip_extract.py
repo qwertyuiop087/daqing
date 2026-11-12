@@ -1,5 +1,6 @@
 """解压 ZIP 提取 TXT（支持一次上传多个 ZIP）。"""
 import os
+import time
 import zipfile
 
 from aiogram import Bot, F, Router
@@ -10,7 +11,13 @@ from config import settings
 from services.file_ops import extract_txt_from_zip, read_file, sanitize_filename
 from states import ZipStates
 from utils.drops import maybe_drop
-from utils.helpers import cleanup_state, ensure_member, get_workdir, send_files_in_batches
+from utils.helpers import (
+    cleanup_state,
+    ensure_member,
+    get_workdir,
+    send_files_in_batches,
+    user_lock,
+)
 from utils.keyboards import finish_upload_kb, menu_kb
 
 router = Router(name="zip_extract")
@@ -60,8 +67,8 @@ async def zip_got_file(message: Message, state: FSMContext, bot: Bot):
         return
 
     data = await state.get_data()
-    zips = list(data.get("zips") or [])
-    if len(zips) >= settings.MAX_UPLOAD_FILES:
+    zips_now = list(data.get("zips") or [])
+    if len(zips_now) >= settings.MAX_UPLOAD_FILES:
         await message.answer(
             f"⚠️ 最多 {settings.MAX_UPLOAD_FILES} 个文件，请先点「✅ 完成上传」。",
             reply_markup=finish_upload_kb("zip"),
@@ -69,8 +76,8 @@ async def zip_got_file(message: Message, state: FSMContext, bot: Bot):
         return
 
     workdir = data.get("workdir") or get_workdir(message.from_user.id)
-    # 序号前缀：多个 zip 之间不会互相覆盖
-    zip_path = os.path.join(workdir, f"zip_{len(zips) + 1}_{name}")
+    # 序号前缀：多个 zip 之间不会互相覆盖（用时间戳兜底并发）
+    zip_path = os.path.join(workdir, f"zip_{len(zips_now) + 1}_{int(time.time() * 1000)}_{name}")
 
     try:
         file = await bot.get_file(doc.file_id)
@@ -113,14 +120,18 @@ async def zip_got_file(message: Message, state: FSMContext, bot: Bot):
             f.write(text)
         files.append({"name": safe, "path": path, "lines": len(text.splitlines())})
 
-    zips.append({"name": name, "files": files})
-    total_txt = sum(len(z["files"]) for z in zips)
-    await state.update_data(zips=zips, total_txt=total_txt, workdir=workdir)
+    async with user_lock(message.from_user.id):
+        data = await state.get_data()
+        zips = list(data.get("zips") or [])
+        zips.append({"name": name, "files": files})
+        total_txt = sum(len(z["files"]) for z in zips)
+        await state.update_data(zips=zips, total_txt=total_txt, workdir=workdir)
+        idx, total_zips = len(zips), total_txt
 
     await message.answer(
-        f"✅ 已解压第 <b>{len(zips)}</b> 个压缩包：<code>{name}</code>\n"
+        f"✅ 已解压第 <b>{idx}</b> 个压缩包：<code>{name}</code>\n"
         f"　本包提取：<b>{len(files)}</b> 个 TXT\n"
-        f"　累计：{len(zips)} 个 ZIP / <b>{total_txt}</b> 个 TXT\n\n"
+        f"　累计：{idx} 个 ZIP / <b>{total_zips}</b> 个 TXT\n\n"
         "可继续发送，全部发完点「✅ 完成上传」。",
         reply_markup=finish_upload_kb("zip"),
     )
