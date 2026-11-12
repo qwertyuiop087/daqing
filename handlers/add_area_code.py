@@ -11,7 +11,7 @@ from config import settings
 from services.file_ops import decode_bytes, read_file, sanitize_filename
 from states import AddAreaCodeStates
 from utils.drops import maybe_drop
-from utils.helpers import cleanup_state, ensure_member, get_workdir
+from utils.helpers import cleanup_state, ensure_member, get_workdir, user_lock
 from utils.keyboards import cancel_kb, finish_upload_kb, menu_kb
 
 router = Router(name="add_area_code")
@@ -127,14 +127,18 @@ async def add_code_got_file(message: Message, state: FSMContext, bot: Bot):
         await message.answer(f"⚠️ 文件接收失败：{str(e)[:100]}")
         return
 
-    files.append((name, path, lines))
-    total_lines = sum(f[2] for f in files)
-    await state.update_data(files=files, total_lines=total_lines, workdir=workdir)
+    async with user_lock(message.from_user.id):
+        data = await state.get_data()
+        files = list(data.get("files") or [])
+        files.append((name, path, lines))
+        total_lines = sum(f[2] for f in files)
+        await state.update_data(files=files, total_lines=total_lines, workdir=workdir)
+        idx = len(files)
 
     await message.answer(
-        f"✅ 已接收第 <b>{len(files)}</b> 个文件：<code>{name}</code>\n"
+        f"✅ 已接收第 <b>{idx}</b> 个文件：<code>{name}</code>\n"
         f"　本文件：<b>{lines:,}</b> 行\n"
-        f"　累计：{len(files)} 个文件 / <b>{total_lines:,}</b> 行\n\n"
+        f"　累计：{idx} 个文件 / <b>{total_lines:,}</b> 行\n\n"
         "可继续发送，全部发完点「✅ 完成上传」。",
         reply_markup=finish_upload_kb("addcode"),
     )
