@@ -969,7 +969,7 @@ async def _wash_submit_impl(cq: CallbackQuery, state: FSMContext, bot: Bot) -> N
     # 生成7位随机码（字母+数字），保护用户隐私；整批文件共用同一个随机码
     import random
     import string
-    random_code = ''.join(random.choices(string.ascii_letters + string.digits, k=7))
+    random_code = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(7))
 
     with SessionLocal() as session:
         from database import set_config
