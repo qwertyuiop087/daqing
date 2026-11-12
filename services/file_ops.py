@@ -136,8 +136,15 @@ def extract_txt_from_zip(
     result: list[tuple[str, str]] = []
     seen: dict[str, int] = {}
     total = 0
+    CHUNK = 1024 * 1024
+    MAX_RATIO = 200          # 压缩比超过 200:1 视为炸弹
+    MAX_ENTRIES = 20000      # 压缩包内条目数上限
+
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        for info in zf.infolist():
+        infos = zf.infolist()
+        if len(infos) > MAX_ENTRIES:
+            raise RuntimeError(f"压缩包内文件太多（{len(infos)} 个），超过上限 {MAX_ENTRIES}")
+        for info in infos:
             if info.is_dir():
                 continue
             name = info.filename.replace("\\", "/")
@@ -146,18 +153,48 @@ def extract_txt_from_zip(
             parts = name.split("/")
             if ".." in parts or not parts[-1]:
                 continue
+            # 压缩比炸弹：声明的大小和压缩后大小严重不成比例
+            if info.compress_size and info.file_size > info.compress_size * MAX_RATIO:
+                raise RuntimeError(
+                    f"压缩包疑似炸弹（{info.filename} 压缩比超过 {MAX_RATIO}:1），已拒绝解压"
+                )
             if info.file_size > max_size:
                 continue
-            data = zf.read(info.filename)
-            total += len(data)
-            if total > max_total_size:
+
+            # 流式读：边读边累计实际字节，绝不按声明大小一次性 read()
+            buf = bytearray()
+            stop_all = False
+            try:
+                with zf.open(info) as fp:
+                    while True:
+                        chunk = fp.read(CHUNK)
+                        if not chunk:
+                            break
+                        buf.extend(chunk)
+                        total += len(chunk)
+                        if len(buf) > max_size:
+                            # 单文件解压后超出上限：说明声明大小不实，直接拒绝这个包
+                            raise RuntimeError(
+                                f"{info.filename} 解压后超过单文件上限，已中止"
+                            )
+                        if total > max_total_size:
+                            stop_all = True  # 总量到顶：保留已提取的，停止继续解压
+                            break
+            except RuntimeError:
+                raise
+            except Exception:
+                # 单条目损坏（CRC 错等）：跳过这个文件，不影响其它
+                continue
+            if stop_all:
                 break
+            if not buf:
+                continue
             base = sanitize_filename(parts[-1])
             seen[base] = seen.get(base, 0) + 1
             if seen[base] > 1:
                 stem, ext = os.path.splitext(base)
                 base = f"{stem}({seen[base] - 1}){ext}"
-            result.append((base, decode_bytes(data)))
+            result.append((base, decode_bytes(bytes(buf))))
             if len(result) >= max_txt:
                 break
     return result
@@ -687,7 +724,17 @@ def xlsx_to_lines(data: bytes) -> list[str]:
 
     lines: list[str] = []
 
+    cells_seen = 0
+
     def _append_row(cells) -> None:
+        nonlocal cells_seen
+        cells_seen += len(cells)
+        if cells_seen > MAX_CELLS:
+            raise ValueError(
+                f"表格太大（超过 {MAX_CELLS:,} 个单元格），请拆分成多个文件后再上传"
+            )
+        if len(lines) >= MAX_ROWS:
+            raise ValueError(f"表格行数超过上限（{MAX_ROWS:,} 行），请拆分后再上传")
         if not any(cells):
             return
         line = "\t".join(cells)
@@ -705,10 +752,14 @@ def xlsx_to_lines(data: bytes) -> list[str]:
                     "请把该列单元格格式改为「文本」后重新保存，再上传。"
                 )
 
+    # 硬上限：单个表格超过这个规模就拒绝，避免把内存和事件循环拖死
+    MAX_ROWS = 300000
+    MAX_CELLS = 3000000
+
     if is_xls:
         # 旧版 xls 格式，用 xlrd（按单元格类型转换，日期不再变成序列号）
         import xlrd
-        wb = xlrd.open_workbook(file_contents=data)
+        wb = xlrd.open_workbook(file_contents=data, on_demand=True)
         try:
             for sheet_idx in range(wb.nsheets):
                 ws = wb.sheet_by_index(sheet_idx)
@@ -730,7 +781,7 @@ def xlsx_to_lines(data: bytes) -> list[str]:
     else:
         # xlsx 格式，用 openpyxl
         from openpyxl import load_workbook
-        wb = load_workbook(BytesIO(data), data_only=True)
+        wb = load_workbook(BytesIO(data), data_only=True, read_only=True)
         try:
             for ws in wb.worksheets:
                 for row in ws.iter_rows(values_only=True):
