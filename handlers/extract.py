@@ -2,6 +2,7 @@
 每个文件分别提取，最后合并导出（可选跨文件去重）。"""
 import os
 import re
+import time
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
@@ -94,7 +95,7 @@ async def extract_got_file(message: Message, state: FSMContext, bot: Bot):
 
     workdir = data.get("workdir") or get_workdir(message.from_user.id)
     safe = sanitize_filename(raw_name)
-    tmp_path = os.path.join(workdir, f"ex_{len(files) + 1}_{safe}")
+    tmp_path = os.path.join(workdir, f"ex_{len(files) + 1}_{int(time.time() * 1000)}_{safe}")
 
     try:
         file = await bot.get_file(doc.file_id)
@@ -120,7 +121,7 @@ async def extract_got_file(message: Message, state: FSMContext, bot: Bot):
         return
 
     # 每个文件的结果先落盘，避免把几十万个号码塞进 FSM 内存
-    list_path = os.path.join(workdir, f"phones_{len(files) + 1}.txt")
+    list_path = os.path.join(workdir, f"phones_{len(files) + 1}_{int(time.time() * 1000)}.txt")
     with open(list_path, "w", encoding="utf-8") as f:
         f.write("\n".join(phones))
 
