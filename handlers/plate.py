@@ -20,7 +20,13 @@ from services.file_ops import (
 )
 from states import PlateStates
 from utils.drops import maybe_drop
-from utils.helpers import cleanup_state, ensure_member, get_workdir, send_files_in_batches
+from utils.helpers import (
+    cleanup_state,
+    ensure_member,
+    get_workdir,
+    send_files_in_batches,
+    user_lock,
+)
 from utils.keyboards import cancel_kb, finish_upload_kb, menu_kb
 from utils.phone_db import extract_phones
 
@@ -195,22 +201,26 @@ async def plate_got_file(message: Message, state: FSMContext, bot: Bot):
 
     both = sum(1 for r in records if r["phone"] and r["plate"])
     has_name = sum(1 for r in records if r["name"])
-    files.append(
-        {
-            "name": name,
-            "path": path,
-            "records": len(records),
-            "both": both,
-            "has_name": has_name,
-        }
-    )
-    total_records = sum(f["records"] for f in files)
-    await state.update_data(files=files, total_records=total_records, workdir=workdir)
+    async with user_lock(message.from_user.id):
+        data = await state.get_data()
+        files = list(data.get("files") or [])
+        files.append(
+            {
+                "name": name,
+                "path": path,
+                "records": len(records),
+                "both": both,
+                "has_name": has_name,
+            }
+        )
+        total_records = sum(f["records"] for f in files)
+        await state.update_data(files=files, total_records=total_records, workdir=workdir)
+        idx = len(files)
 
     await message.answer(
-        f"✅ 已接收第 <b>{len(files)}</b> 个文件：<code>{name}</code>\n"
+        f"✅ 已接收第 <b>{idx}</b> 个文件：<code>{name}</code>\n"
         f"　本文件识别：<b>{len(records)}</b> 条（手机号+车牌 {both} · 有名字 {has_name}）\n"
-        f"　累计：{len(files)} 个文件 / <b>{total_records:,}</b> 条记录\n\n"
+        f"　累计：{idx} 个文件 / <b>{total_records:,}</b> 条记录\n\n"
         "可继续发送，全部发完点「✅ 完成上传」。",
         reply_markup=finish_upload_kb("plate"),
     )
