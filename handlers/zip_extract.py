@@ -94,7 +94,14 @@ async def zip_got_file(message: Message, state: FSMContext, bot: Bot):
             max_size=settings.MAX_ZIP_SIZE,
             max_total_size=settings.MAX_ZIP_SIZE * 2,
         )
-    except (zipfile.BadZipFile, NotImplementedError, RuntimeError):
+    except RuntimeError as e:
+        # 命中安全限制（压缩包炸弹 / 条目过多 / 解压总量超限）
+        await message.answer(
+            f"⚠️ <code>{name}</code> 已被安全拦截：{str(e)[:120]}",
+            reply_markup=finish_upload_kb("zip"),
+        )
+        return
+    except (zipfile.BadZipFile, NotImplementedError):
         await message.answer(
             f"⚠️ <code>{name}</code> 无法解析（可能损坏或被加密），已跳过。",
             reply_markup=finish_upload_kb("zip"),
