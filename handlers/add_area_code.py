@@ -32,20 +32,25 @@ def add_plus86(text: str) -> tuple[str, int]:
         raw = line.strip()
         if not raw:
             continue
-        new_line = raw
+        pieces = []
+        last = 0
         changed = False
         for m in _PHONE_RE.finditer(raw):
             phone = m.group(1)
-            prefix = raw[: m.start(1)]
+            start = m.start(1)
+            if start < last:
+                continue
+            prefix = raw[:start]
             if prefix.endswith("+86") or prefix.endswith("86") or prefix.endswith("86 "):
                 continue
-            if f"+86{phone}" in new_line:
-                continue
-            new_line = new_line.replace(phone, f"+86{phone}", 1)
+            pieces.append(raw[last:start])
+            pieces.append(f"+86{phone}")
+            last = start + len(phone)
             changed = True
+        pieces.append(raw[last:])
+        out_lines.append("".join(pieces))
         if changed:
             changed_lines += 1
-        out_lines.append(new_line)
     return "\n".join(out_lines), changed_lines
 
 
