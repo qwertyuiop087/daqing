@@ -35,6 +35,33 @@ def is_benign_update_error(exc: BaseException) -> bool:
     return any(marker in text for marker in benign_markers)
 
 
+def is_network_error(exc: BaseException) -> bool:
+    """是否是「连不上 Telegram」这类网络异常（不是代码 bug）。
+
+    典型：Connection reset by peer、Cannot connect to host api.telegram.org、
+    ClientConnectorError、ServerDisconnectedError、超时。
+    """
+    name = type(exc).__name__.lower()
+    if "network" in name or "connector" in name or "timeout" in name:
+        return True
+    text = f"{type(exc).__name__} {exc}".lower()
+    markers = (
+        "cannot connect to host",
+        "connection reset by peer",
+        "clientconnectorerror",
+        "serverdisconnectederror",
+        "connection aborted",
+        "network is unreachable",
+        "temporary failure in name resolution",
+        "getaddrinfo failed",
+        "timed out",
+        "timeout",
+        "ssl",
+        "api.telegram.org",
+    )
+    return any(m in text for m in markers)
+
+
 async def cleanup_state(state: FSMContext) -> None:
     """清除状态并删除该操作产生的临时文件。
 
