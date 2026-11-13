@@ -270,8 +270,14 @@ async def main() -> None:
     from utils.keyboards import load_btn_icons
     load_btn_icons()
 
+    # 显式设置连接超时：跨境网络抖动时不要让请求无限期挂着，
+    # 超时后 aiogram 会抛 TelegramNetworkError，轮询/webhook 会自动重试。
+    from aiogram.client.session.aiohttp import AiohttpSession
+
+    session = AiohttpSession(timeout=float(getattr(settings, "HTTP_TIMEOUT", 30) or 30))
     bot = Bot(
         token=settings.BOT_TOKEN,
+        session=session,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dp = Dispatcher(storage=MemoryStorage())
@@ -300,9 +306,32 @@ async def main() -> None:
         exc = event.exception
         # 用户连点按钮 / 点开很久以前的按钮这类情况，Telegram 会返回 400，
         # 属于正常现象，不记录也不打扰管理员
-        from utils.helpers import is_benign_update_error
+        from utils.helpers import is_benign_update_error, is_network_error
         if is_benign_update_error(exc):
             logging.debug("忽略用户操作类异常：%s", exc)
+            return
+        if is_network_error(exc):
+            # 连不上 Telegram（连接被重置/超时）：不是代码问题，
+            # 30 分钟最多提示一次，避免网络抖动时刷屏。
+            logging.warning("网络异常：%s", exc)
+            now = time.time()
+            if now - _err_notify_state["ts"] < 1800:
+                return
+            _err_notify_state["ts"] = now
+            from utils.roles import admin_id_list
+
+            for uid in admin_id_list():
+                try:
+                    await bot.send_message(
+                        uid,
+                        "🌐 <b>网络异常（不是程序故障）</b>\n\n"
+                        "服务器暂时连不上 Telegram（连接被重置或超时）。\n"
+                        "消息收发可能延迟，机器人会自动重试；"
+                        "如果持续超过 10 分钟，建议检查服务器网络。",
+                        parse_mode=ParseMode.HTML,
+                    )
+                except Exception:
+                    pass
             return
         logging.error("未处理异常：%s", exc, exc_info=(type(exc), exc, exc.__traceback__))
         now = time.time()
