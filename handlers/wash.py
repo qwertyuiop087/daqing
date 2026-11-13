@@ -4,6 +4,8 @@ import html
 import json
 import math
 import os
+import secrets
+import string
 import uuid
 
 from aiogram import Bot, F, Router
@@ -42,6 +44,13 @@ class FromAltUserFilter(BaseFilter):
         return str(message.from_user.id) == alt_user_id
 
 router = Router(name="wash")
+
+
+def gen_wash_code() -> str:
+    """生成 7 位随机码（字母+数字），用于群内文件名的隐私保护。"""
+    return "".join(
+        secrets.choice(string.ascii_letters + string.digits) for _ in range(7)
+    )
 # 专门处理小号回传文件的路由，要放到最前面注册，避免被其他文件 handler 拦截
 wash_reply_router = Router(name="wash_reply")
 
@@ -967,9 +976,7 @@ async def _wash_submit_impl(cq: CallbackQuery, state: FSMContext, bot: Bot) -> N
     user_id = cq.from_user.id
 
     # 生成7位随机码（字母+数字），保护用户隐私；整批文件共用同一个随机码
-    import random
-    import string
-    random_code = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(7))
+    random_code = gen_wash_code()
 
     with SessionLocal() as session:
         from database import set_config
