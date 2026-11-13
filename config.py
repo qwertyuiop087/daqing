@@ -91,7 +91,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.93"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.94"))
 
 
 settings = Settings()
@@ -101,6 +101,13 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.94",
+        [
+            "修复洗数据提交报 secrets is not defined（随机码生成改成独立函数并补上导入）",
+            "新增提交链路测试：随机码生成与导入完整性都被覆盖",
+        ],
+    ),
     (
         "2026-10-28.93",
         [
