@@ -66,6 +66,7 @@ class Settings:
     MAX_BATCH_FILES: int = int(os.getenv("MAX_BATCH_FILES", "10"))                 # 每次批量发送文件数（Telegram 媒体组上限 10）
     MAX_PHONES: int = int(os.getenv("MAX_PHONES", "50000"))                       # 单次最多处理/插入手机号数
     MAX_UPLOAD_FILES: int = int(os.getenv("MAX_UPLOAD_FILES", "100"))             # 合并/重命名最多上传文件数
+    HTTP_TIMEOUT: int = int(os.getenv("HTTP_TIMEOUT", "30"))                      # 调 Telegram API 超时（秒）
     MAX_ZIP_SIZE: int = int(os.getenv("MAX_ZIP_SIZE_MB", "20")) * 1024 * 1024      # ZIP 文件大小上限
     MAX_ZIP_TXT_FILES: int = int(os.getenv("MAX_ZIP_TXT_FILES", "500"))           # ZIP 内最多提取 TXT 数量
 
@@ -90,7 +91,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.92"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.93"))
 
 
 settings = Settings()
@@ -100,6 +101,13 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.93",
+        [
+            "网络抖动容错：连不上 Telegram 时提示「网络异常（不是程序故障）」，不再刷堆栈",
+            "Telegram 请求加 30 秒超时（可用 HTTP_TIMEOUT 调整），避免网络卡住时一直挂着",
+        ],
+    ),
     (
         "2026-10-28.92",
         [
