@@ -232,7 +232,7 @@ async def _scan(bot, only_code=None, dry_run=False, require_pending=True) -> dic
             stat["sent"] += 1
             wash_handlers._remember_delivery(code, dkey)
             try:
-                wash_handlers._settle_wash_result(code, user_id, original_name)
+                await wash_handlers._settle_wash_result(code, user_id, original_name)
             except Exception as e:
                 print(f"[wash-resend] 结算失败 {code}: {e}")
             print(f"[wash-resend] 已补发 {file_name} → {user_id}")
