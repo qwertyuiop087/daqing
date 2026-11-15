@@ -134,31 +134,35 @@ def get_home_entities() -> list[MessageEntity] | None:
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
-    # /start ref_XXXXXXX：邀请链接进来的新用户，绑定邀请人
+    # /start ref_XXX：只有「首次注册的新用户」才会绑定邀请人。
+    # 已注册用户（哪怕从没绑过）点别人的邀请链接也不绑、不重复注册。
     bound_inviter = None
+    already_registered = False
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) == 2 and parts[1].strip().lower().startswith("ref_"):
         invite_code = parts[1].strip()[4:]
         with SessionLocal() as session:
-            from database import bind_inviter, get_or_create_user as _gocu
+            from database import User, bind_inviter, get_or_create_user as _gocu
             from database import get_user_by_invite_code
 
-            # 新链接是 ref_<邀请人ID>；老链接的随机邀请码继续兼容
-            inviter = None
-            if invite_code.isdigit():
-                inviter = session.get(
-                    __import__("database").User, int(invite_code)
+            existing = session.get(User, message.from_user.id)
+            if existing is not None:
+                already_registered = True  # 老用户：邀请只对新用户有效
+            else:
+                # 新链接是 ref_<邀请人ID>；老链接的随机邀请码继续兼容
+                inviter = None
+                if invite_code.isdigit():
+                    inviter = session.get(User, int(invite_code))
+                if inviter is None:
+                    inviter = get_user_by_invite_code(session, invite_code)
+                me = _gocu(
+                    session,
+                    message.from_user.id,
+                    message.from_user.username or "",
+                    message.from_user.first_name or "",
                 )
-            if inviter is None:
-                inviter = get_user_by_invite_code(session, invite_code)
-            me = _gocu(
-                session,
-                message.from_user.id,
-                message.from_user.username or "",
-                message.from_user.first_name or "",
-            )
-            if inviter and bind_inviter(session, me, inviter):
-                bound_inviter = inviter.first_name or inviter.username or str(inviter.id)
+                if inviter and bind_inviter(session, me, inviter):
+                    bound_inviter = inviter.first_name or inviter.username or str(inviter.id)
 
     with SessionLocal() as session:
         get_or_create_user(
@@ -178,6 +182,12 @@ async def cmd_start(message: Message):
     )
     if bound_inviter:
         await message.answer(f"🎁 已通过 <b>{html.escape(bound_inviter)}</b> 的邀请链接进入。")
+    elif already_registered:
+        await message.answer(
+            "ℹ️ 你已经是注册用户了。\n\n"
+            "邀请注册只对<b>新用户</b>生效；你的专属邀请链接在"
+            "「🎫 会员中心 → 🎁 邀请返佣」里。"
+        )
 
 
 @router.callback_query(F.data == "menu:home")
