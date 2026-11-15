@@ -720,8 +720,10 @@ const PAGE_META={
 async function api(path,opt={}){
   const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opt});
   if(r.status===401){showLogin();throw new Error('未登录');}
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok)throw new Error(d.detail||'请求失败');
+  let d={};
+  const text=await r.text();
+  try{ d=JSON.parse(text); }catch(e){ d={ detail: text }; }
+  if(!r.ok)throw new Error(d.detail || text || ('请求失败 '+r.status));
   return d;
 }
 function toast(msg,ok=true){
@@ -749,6 +751,7 @@ function go(p){
   if(p==='audit')loadAudit();
   if(p==='washorders')loadWashOrders();
   if(p==='admins')loadAdmins();
+  if(['member','washset','site'].includes(p)) refreshConfig();
   if(p==='overview')setTimeout(fitStatNumbers,500);
 }
 
@@ -784,6 +787,18 @@ const KEY_TO_EL={
   referral_enabled:'referral_enabled',
 };
 
+async function refreshConfig(){
+  try{
+    CONFIG=await api('/api/config');
+    Object.entries(KEY_TO_EL).forEach(([k,el])=>{
+      const node=$(el); if(!node) return;
+      // 正在输入的框不要被覆盖
+      if(document.activeElement===node) return;
+      node.value=CONFIG[k]??'';
+    });
+  }catch(e){}
+}
+
 async function loadAll(){
   try{
     CONFIG=await api('/api/config');
@@ -807,6 +822,7 @@ async function save(key){
   const el=$(KEY_TO_EL[key]);
   try{
     await api('/api/config/'+key,{method:'POST',body:JSON.stringify({value:el.value})});
+    CONFIG[key]=el.value;
     toast('已保存');
   }catch(e){toast(e.message,false);}
 }
