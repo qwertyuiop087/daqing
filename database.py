@@ -9,7 +9,7 @@ import random
 import time
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, create_engine, func, select
+from sqlalchemy import delete as sa_delete, BigInteger, DateTime, Integer, String, create_engine, func, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from config import settings
@@ -252,6 +252,21 @@ def add_wash_balance(session, tg_id: int, amount: float) -> None:
         .values(wash_balance=func_coalesce(User.wash_balance) + amount)
     )
     session.commit()
+
+
+def _add_wash_balance_stmt(session, tg_id: int, amount: float) -> int:
+    """只执行加余额语句，不提交（供需要和其它写操作同一事务的场景）。
+
+    返回受影响行数：0 表示用户不存在，调用方要告警而不是当成功。
+    """
+    from sqlalchemy import update
+
+    result = session.execute(
+        update(User)
+        .where(User.id == tg_id)
+        .values(wash_balance=func_coalesce(User.wash_balance) + amount)
+    )
+    return result.rowcount
 
 
 def deduct_wash_balance(session, tg_id: int, amount: float) -> bool:
@@ -672,7 +687,15 @@ def get_washed_breakdown(session) -> tuple[int, int]:
                     continue
         if len(parts) >= 4 and parts[3].isdigit():
             if now - int(parts[3]) > WASH_PENDING_TTL_SECONDS:
-                stale_rows.append(row)
+                # 先条件删除认领这条超时任务：并发调用（菜单 + 提交）里
+                # 只有一个能删成功，避免同一任务被退两次款
+                claimed = session.execute(
+                    sa_delete(AppConfig).where(
+                        AppConfig.key == row.key, AppConfig.value == row.value
+                    )
+                )
+                if claimed.rowcount != 1:
+                    continue
                 # 任务超时未回传：退回未结算的费用并记退款流水。
                 # 批量任务（第 5 段为 JSON：各文件行数与已结算金额）按剩余比例退款。
                 try:
@@ -691,7 +714,14 @@ def get_washed_breakdown(session) -> tuple[int, int]:
                         except Exception:
                             pass
                     if refund_amount > 0:
-                        add_wash_balance(session, uid, refund_amount)
+                        # 不提交：和删除 pending、退款流水同一个事务，
+                        # 要么全成要么全不成，杜绝「钱退了任务还在」
+                        affected = _add_wash_balance_stmt(session, uid, refund_amount)
+                        if affected != 1:
+                            print(
+                                f"[wash] 退款没落到账户：用户 {uid} 不存在，"
+                                f"金额 {refund_amount}，任务 {row.key}"
+                            )
                         session.add(
                             WashOrder(
                                 user_id=uid,
@@ -734,8 +764,9 @@ def get_washed_breakdown(session) -> tuple[int, int]:
                 stale_rows.append(row)
     for row in stale_rows:
         session.delete(row)
-    if stale_rows:
-        session.commit()
+    # 无条件提交：超时退款可能没有任何 stale_rows（那些行已被条件删除），
+    # 如果只在 stale_rows 非空时提交，退款与删除都会丢。
+    session.commit()
     # 已完成行数 = 扣费 + 退款（退款行为负数行数/负数金额，自然冲减）。
     # 必须在清理提交之后再统计，确保本次新产生的退款流水计入结果。
     charged = session.scalar(
