@@ -92,7 +92,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.97"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.98"))
 
 
 settings = Settings()
@@ -102,6 +102,13 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.98",
+        [
+            "修后台保存点了没反应：同源校验忽略端口差异，跨站请求会明确提示原因",
+            "后台/官网页面禁缓存，改完刷新立即看到新版；保存后界面自动同步最新值",
+        ],
+    ),
     (
         "2026-10-28.97",
         [
