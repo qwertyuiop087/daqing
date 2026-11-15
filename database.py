@@ -71,6 +71,7 @@ class User(Base):
     membership_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     wash_balance: Mapped[float] = mapped_column(default=0.0)  # 洗数据余额（人民币 元）
     lottery_tickets: Mapped[int] = mapped_column(Integer, default=0)  # 高级抽奖次数
+    cash_balance: Mapped[float] = mapped_column(default=0.0)  # 用户余额（元，可提现）
     inviter_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # 邀请人 tg id
     invite_code: Mapped[str] = mapped_column(String(16), default="", index=True)  # 自己的邀请码
 
@@ -99,6 +100,34 @@ class ReferralReward(Base):
     rate: Mapped[float] = mapped_column(default=0.0)                 # 返佣比例（%）
     reward: Mapped[float] = mapped_column(default=0.0)               # 实发金额（元，进洗数据余额）
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class CashTransaction(Base):
+    """用户余额流水（正数入账，负数出账）。"""
+    __tablename__ = "cash_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    amount: Mapped[float] = mapped_column(default=0.0)
+    kind: Mapped[str] = mapped_column(String(24), default="")
+    # referral（返佣）/ transfer_out（转洗数据）/ withdraw（提现）/ withdraw_refund（提现退回）
+    # manual（管理员调整）
+    note: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class WithdrawRequest(Base):
+    """提现申请。"""
+    __tablename__ = "withdraw_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    amount: Mapped[float] = mapped_column(default=0.0)
+    status: Mapped[str] = mapped_column(String(16), default="pending")  # pending/done/rejected
+    note: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    handled_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 
 class AppConfig(Base):
@@ -253,6 +282,10 @@ def _auto_migrate() -> None:
         if "invite_code" not in cols:
             with engine.connect() as conn:
                 conn.execute(text("ALTER TABLE users ADD COLUMN invite_code VARCHAR(16) DEFAULT ''"))
+                conn.commit()
+        if "cash_balance" not in cols:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN cash_balance FLOAT DEFAULT 0.0"))
                 conn.commit()
 
 
@@ -1166,7 +1199,17 @@ def add_referral_reward(
     inviter = session.get(User, inviter_id)
     if not inviter:
         return 0.0
-    _add_wash_balance_stmt(session, inviter_id, reward)
+    # 返佣进「用户余额」：可以提现，也可以自己转进洗数据余额
+    _add_cash_balance_stmt(session, inviter_id, reward)
+    session.add(
+        CashTransaction(
+            user_id=inviter_id,
+            amount=reward,
+            kind="referral",
+            note=("洗数据充值返佣" if kind == "wash_recharge" else "开通会员返佣")
+            + f" ¥{float(base_amount):.2f} × {rate:g}%",
+        )
+    )
     session.add(
         ReferralReward(
             inviter_id=inviter_id,
@@ -1179,3 +1222,157 @@ def add_referral_reward(
     )
     session.commit()
     return reward
+
+# ---------------- 用户余额（可提现） ----------------
+
+MIN_WITHDRAW = 1.0        # 提现最少金额（元）
+MIN_TRANSFER = 1.0        # 转入洗数据最少金额（元）
+
+
+def get_cash_balance(session, tg_id: int) -> float:
+    user = session.get(User, tg_id)
+    return float(user.cash_balance or 0.0) if user else 0.0
+
+
+def _add_cash_balance_stmt(session, tg_id: int, amount: float) -> int:
+    """只改余额不提交，返回受影响行数。"""
+    from sqlalchemy import update
+
+    result = session.execute(
+        update(User)
+        .where(User.id == tg_id)
+        .values(cash_balance=func_coalesce(User.cash_balance) + amount)
+    )
+    return result.rowcount
+
+
+def add_cash_balance(session, tg_id: int, amount: float, kind: str, note: str = "") -> bool:
+    """给用户余额入账（返佣、充值等），并记流水。"""
+    if amount == 0:
+        return False
+    affected = _add_cash_balance_stmt(session, tg_id, amount)
+    if affected != 1:
+        return False
+    session.add(
+        CashTransaction(user_id=tg_id, amount=round(float(amount), 4), kind=kind, note=note[:255])
+    )
+    session.commit()
+    return True
+
+
+def transfer_cash_to_wash(session, tg_id: int, amount: float) -> tuple[bool, str]:
+    """用户余额 → 洗数据余额（单向）。返回 (是否成功, 说明)。"""
+    from sqlalchemy import update
+
+    amount = round(float(amount), 4)
+    if amount <= 0:
+        return False, "金额需大于 0"
+    if amount < MIN_TRANSFER:
+        return False, f"最少转 {MIN_TRANSFER:g} 元"
+    # 条件更新：余额足够才扣，原子且不会扣成负数
+    result = session.execute(
+        update(User)
+        .where(
+            User.id == tg_id,
+            func_coalesce(User.cash_balance) >= amount,
+        )
+        .values(
+            cash_balance=func_coalesce(User.cash_balance) - amount,
+            wash_balance=func_coalesce(User.wash_balance) + amount,
+        )
+    )
+    if result.rowcount != 1:
+        session.rollback()
+        return False, "用户余额不足"
+    session.add(
+        CashTransaction(
+            user_id=tg_id, amount=-amount, kind="transfer_out", note="转入洗数据余额"
+        )
+    )
+    session.commit()
+    return True, f"已转入洗数据余额 ¥{amount:.4f} 元"
+
+
+def create_withdraw_request(session, tg_id: int, amount: float) -> tuple[bool, str, int]:
+    """创建提现申请：先从余额里冻结（扣掉），管理员拒绝时再退回。"""
+    from sqlalchemy import update
+
+    amount = round(float(amount), 4)
+    if amount <= 0:
+        return False, "金额需大于 0", 0
+    if amount < MIN_WITHDRAW:
+        return False, f"最少提现 {MIN_WITHDRAW:g} 元", 0
+    existing = session.scalar(
+        select(func.count(WithdrawRequest.id)).where(
+            WithdrawRequest.user_id == tg_id, WithdrawRequest.status == "pending"
+        )
+    )
+    if existing:
+        return False, "你还有一笔提现申请在处理中，请等管理员处理后再提交", 0
+    result = session.execute(
+        update(User)
+        .where(User.id == tg_id, func_coalesce(User.cash_balance) >= amount)
+        .values(cash_balance=func_coalesce(User.cash_balance) - amount)
+    )
+    if result.rowcount != 1:
+        session.rollback()
+        return False, "用户余额不足", 0
+    req = WithdrawRequest(user_id=tg_id, amount=amount, status="pending")
+    session.add(req)
+    session.add(
+        CashTransaction(user_id=tg_id, amount=-amount, kind="withdraw", note="提现申请（冻结）")
+    )
+    session.commit()
+    return True, "提现申请已提交，请联系管理员处理", int(req.id)
+
+
+def list_withdraw_requests(session, status: str = "pending", limit: int = 20) -> list:
+    return list(
+        session.scalars(
+            select(WithdrawRequest)
+            .where(WithdrawRequest.status == status)
+            .order_by(WithdrawRequest.id.asc())
+            .limit(limit)
+        )
+    )
+
+
+def finish_withdraw(
+    session, request_id: int, approve: bool, admin_id: int, note: str = ""
+) -> tuple[bool, str, int, float]:
+    """处理提现：通过=已打款；拒绝=退回余额。返回 (ok, 说明, 用户ID, 金额)。"""
+    req = session.get(WithdrawRequest, request_id)
+    if req is None:
+        return False, "申请不存在", 0, 0.0
+    if req.status != "pending":
+        return False, "该申请已处理过", req.user_id, float(req.amount)
+    if approve:
+        req.status = "done"
+        req.note = (note or "")[:255]
+    else:
+        req.status = "rejected"
+        req.note = (note or "")[:255]
+        _add_cash_balance_stmt(session, req.user_id, float(req.amount))
+        session.add(
+            CashTransaction(
+                user_id=req.user_id,
+                amount=round(float(req.amount), 4),
+                kind="withdraw_refund",
+                note=f"提现被拒绝退回（#{request_id}）",
+            )
+        )
+    req.handled_at = utcnow()
+    req.handled_by = admin_id
+    session.commit()
+    return True, ("已标记打款" if approve else "已拒绝并退回余额"), req.user_id, float(req.amount)
+
+
+def get_cash_transactions(session, tg_id: int, limit: int = 10) -> list:
+    return list(
+        session.scalars(
+            select(CashTransaction)
+            .where(CashTransaction.user_id == tg_id)
+            .order_by(CashTransaction.id.desc())
+            .limit(limit)
+        )
+    )
