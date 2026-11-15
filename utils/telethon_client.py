@@ -7,6 +7,7 @@
 """
 import asyncio
 import time
+import uuid as _uuid
 
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
@@ -28,6 +29,87 @@ _heartbeat_task: asyncio.Task | None = None
 # 掉线通知节流：30 分钟内最多主动提醒一次（恢复通知不受限）
 _last_offline_notify = 0.0
 _NOTIFY_MIN_INTERVAL = 1800
+
+
+# ---------------- 小号单实例占用锁 ----------------
+_INSTANCE_ID = _uuid.uuid4().hex[:12]
+_OWNER_KEY = "userbot_owner"
+_OWNER_TTL = 150          # 租约有效期（秒）：心跳 30 秒续一次，超过 150 秒视为旧实例已死
+_OWNER_REFRESH = 30
+
+
+def _read_owner() -> tuple[str, float]:
+    try:
+        with SessionLocal() as session:
+            raw = get_config(session, _OWNER_KEY, "")
+    except Exception:
+        return "", 0.0
+    if not raw or ":" not in raw:
+        return "", 0.0
+    iid, ts = raw.rsplit(":", 1)
+    try:
+        return iid, float(ts)
+    except ValueError:
+        return "", 0.0
+
+
+def _write_owner(force: bool = False) -> bool:
+    """把自己写成小号主人。force=True 时不看别人是否还在租期内。"""
+    try:
+        with SessionLocal() as session:
+            set_config(session, _OWNER_KEY, f"{_INSTANCE_ID}:{time.time()}")
+        return True
+    except Exception as e:
+        print(f"⚠️ 写入小号占用锁失败：{e}")
+        return False
+
+
+async def acquire_userbot_owner(wait_seconds: int = 120, force: bool = False) -> bool:
+    """抢小号占用权。返回 True 表示本实例可以连接小号。"""
+    if force:
+        _write_owner(force=True)
+        print(f"🔑 强制接管小号占用权（实例 {_INSTANCE_ID}）")
+        return True
+
+    deadline = time.time() + max(0, wait_seconds)
+    first = True
+    while True:
+        iid, ts = _read_owner()
+        stale = (time.time() - ts) > _OWNER_TTL
+        if not iid or stale or iid == _INSTANCE_ID:
+            _write_owner()
+            await asyncio.sleep(0.5)  # 二次确认，避免两个实例同时写入
+            iid2, _ = _read_owner()
+            if iid2 == _INSTANCE_ID:
+                print(f"🔑 已取得小号占用权（实例 {_INSTANCE_ID}）")
+                return True
+        if time.time() >= deadline:
+            other = iid[:8] if iid else "未知"
+            print(
+                f"⛔ 另一个实例（{other}，{int(time.time() - ts)} 秒前有心跳）正在使用小号，"
+                "本实例不连接，避免 session 被 Telegram 作废"
+            )
+            if first:
+                first = False
+                await _notify_admins(
+                    "⚠️ <b>检测到另一个实例正在使用小号</b>\n\n"
+                    "为了避免 Telegram 作废 session，本实例暂不连接小号。\n"
+                    "如果旧实例已经下线，稍等 2~3 分钟会自动接管；"
+                    "也可以到管理面板「小号登录」重新登录（会强制接管）。",
+                    force=True,
+                )
+            return False
+        await asyncio.sleep(10)
+
+
+async def release_userbot_owner() -> None:
+    iid, _ = _read_owner()
+    if iid == _INSTANCE_ID:
+        try:
+            with SessionLocal() as session:
+                set_config(session, _OWNER_KEY, "")
+        except Exception:
+            pass
 
 
 async def _notify_admins(text: str, force: bool = False) -> None:
@@ -245,7 +327,7 @@ def setup_handlers():
             return
 
 
-async def start_userbot(bot=None):
+async def start_userbot(bot=None, force: bool = False):
     """启动小号客户端。可以在 bot 运行过程中调用，自动启动。
 
     用锁串行化并发调用（启动时 + 登录成功后都可能触发），
@@ -255,10 +337,10 @@ async def start_userbot(bot=None):
     if _userbot_lock is None:
         _userbot_lock = asyncio.Lock()
     async with _userbot_lock:
-        await _start_userbot_inner(bot)
+        await _start_userbot_inner(bot, force=force)
 
 
-async def _start_userbot_inner(bot=None):
+async def _start_userbot_inner(bot=None, force: bool = False):
     """start_userbot 的锁内实现，不要直接调用。"""
     global userbot, bot_id, bot_instance, _heartbeat_task
 
@@ -271,6 +353,13 @@ async def _start_userbot_inner(bot=None):
 
     if not session_str or not settings.TELETHON_API_ID or not settings.TELETHON_API_HASH:
         print("⚠️ 未登录小号，洗数据中转未启动，请在管理面板登录")
+        return
+
+    # 抢「小号占用权」：另一个实例正在使用时绝不连接，
+    # 否则两个 IP 同时用一个 session，Telegram 会把它永久作废
+    if not await acquire_userbot_owner(wait_seconds=0 if force else 120, force=force):
+        with SessionLocal() as session:
+            set_config(session, "alt_status", "conflict")
         return
 
     # 如果已经在运行，先停止
@@ -317,9 +406,26 @@ async def _start_userbot_inner(bot=None):
 
     # 心跳检测：每2分钟检查一次是否在线，断线自动重连
     async def heartbeat():
+        tick = 0
         while True:
-            await asyncio.sleep(120)  # 2分钟
+            await asyncio.sleep(30)
+            tick += 1
             try:
+                # 每 30 秒续租；发现占用权被别人拿走（例如管理员重新登录），
+                # 立刻断开本实例，避免双连把 session 打死
+                iid, _ts = _read_owner()
+                if iid != _INSTANCE_ID:
+                    print("⚠️ 小号占用权已被其它实例接管，本实例断开连接")
+                    try:
+                        if userbot and userbot.is_connected():
+                            await userbot.disconnect()
+                    except Exception:
+                        pass
+                    return
+                _write_owner()
+
+                if tick % 4 != 0:  # 每 2 分钟才做一次在线检查
+                    continue
                 if not userbot:
                     continue
 
