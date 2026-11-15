@@ -596,7 +596,7 @@ table{min-width:100%}
         <input id="footer_text">
         <label>页脚 · 说明文字</label>
         <input id="footer_note">
-        <div class="row"><button onclick="saveSite()">保存网站设置</button></div>
+        <div class="row"><button onclick="saveSite()">保存网站设置</button><button class="ghost" onclick="openWebsite()">🌐 打开网站看看</button></div>
       </div>
     </section>
 
@@ -893,9 +893,14 @@ async function saveSite(){
   const body={};
   SITE_FIELDS.forEach(k=>{ if($(k)) body[k]=$(k).value.trim(); });
   try{
-    await api('/api/site',{method:'POST',body:JSON.stringify(body)});
-    toast('网站设置已保存，刷新网站后生效');
+    const d=await api('/api/site',{method:'POST',body:JSON.stringify(body)});
+    const saved=(d&&d.site)||{};
+    SITE_FIELDS.forEach(k=>{ if($(k) && saved[k]!==undefined) $(k).value=saved[k]; });
+    toast('已保存（官网若还是旧的，按 Ctrl+F5 强刷一次）');
   }catch(e){toast(e.message,false);}
+}
+function openWebsite(){
+  window.open('/', '_blank', 'noopener');
 }
 
 async function loadBotProfile(){
