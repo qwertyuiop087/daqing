@@ -445,20 +445,25 @@ async def members_adjust_api(request: web.Request):
         user_id = int(data.get("user_id", 0) or 0)
         days_delta = int(data.get("days_delta", 0) or 0)
         balance_delta = float(data.get("balance_delta", 0) or 0)
+        cash_delta = float(data.get("cash_delta", 0) or 0)
     except (TypeError, ValueError):
         raise web.HTTPBadRequest(text="数值格式错误")
     # 拒绝 NaN / Infinity：JSON 解析会接受这些值，写库会永久损坏余额
-    if not math.isfinite(balance_delta) or not math.isfinite(float(days_delta)):
+    if (
+        not math.isfinite(balance_delta)
+        or not math.isfinite(float(days_delta))
+        or not math.isfinite(cash_delta)
+    ):
         raise web.HTTPBadRequest(text="数值格式错误")
-    if abs(days_delta) > 365000 or abs(balance_delta) > 1e9:
+    if abs(days_delta) > 365000 or abs(balance_delta) > 1e9 or abs(cash_delta) > 1e9:
         raise web.HTTPBadRequest(text="调整数值超出允许范围")
     if not user_id:
         raise web.HTTPBadRequest(text="缺少用户")
-    if not days_delta and not balance_delta:
+    if not days_delta and not balance_delta and not cash_delta:
         raise web.HTTPBadRequest(text="调整值不能为空")
     with database.SessionLocal() as session:
         try:
-            result = config_api.adjust_member(session, user_id, days_delta, balance_delta)
+            result = config_api.adjust_member(session, user_id, days_delta, balance_delta, cash_delta)
         except ValueError as e:
             raise web.HTTPBadRequest(text=str(e))
         detail = "、".join(result.get("changed") or [])
