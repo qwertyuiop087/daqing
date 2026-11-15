@@ -2329,8 +2329,9 @@ async def admin_alt_login_step2(message: Message, state: FSMContext, bot: Bot):
         await client.disconnect()
 
         # 自动启动小号客户端（bot 由 aiogram 自动注入）
+        # force=True：刚登录的新 session，旧实例的占用权必须让出来
         from utils.telethon_client import start_userbot
-        asyncio.create_task(start_userbot(bot))
+        asyncio.create_task(start_userbot(bot, force=True))
     except Exception as e:
         # 遇到两步验证
         if "Two-step" in str(e) or "password" in str(e):
@@ -2386,7 +2387,7 @@ async def admin_alt_login_step3(message: Message, state: FSMContext, bot: Bot):
 
         # 自动启动小号客户端（bot 由 aiogram 自动注入）
         from utils.telethon_client import start_userbot
-        asyncio.create_task(start_userbot(bot))
+        asyncio.create_task(start_userbot(bot, force=True))
     except Exception as e:
         from telethon.errors import PasswordHashInvalidError
         if isinstance(e, PasswordHashInvalidError):
