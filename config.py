@@ -92,7 +92,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-29.100"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-29.101"))
 
 
 settings = Settings()
@@ -102,6 +102,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-29.101",
+        [
+            "新增「用户余额」：返佣进这里，可申请提现，也可自己转进洗数据余额（洗数据不能转回来）",
+            "会员中心显示用户余额 + 洗数据余额；余额页可看明细、转洗数据、申请提现",
+            "管理员用 /withdraw 处理提现：已打款 或 拒绝并退回余额，双方都会收到通知",
+        ],
+    ),
     (
         "2026-10-29.100",
         [
