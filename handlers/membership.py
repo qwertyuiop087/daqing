@@ -91,6 +91,64 @@ async def cb_membership(cq: CallbackQuery):
     await cq.message.edit_text(f"🎫 <b>会员中心</b>\n\n{status}", reply_markup=membership_kb())
 
 
+@router.callback_query(F.data == "membership:referral")
+async def cb_referral(cq: CallbackQuery):
+    """邀请返佣：显示邀请链接、已邀请人数、累计返佣。"""
+    from database import (
+        ensure_invite_code,
+        get_referral_enabled,
+        get_referral_rates,
+        get_referral_stats,
+        get_wash_balance,
+    )
+
+    await cq.answer()
+    with SessionLocal() as session:
+        user = get_or_create_user(
+            session,
+            cq.from_user.id,
+            cq.from_user.username or "",
+            cq.from_user.first_name or "",
+        )
+        enabled = get_referral_enabled(session)
+        wash_rate, member_rate = get_referral_rates(session)
+        code = ensure_invite_code(session, user)
+        stats = get_referral_stats(session, user.id)
+        balance = get_wash_balance(session, user.id)
+        bot_username = settings.BOT_USERNAME.lstrip("@") if getattr(settings, "BOT_USERNAME", "") else ""
+
+    if not enabled:
+        await cq.message.edit_text(
+            "🎁 <b>邀请返佣</b>\n\n当前未开启，敬请期待。",
+            reply_markup=membership_kb(),
+        )
+        return
+
+    link = (
+        f"https://t.me/{bot_username}?start=ref_{code}" if bot_username else f"邀请码：<code>{code}</code>"
+    )
+    recent_lines = ""
+    if stats["recent"]:
+        rows = []
+        for r in stats["recent"]:
+            kind = "充值洗数据" if r.kind == "wash_recharge" else "开通会员"
+            rows.append(f"· {kind} ¥{r.base_amount:.2f} → 返 ¥{r.reward:.2f}")
+        recent_lines = "\n\n<b>最近返佣</b>\n" + "\n".join(rows)
+
+    await cq.message.edit_text(
+        "🎁 <b>邀请返佣</b>\n\n"
+        f"你的邀请链接：\n<code>{html.escape(link)}</code>\n\n"
+        f"· 好友通过链接进入并充值洗数据：你拿 <b>{wash_rate:g}%</b>\n"
+        f"· 好友开通会员：你拿 <b>{member_rate:g}%</b>\n"
+        "· 返佣直接进你的洗数据余额，可立刻使用\n\n"
+        f"已邀请：<b>{stats['count']}</b> 人\n"
+        f"累计返佣：<b>¥{stats['total']:.4f}</b> 元\n"
+        f"当前洗数据余额：¥{balance:.4f} 元"
+        f"{recent_lines}",
+        reply_markup=membership_kb(),
+    )
+
+
 @router.callback_query(F.data == "membership:redeem")
 async def cb_redeem(cq: CallbackQuery, state: FSMContext):
     await cq.answer()
