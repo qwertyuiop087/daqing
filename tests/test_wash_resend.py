@@ -200,7 +200,7 @@ class TestWashResend(unittest.TestCase):
             set_config(session, "wash_code:Settle1", f"{USER_ID}:{ts}")
             set_config(session, "wash_pending:Settle1", f"{USER_ID}:1000:2.0:{ts}:{fm}")
 
-        first = wash_handlers._settle_wash_result("Settle1", USER_ID, "结果.txt")
+        first = asyncio.run(wash_handlers._settle_wash_result("Settle1", USER_ID, "结果.txt"))
         self.assertGreater(first[0], 0)
         self.assertTrue(first[2])
 
@@ -210,7 +210,7 @@ class TestWashResend(unittest.TestCase):
         self.assertIn('"done": 1', raw)
 
         # 再结算一次：不能重复扣费
-        second = wash_handlers._settle_wash_result("Settle1", USER_ID, "结果.txt")
+        second = asyncio.run(wash_handlers._settle_wash_result("Settle1", USER_ID, "结果.txt"))
         self.assertEqual(second[0], 0)
 
 
