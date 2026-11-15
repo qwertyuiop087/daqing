@@ -96,9 +96,11 @@ async def cb_referral(cq: CallbackQuery):
     """邀请返佣：显示邀请链接、已邀请人数、累计返佣。"""
     from database import (
         ensure_invite_code,
+        get_invitees,
         get_referral_enabled,
         get_referral_rates,
         get_referral_stats,
+        get_referrer,
         get_wash_balance,
     )
 
@@ -115,7 +117,24 @@ async def cb_referral(cq: CallbackQuery):
         code = ensure_invite_code(session, user)
         stats = get_referral_stats(session, user.id)
         balance = get_wash_balance(session, user.id)
-        bot_username = settings.BOT_USERNAME.lstrip("@") if getattr(settings, "BOT_USERNAME", "") else ""
+        inviter = get_referrer(session, user.id)
+        invitees = get_invitees(session, user.id, limit=10)
+        inviter_text = ""
+        if inviter:
+            name = inviter.first_name or inviter.username or str(inviter.id)
+            inviter_text = f"\n我的邀请人：<b>{html.escape(name)}</b>（<code>{inviter.id}</code>）"
+        listed = []
+        for u in invitees:
+            name = u.first_name or u.username or str(u.id)
+            listed.append(f"· {html.escape(name)}（<code>{u.id}</code>）已注册")
+        invitees_text = ""
+        if listed:
+            invitees_text = "\n\n<b>我邀请的人</b>\n" + "\n".join(listed)
+        bot_username = (getattr(settings, "BOT_USERNAME", "") or "").lstrip("@")
+        if not bot_username:
+            from database import get_config as _get_config
+
+            bot_username = _get_config(session, "bot_username", "")
 
     if not enabled:
         await cq.message.edit_text(
@@ -124,8 +143,11 @@ async def cb_referral(cq: CallbackQuery):
         )
         return
 
+    # 邀请链接直接用「机器人链接 + 我的 ID」，一眼能看出是谁邀请的
     link = (
-        f"https://t.me/{bot_username}?start=ref_{code}" if bot_username else f"邀请码：<code>{code}</code>"
+        f"https://t.me/{bot_username}?start=ref_{user.id}"
+        if bot_username
+        else f"邀请码：<code>{code}</code>"
     )
     recent_lines = ""
     if stats["recent"]:
@@ -144,6 +166,8 @@ async def cb_referral(cq: CallbackQuery):
         f"已邀请：<b>{stats['count']}</b> 人\n"
         f"累计返佣：<b>¥{stats['total']:.4f}</b> 元\n"
         f"当前洗数据余额：¥{balance:.4f} 元"
+        f"{inviter_text}"
+        f"{invitees_text}"
         f"{recent_lines}",
         reply_markup=membership_kb(),
     )
