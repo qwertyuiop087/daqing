@@ -133,6 +133,25 @@ def get_home_entities() -> list[MessageEntity] | None:
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
+    # /start ref_XXXXXXX：邀请链接进来的新用户，绑定邀请人
+    bound_inviter = None
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) == 2 and parts[1].strip().lower().startswith("ref_"):
+        invite_code = parts[1].strip()[4:]
+        with SessionLocal() as session:
+            from database import bind_inviter, get_or_create_user as _gocu
+            from database import get_user_by_invite_code
+
+            inviter = get_user_by_invite_code(session, invite_code)
+            me = _gocu(
+                session,
+                message.from_user.id,
+                message.from_user.username or "",
+                message.from_user.first_name or "",
+            )
+            if inviter and bind_inviter(session, me, inviter):
+                bound_inviter = inviter.first_name or inviter.username or str(inviter.id)
+
     with SessionLocal() as session:
         get_or_create_user(
             session,
@@ -149,6 +168,8 @@ async def cmd_start(message: Message):
         entities=home_entities,
         parse_mode=None if home_entities else "HTML",
     )
+    if bound_inviter:
+        await message.answer(f"🎁 已通过 <b>{html.escape(bound_inviter)}</b> 的邀请链接进入。")
 
 
 @router.callback_query(F.data == "menu:home")
