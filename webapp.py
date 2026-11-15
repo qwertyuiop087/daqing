@@ -91,16 +91,36 @@ def _rate_ok(ip: str, limit: int) -> bool:
     return len(hits) <= limit
 
 
+def _host_only(value: str) -> str:
+    """从 URL 或 Host 头里取出主机名（忽略端口、协议）。"""
+    if not value:
+        return ""
+    if "//" in value:
+        value = value.split("//", 1)[1]
+    return value.split("/")[0].split(":")[0].strip().lower()
+
+
 def _same_origin(request: web.Request) -> bool:
-    """判断写请求是否来自本后台自己的页面（防 CSRF）。"""
+    """判断写请求是否来自后台自己的页面（防 CSRF）。
+
+    优先信浏览器的 Sec-Fetch-Site；没有该头时再比 Origin/Referer 的主机名，
+    并且忽略端口（反向代理常见 Host 带端口、Origin 不带的差异）。
+    """
     site = (request.headers.get("Sec-Fetch-Site") or "").lower()
-    if site and site not in ("same-origin", "none"):
+    if site == "same-origin":
+        return True
+    if site in ("cross-site", "same-site"):
+        print(f"[csrf] 拒绝跨站写请求：path={request.path} site={site}")
         return False
+
     origin = request.headers.get("Origin") or request.headers.get("Referer") or ""
+    host = request.headers.get("Host") or ""
     if not origin:
         return True  # 非浏览器客户端（curl/脚本）没有 Origin，靠 cookie 鉴权
-    host = request.headers.get("Host") or ""
-    return host and origin.split("//")[-1].split("/")[0] == host
+    ok = _host_only(origin) == _host_only(host)
+    if not ok:
+        print(f"[csrf] 拒绝写请求：path={request.path} origin={origin} host={host}")
+    return ok
 
 
 @web.middleware
@@ -235,7 +255,9 @@ background:linear-gradient(120deg,#8b5cf6,#22d3ee);color:#fff;text-decoration:no
 async def index(request: web.Request):
     page = ROOT / "website" / "index.html"
     if page.exists():
-        return web.FileResponse(page)
+        resp = web.FileResponse(page)
+        resp.headers["Cache-Control"] = "no-store, must-revalidate"
+        return resp
     print("⚠️ 缺少 website/index.html（代码没传全），已使用内置备用页")
     return web.Response(text=_FALLBACK_HTML, content_type="text/html")
 
@@ -243,7 +265,9 @@ async def index(request: web.Request):
 async def admin_page(request: web.Request):
     page = ROOT / "webadmin" / "static" / "admin.html"
     if page.exists():
-        return web.FileResponse(page)
+        resp = web.FileResponse(page)
+        resp.headers["Cache-Control"] = "no-store, must-revalidate"
+        return resp
     print("⚠️ 缺少 webadmin/static/admin.html（代码没传全），后台页面不可用")
     return web.Response(
         text="<h2 style='font-family:sans-serif'>⚠️ 缺少 webadmin/static/admin.html</h2>"
