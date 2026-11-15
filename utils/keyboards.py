@@ -184,10 +184,21 @@ def merge_skip_filename_kb() -> InlineKeyboardMarkup:
 
 def membership_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
+    b.button(text="💰 用户余额", callback_data="membership:cash")
     b.button(text="🎫 兑换卡密", callback_data="membership:redeem")
     b.button(text="🎁 邀请返佣", callback_data="membership:referral")
     b.button(text="🔙 返回主菜单", callback_data="menu:home")
-    b.adjust(2, 1)
+    b.adjust(2, 2)
+    return b.as_markup()
+
+
+def cash_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="🔄 转入洗数据", callback_data="cash:to_wash")
+    b.button(text="💸 申请提现", callback_data="cash:withdraw")
+    b.button(text="📜 余额明细", callback_data="cash:history")
+    b.button(text="🔙 返回", callback_data="menu:membership")
+    b.adjust(2, 1, 1)
     return b.as_markup()
 
 
