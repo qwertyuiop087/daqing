@@ -1891,7 +1891,10 @@ async function loadSiteConfig(){
     if(s.footer_text){const e=document.getElementById('footerText'); if(e)e.textContent=s.footer_text;}
     if(s.footer_note){const e=document.getElementById('footerNote'); if(e)e.textContent=s.footer_note;}
     if(s.bot_link&&/^(https?:|tg:|t\.me)/.test(s.bot_link)) document.querySelectorAll('.bot-link').forEach(a=>a.href=s.bot_link);
-  }catch(e){}
+  }catch(e){
+    // 后台改完配置后这里会重新读；失败时留个日志方便排查
+    console.warn('[site] 读取网站配置失败', e);
+  }
 }
 loadSiteConfig();
 /* ===== 液态玻璃增强：交互与动效 ===== */
