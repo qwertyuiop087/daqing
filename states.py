@@ -105,4 +105,9 @@ class AddAreaCodeStates(StatesGroup):
 
 
 class OkayPayStates(StatesGroup):
-    waiting_amount = State()  # OKPay 充值：等待输入金额
+    waiting_amount = State()
+
+
+class CashStates(StatesGroup):
+    waiting_transfer_amount = State()   # 转入洗数据的金额
+    waiting_withdraw_amount = State()   # 提现申请金额  # OKPay 充值：等待输入金额
