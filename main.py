@@ -283,6 +283,18 @@ async def main() -> None:
     dp = Dispatcher(storage=MemoryStorage())
     register_all_routers(dp)
 
+    # 记录机器人用户名：邀请链接要用它拼 t.me/xxx?start=ref_<id>
+    try:
+        me = await bot.get_me()
+        if me and me.username:
+            from database import SessionLocal, set_config
+
+            with SessionLocal() as _s:
+                set_config(_s, "bot_username", me.username)
+            logging.info("机器人用户名：@%s", me.username)
+    except Exception as e:
+        logging.warning("获取机器人用户名失败：%s", e)
+
     # 启动小号客户端（洗数据中转）
     from utils.telethon_client import start_userbot
     asyncio.create_task(start_userbot(bot))
