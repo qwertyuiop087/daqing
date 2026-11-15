@@ -142,7 +142,14 @@ async def cmd_start(message: Message):
             from database import bind_inviter, get_or_create_user as _gocu
             from database import get_user_by_invite_code
 
-            inviter = get_user_by_invite_code(session, invite_code)
+            # 新链接是 ref_<邀请人ID>；老链接的随机邀请码继续兼容
+            inviter = None
+            if invite_code.isdigit():
+                inviter = session.get(
+                    __import__("database").User, int(invite_code)
+                )
+            if inviter is None:
+                inviter = get_user_by_invite_code(session, invite_code)
             me = _gocu(
                 session,
                 message.from_user.id,
