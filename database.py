@@ -71,6 +71,8 @@ class User(Base):
     membership_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     wash_balance: Mapped[float] = mapped_column(default=0.0)  # 洗数据余额（人民币 元）
     lottery_tickets: Mapped[int] = mapped_column(Integer, default=0)  # 高级抽奖次数
+    inviter_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # 邀请人 tg id
+    invite_code: Mapped[str] = mapped_column(String(16), default="", index=True)  # 自己的邀请码
 
 
 class CardKey(Base):
@@ -83,6 +85,20 @@ class CardKey(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     used_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ReferralReward(Base):
+    """邀请返佣流水。"""
+    __tablename__ = "referral_rewards"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    inviter_id: Mapped[int] = mapped_column(BigInteger, index=True)  # 拿返佣的人
+    invitee_id: Mapped[int] = mapped_column(BigInteger)              # 被邀请人
+    kind: Mapped[str] = mapped_column(String(16), default="")        # wash_recharge / member_buy
+    base_amount: Mapped[float] = mapped_column(default=0.0)          # 计佣基数（元）
+    rate: Mapped[float] = mapped_column(default=0.0)                 # 返佣比例（%）
+    reward: Mapped[float] = mapped_column(default=0.0)               # 实发金额（元，进洗数据余额）
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class AppConfig(Base):
@@ -229,6 +245,14 @@ def _auto_migrate() -> None:
         if "lottery_tickets" not in cols:
             with engine.connect() as conn:
                 conn.execute(text("ALTER TABLE users ADD COLUMN lottery_tickets INTEGER DEFAULT 0"))
+                conn.commit()
+        if "inviter_id" not in cols:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN inviter_id BIGINT"))
+                conn.commit()
+        if "invite_code" not in cols:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN invite_code VARCHAR(16) DEFAULT ''"))
                 conn.commit()
 
 
@@ -1024,3 +1048,114 @@ def spend_lottery_ticket(session, user_id: int) -> bool:
     user.lottery_tickets -= 1
     session.commit()
     return True
+
+# ---------------- 邀请返佣 ----------------
+
+DEFAULT_REFERRAL_WASH_RATE = 5.0      # 洗数据充值返佣 5%
+DEFAULT_REFERRAL_MEMBER_RATE = 10.0   # 开通会员返佣 10%
+
+
+def get_referral_enabled(session) -> bool:
+    return get_config(session, "referral_enabled", "1") != "0"
+
+
+def get_referral_rates(session) -> tuple[float, float]:
+    """返回 (洗数据充值返佣比例%, 开通会员返佣比例%)。"""
+    try:
+        wash_rate = float(get_config(session, "referral_wash_rate", "") or DEFAULT_REFERRAL_WASH_RATE)
+    except ValueError:
+        wash_rate = DEFAULT_REFERRAL_WASH_RATE
+    try:
+        member_rate = float(
+            get_config(session, "referral_member_rate", "") or DEFAULT_REFERRAL_MEMBER_RATE
+        )
+    except ValueError:
+        member_rate = DEFAULT_REFERRAL_MEMBER_RATE
+    return max(0.0, min(wash_rate, 100.0)), max(0.0, min(member_rate, 100.0))
+
+
+def ensure_invite_code(session, user: User) -> str:
+    """给用户分配一个邀请码（幂等）。"""
+    if user.invite_code:
+        return user.invite_code
+    import secrets as _secrets
+
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    for _ in range(20):
+        code = "".join(_secrets.choice(alphabet) for _ in range(7))
+        exists = session.scalar(select(User).where(User.invite_code == code))
+        if not exists:
+            user.invite_code = code
+            session.commit()
+            return code
+    user.invite_code = f"U{user.id}"
+    session.commit()
+    return user.invite_code
+
+
+def get_user_by_invite_code(session, code: str) -> User | None:
+    code = (code or "").strip().upper()
+    if not code:
+        return None
+    return session.scalar(select(User).where(User.invite_code == code))
+
+
+def bind_inviter(session, user: User, inviter: User) -> bool:
+    """绑定邀请人：只能绑一次，且不能邀请自己。"""
+    if not inviter or inviter.id == user.id:
+        return False
+    if user.inviter_id:
+        return False
+    user.inviter_id = inviter.id
+    session.commit()
+    return True
+
+
+def get_referral_stats(session, uid: int) -> dict:
+    """邀请统计：人数、累计返佣、最近记录。"""
+    count = session.scalar(
+        select(func.count(User.id)).where(User.inviter_id == uid)
+    ) or 0
+    total = session.scalar(
+        select(func.coalesce(func.sum(ReferralReward.reward), 0.0)).where(
+            ReferralReward.inviter_id == uid
+        )
+    ) or 0.0
+    recent = list(
+        session.scalars(
+            select(ReferralReward)
+            .where(ReferralReward.inviter_id == uid)
+            .order_by(ReferralReward.id.desc())
+            .limit(5)
+        )
+    )
+    return {"count": int(count), "total": float(total), "recent": recent}
+
+
+def add_referral_reward(
+    session, inviter_id: int, invitee_id: int, kind: str, base_amount: float, rate: float
+) -> float:
+    """给邀请人发返佣（进洗数据余额），返回实发金额。"""
+    if inviter_id <= 0 or invitee_id <= 0 or inviter_id == invitee_id:
+        return 0.0
+    if rate <= 0 or base_amount <= 0:
+        return 0.0
+    reward = round(base_amount * rate / 100.0, 4)
+    if reward <= 0:
+        return 0.0
+    inviter = session.get(User, inviter_id)
+    if not inviter:
+        return 0.0
+    _add_wash_balance_stmt(session, inviter_id, reward)
+    session.add(
+        ReferralReward(
+            inviter_id=inviter_id,
+            invitee_id=invitee_id,
+            kind=kind,
+            base_amount=round(float(base_amount), 4),
+            rate=float(rate),
+            reward=reward,
+        )
+    )
+    session.commit()
+    return reward
