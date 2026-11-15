@@ -185,8 +185,9 @@ def merge_skip_filename_kb() -> InlineKeyboardMarkup:
 def membership_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="🎫 兑换卡密", callback_data="membership:redeem")
+    b.button(text="🎁 邀请返佣", callback_data="membership:referral")
     b.button(text="🔙 返回主菜单", callback_data="menu:home")
-    b.adjust(2)
+    b.adjust(2, 1)
     return b.as_markup()
 
 
