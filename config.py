@@ -92,7 +92,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-29.103"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-29.104"))
 
 
 settings = Settings()
@@ -102,6 +102,13 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-29.104",
+        [
+            "修小号 session 被两个实例同时使用而作废：加单实例占用锁，抢不到锁就不连接",
+            "心跳每 30 秒续租，发现占用权被接管会自动断开，不再互相抢；重新登录小号会强制接管",
+        ],
+    ),
     (
         "2026-10-29.103",
         [
