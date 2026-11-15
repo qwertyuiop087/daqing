@@ -429,7 +429,7 @@ table{min-width:100%}
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>用户</th><th>会员</th><th>洗数据余额</th><th>高级券</th><th>操作</th></tr></thead>
+            <thead><tr><th>ID</th><th>用户</th><th>会员</th><th>洗数据余额</th><th>用户余额</th><th>高级券</th><th>操作</th></tr></thead>
             <tbody id="member-rows"><tr><td colspan="6" style="color:var(--ink-2)">加载中</td></tr></tbody>
           </table>
         </div>
@@ -699,6 +699,8 @@ table{min-width:100%}
   <input id="adjust-days" type="number" step="1" value="0">
   <label>洗数据余额（正数增加，负数扣减，单位元）</label>
   <input id="adjust-balance" type="number" step="0.0001" value="0">
+  <label>用户余额（可提现；正数增加，负数扣减，单位元）</label>
+  <input id="adjust-cash" type="number" step="0.0001" value="0">
   <div class="row">
     <button onclick="doAdjust()">保存</button>
     <button class="ghost" onclick="document.getElementById('adjust-dialog').close()">取消</button>
@@ -845,11 +847,12 @@ async function loadMembers(){
         <td>${esc(name)}</td>
         <td>${esc(u.member_text)}${u.expires?'<br><span style="color:var(--ink-2);font-size:12px">'+esc(u.expires)+'</span>':''}</td>
         <td>¥${Number(u.wash_balance).toFixed(4)}</td>
+        <td>¥${Number(u.cash_balance||0).toFixed(4)}</td>
         <td>${Number(u.lottery_tickets)||0}</td>
         <td><button class="ghost adjust-btn" style="height:32px;padding:0 12px" data-id="${u.id}" data-name="${esc(name)}">调整</button></td>
       </tr>`;
     }).join('');
-    $('member-rows').innerHTML=rows||'<tr><td colspan="6" style="color:var(--ink-2)">没有找到用户</td></tr>';
+    $('member-rows').innerHTML=rows||'<tr><td colspan="7" style="color:var(--ink-2)">没有找到用户</td></tr>';
   }catch(e){toast(e.message,false);}
 }
 
@@ -867,15 +870,17 @@ function openAdjust(id,name){
   $('adjust-title').textContent='调整用户：'+name;
   $('adjust-days').value=0;
   $('adjust-balance').value=0;
+  if($('adjust-cash')) $('adjust-cash').value=0;
   document.getElementById('adjust-dialog').showModal();
 }
 
 async function doAdjust(){
   const days=parseInt($('adjust-days').value||'0');
   const balance=parseFloat($('adjust-balance').value||'0');
-  if(!days&&!balance){toast('请填写调整数值',false);return;}
+  const cash=parseFloat(($('adjust-cash')?.value)||'0');
+  if(!days&&!balance&&!cash){toast('请填写调整数值',false);return;}
   try{
-    const d=await api('/api/members/adjust',{method:'POST',body:JSON.stringify({user_id:adjustUserId,days_delta:days,balance_delta:balance})});
+    const d=await api('/api/members/adjust',{method:'POST',body:JSON.stringify({user_id:adjustUserId,days_delta:days,balance_delta:balance,cash_delta:cash})});
     toast((d.result.changed||[]).join('，')||'已保存');
     document.getElementById('adjust-dialog').close();
     loadMembers();
