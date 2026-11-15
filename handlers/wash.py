@@ -45,6 +45,9 @@ class FromAltUserFilter(BaseFilter):
 
 router = Router(name="wash")
 
+MIN_RECHARGE = 5.0     # 单笔充值下限（USDT）
+MAX_RECHARGE = 10000.0  # 单笔充值上限（USDT）
+
 
 def gen_wash_code() -> str:
     """生成 7 位随机码（字母+数字），用于群内文件名的隐私保护。"""
@@ -114,6 +117,19 @@ def _washed_original_name(filename: str) -> str:
     return re.sub(r"^[a-zA-Z0-9]{7}_", "", filename or "").strip() or (filename or "unnamed")
 
 
+def _delivery_key(doc, filename: str) -> str:
+    """结果文件的去重键。
+
+    优先用 Telegram 的 file_unique_id（内容指纹）：同一批里两个同名同大小
+    的输入文件，洗回来的结果文件名和大小可能完全一样，用「名字|大小」
+    会把第二个当成重复投递丢掉，用户付了钱却拿不到文件。
+    """
+    unique = getattr(doc, "file_unique_id", "") or ""
+    if unique:
+        return f"{filename}|{unique}"
+    return f"{filename}|{getattr(doc, 'file_size', 0) or 0}"
+
+
 def _delivery_keys(code: str) -> list:
     """该任务已经投递过的结果文件键（用于去重，防止重复发/重复扣）。"""
     with SessionLocal() as session:
@@ -169,12 +185,27 @@ async def _alert_undelivered(bot, filename: str, code: str, user_id: int) -> Non
             pass
 
 
-def _settle_wash_result(random_code: str, user_id: int, original_name: str) -> tuple:
+async def _settle_wash_result(
+    random_code: str, user_id: int, original_name: str
+) -> tuple:
     """回传成功后记账：批量任务每收到一份结算一份，全部回传才结清。
 
     返回 (结算金额, 结算行数, 是否已结清)。只在文件真正送达用户后调用，
     保证「没送达就不扣钱」。
+
+    用按用户串行锁包住「读 pending → 扣一份 → 写回」：
+    批量结果文件是同时到达的，不加锁会两个 handler 读到同一份列表，
+    导致同一份结算两次、另一份永远不结算。
     """
+    from utils.helpers import user_lock
+
+    async with user_lock(user_id):
+        return _settle_wash_result_locked(random_code, user_id, original_name)
+
+
+def _settle_wash_result_locked(
+    random_code: str, user_id: int, original_name: str
+) -> tuple:
     with SessionLocal() as session:
         pending = get_config(session, f"wash_pending:{random_code}", "")
     if not pending:
@@ -438,6 +469,15 @@ async def wash_create_order(cq: CallbackQuery):
         amount = float(cq.data.split(":")[2])
     except Exception as e:
         await cq.answer(f"参数错误: {e}", show_alert=True)
+        return
+
+    # 金额来自按钮回调，客户端可以伪造：服务端只接受合理区间，
+    # 防止 0 元 / 负数 / 天价订单污染渠道订单表
+    if not (MIN_RECHARGE <= amount <= MAX_RECHARGE):
+        await cq.answer(
+            f"⚠️ 充值金额需在 {MIN_RECHARGE:g} ~ {MAX_RECHARGE:g} USDT 之间",
+            show_alert=True,
+        )
         return
 
     try:
@@ -1199,7 +1239,7 @@ async def alt_user_reply(message: Message, bot: Bot):
         # ① 先把文件交给用户：这是用户唯一关心的结果。
         #    记账放在后面，记账只要出一点问题都不能影响交付（以前是先记账后发送，
         #    记账一抛异常就整条 update 被全局错误处理器吞掉，用户永远收不到文件）。
-        dkey = f"{filename}|{getattr(doc, 'file_size', 0) or 0}"
+        dkey = _delivery_key(doc, filename)
         if _already_delivered(random_code, dkey):
             print(f"⚠️ 这个结果文件已经发过了，跳过重复投递: {filename}")
             return
@@ -1218,7 +1258,7 @@ async def alt_user_reply(message: Message, bot: Bot):
 
         # ② 送达后再记账（费用提交时已预扣，这里只记流水，不重复扣费）
         try:
-            settle_cost, settle_lines, done = _settle_wash_result(
+            settle_cost, settle_lines, done = await _settle_wash_result(
                 random_code, user_id, original_name
             )
             print(f"💳 结算：{settle_lines} 行 / ¥{settle_cost}，本任务{'已结清' if done else '还有未回传部分'}")
