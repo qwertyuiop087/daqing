@@ -8,7 +8,13 @@ import time
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery,
+    FSInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 from sqlalchemy import func, select
 
 from config import settings
@@ -36,9 +42,9 @@ from database import (
     set_drop_notify_template,
     set_plans,
 )
-from states import AdminStates, RedeemStates
+from states import AdminStates, CashStates, RedeemStates
 from utils.helpers import cleanup_state
-from utils.keyboards import admin_kb, cancel_kb, membership_kb, menu_kb
+from utils.keyboards import cash_kb, admin_kb, cancel_kb, membership_kb, menu_kb
 from utils.roles import is_admin, is_super_admin
 
 router = Router(name="membership")
@@ -71,24 +77,32 @@ async def cb_membership(cq: CallbackQuery):
             cq.from_user.username or "",
             cq.from_user.first_name or "",
         )
+        from database import beijing_str, get_cash_balance, get_wash_balance
+
+        wash_balance = get_wash_balance(session, cq.from_user.id)
+        cash_balance = get_cash_balance(session, cq.from_user.id)
+        balances = (
+            f"💰 用户余额：¥{cash_balance:.4f} 元\n"
+            f"🧼 洗数据余额：¥{wash_balance:.4f} 元"
+        )
         if is_member(user):
-            from database import beijing_str, get_wash_balance
-            wash_balance = get_wash_balance(session, cq.from_user.id)
             status = (
                 f"✅ <b>会员有效</b>\n\n"
                 f"到期时间：{beijing_str(user.membership_expires_at)}（北京时间）\n"
                 f"剩余天数：约 <b>{remaining_days(user)}</b> 天\n\n"
-                f"🧼 洗数据余额：¥{wash_balance:.4f} 元"
+                f"{balances}"
             )
         else:
-            from database import get_wash_balance
-            wash_balance = get_wash_balance(session, cq.from_user.id)
             status = (
                 "❌ <b>未开通 / 已到期</b>\n\n兑换卡密后即可使用全部功能。\n\n"
-                f"🧼 洗数据余额：¥{wash_balance:.4f} 元"
+                f"{balances}"
             )
     await cq.answer()
-    await cq.message.edit_text(f"🎫 <b>会员中心</b>\n\n{status}", reply_markup=membership_kb())
+    await cq.message.edit_text(
+        f"🎫 <b>会员中心</b>\n\n{status}\n\n"
+        "💰 用户余额：可提现，也可自己转进洗数据余额",
+        reply_markup=membership_kb(),
+    )
 
 
 @router.callback_query(F.data == "membership:referral")
@@ -96,6 +110,7 @@ async def cb_referral(cq: CallbackQuery):
     """邀请返佣：显示邀请链接、已邀请人数、累计返佣。"""
     from database import (
         ensure_invite_code,
+        get_cash_balance,
         get_invitees,
         get_referral_enabled,
         get_referral_rates,
@@ -117,6 +132,7 @@ async def cb_referral(cq: CallbackQuery):
         code = ensure_invite_code(session, user)
         stats = get_referral_stats(session, user.id)
         balance = get_wash_balance(session, user.id)
+        cash_balance = get_cash_balance(session, user.id)
         inviter = get_referrer(session, user.id)
         invitees = get_invitees(session, user.id, limit=10)
         inviter_text = ""
@@ -162,15 +178,263 @@ async def cb_referral(cq: CallbackQuery):
         f"你的邀请链接：\n<code>{html.escape(link)}</code>\n\n"
         f"· 好友通过链接进入并充值洗数据：你拿 <b>{wash_rate:g}%</b>\n"
         f"· 好友开通会员：你拿 <b>{member_rate:g}%</b>\n"
-        "· 返佣直接进你的洗数据余额，可立刻使用\n\n"
+        "· 返佣进你的 <b>用户余额</b>：可提现，也可自己转进洗数据余额\n\n"
         f"已邀请：<b>{stats['count']}</b> 人\n"
         f"累计返佣：<b>¥{stats['total']:.4f}</b> 元\n"
+        f"当前用户余额：¥{cash_balance:.4f} 元\n"
         f"当前洗数据余额：¥{balance:.4f} 元"
         f"{inviter_text}"
         f"{invitees_text}"
         f"{recent_lines}",
         reply_markup=membership_kb(),
     )
+
+
+@router.callback_query(F.data == "membership:cash")
+async def cb_cash(cq: CallbackQuery):
+    """用户余额页：可提现，可转洗数据，洗数据不能转回来。"""
+    from database import get_cash_balance, get_wash_balance
+
+    await cq.answer()
+    with SessionLocal() as session:
+        user = get_or_create_user(
+            session,
+            cq.from_user.id,
+            cq.from_user.username or "",
+            cq.from_user.first_name or "",
+        )
+        cash = get_cash_balance(session, user.id)
+        wash = get_wash_balance(session, user.id)
+
+    await cq.message.edit_text(
+        "💰 <b>我的余额</b>\n\n"
+        f"用户余额：<b>¥{cash:.4f}</b> 元\n"
+        f"洗数据余额：<b>¥{wash:.4f}</b> 元\n\n"
+        "用户余额可以：\n"
+        "· 自己转进洗数据余额（立即可用）\n"
+        "· 申请提现（管理员人工打款）\n\n"
+        "洗数据余额只能用于洗数据，不能转回用户余额。",
+        reply_markup=cash_kb(),
+    )
+
+
+@router.callback_query(F.data == "cash:history")
+async def cb_cash_history(cq: CallbackQuery):
+    from database import get_cash_balance, get_cash_transactions
+
+    await cq.answer()
+    with SessionLocal() as session:
+        rows = get_cash_transactions(session, cq.from_user.id, limit=10)
+        cash = get_cash_balance(session, cq.from_user.id)
+
+    kind_names = {
+        "referral": "邀请返佣",
+        "transfer_out": "转入洗数据",
+        "withdraw": "提现申请",
+        "withdraw_refund": "提现退回",
+        "manual": "管理员调整",
+    }
+    lines = []
+    for r in rows:
+        sign = "+" if r.amount >= 0 else ""
+        lines.append(
+            f"· {beijing_str(r.created_at)} {kind_names.get(r.kind, r.kind)} "
+            f"{sign}¥{r.amount:.4f}"
+        )
+    body = "\n".join(lines) if lines else "暂无记录"
+    await cq.message.edit_text(
+        f"📜 <b>用户余额明细</b>\n\n当前余额：<b>¥{cash:.4f}</b> 元\n\n{body}",
+        reply_markup=cash_kb(),
+    )
+
+
+@router.callback_query(F.data == "cash:to_wash")
+async def cb_cash_to_wash(cq: CallbackQuery, state: FSMContext):
+    from database import get_cash_balance
+
+    await cq.answer()
+    with SessionLocal() as session:
+        cash = get_cash_balance(session, cq.from_user.id)
+    await cq.message.edit_text(
+        "🔄 <b>转入洗数据余额</b>\n\n"
+        f"当前用户余额：<b>¥{cash:.4f}</b> 元\n\n"
+        "请输入要转入的金额（最多转全部，最少 1 元）：",
+        reply_markup=cancel_kb(),
+    )
+    await state.set_state(CashStates.waiting_transfer_amount)
+
+
+@router.message(CashStates.waiting_transfer_amount, F.text)
+async def cash_transfer_amount(message: Message, state: FSMContext):
+    from database import get_cash_balance, get_wash_balance, transfer_cash_to_wash
+
+    raw = (message.text or "").strip().replace("元", "")
+    try:
+        amount = round(float(raw), 4)
+    except ValueError:
+        await message.answer("请输入数字金额，例如 <code>10</code>。")
+        return
+    with SessionLocal() as session:
+        ok, note = transfer_cash_to_wash(session, message.from_user.id, amount)
+        cash = get_cash_balance(session, message.from_user.id)
+        wash = get_wash_balance(session, message.from_user.id)
+    await cleanup_state(state)
+    if not ok:
+        await message.answer(f"⚠️ {note}", reply_markup=cash_kb())
+        return
+    await message.answer(
+        f"✅ {note}\n\n"
+        f"用户余额：¥{cash:.4f} 元\n"
+        f"洗数据余额：¥{wash:.4f} 元",
+        reply_markup=cash_kb(),
+    )
+
+
+@router.callback_query(F.data == "cash:withdraw")
+async def cb_cash_withdraw(cq: CallbackQuery, state: FSMContext):
+    from database import get_cash_balance
+
+    await cq.answer()
+    with SessionLocal() as session:
+        cash = get_cash_balance(session, cq.from_user.id)
+    if cash <= 0:
+        await cq.message.edit_text(
+            "💸 <b>申请提现</b>\n\n当前用户余额为 ¥0，暂时不能提现。",
+            reply_markup=cash_kb(),
+        )
+        return
+    await cq.message.edit_text(
+        "💸 <b>申请提现</b>\n\n"
+        f"当前用户余额：<b>¥{cash:.4f}</b> 元\n\n"
+        "请输入提现金额（最少 1 元）。\n"
+        "提交后管理员会看到申请，打款完成会通知你。",
+        reply_markup=cancel_kb(),
+    )
+    await state.set_state(CashStates.waiting_withdraw_amount)
+
+
+@router.message(CashStates.waiting_withdraw_amount, F.text)
+async def cash_withdraw_amount(message: Message, state: FSMContext, bot: Bot):
+    from database import create_withdraw_request, get_cash_balance
+
+    raw = (message.text or "").strip().replace("元", "")
+    try:
+        amount = round(float(raw), 4)
+    except ValueError:
+        await message.answer("请输入数字金额，例如 <code>10</code>。")
+        return
+    with SessionLocal() as session:
+        ok, note, req_id = create_withdraw_request(session, message.from_user.id, amount)
+        cash = get_cash_balance(session, message.from_user.id)
+    await cleanup_state(state)
+    if not ok:
+        await message.answer(f"⚠️ {note}", reply_markup=cash_kb())
+        return
+
+    await message.answer(
+        f"✅ {note}\n\n"
+        f"申请单号：<code>#{req_id}</code>\n"
+        f"提现金额：¥{amount:.4f} 元\n"
+        f"剩余用户余额：¥{cash:.4f} 元\n\n"
+        "管理员确认打款后会私聊通知你。",
+        reply_markup=cash_kb(),
+    )
+
+    # 通知所有管理员
+    from utils.roles import admin_id_list
+
+    name = message.from_user.first_name or message.from_user.username or str(message.from_user.id)
+    text = (
+        "💸 <b>新的提现申请</b>\n\n"
+        f"用户：<b>{html.escape(name)}</b>（<code>{message.from_user.id}</code>）\n"
+        f"金额：<b>¥{amount:.4f}</b> 元\n"
+        f"单号：<code>#{req_id}</code>\n\n"
+        "处理命令：/withdraw"
+    )
+    for uid in admin_id_list():
+        try:
+            await bot.send_message(uid, text)
+        except Exception:
+            pass
+
+
+# ---------------- 管理员处理提现 ----------------
+
+def _withdraw_kb(req_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ 已打款", callback_data=f"cash:ok:{req_id}"),
+                InlineKeyboardButton(text="❌ 拒绝并退回", callback_data=f"cash:no:{req_id}"),
+            ]
+        ]
+    )
+
+
+@router.message(Command("withdraw", "提现"))
+async def cmd_withdraw(message: Message):
+    from database import list_withdraw_requests
+    from utils.roles import is_admin
+
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ 仅管理员可用。")
+        return
+    with SessionLocal() as session:
+        rows = list_withdraw_requests(session, "pending", limit=20)
+    if not rows:
+        await message.answer("✅ 没有待处理的提现申请。")
+        return
+    for r in rows:
+        await message.answer(
+            f"💸 提现申请 <code>#{r.id}</code>\n"
+            f"用户：<code>{r.user_id}</code>\n"
+            f"金额：<b>¥{r.amount:.4f}</b> 元\n"
+            f"提交时间：{beijing_str(r.created_at)}",
+            reply_markup=_withdraw_kb(r.id),
+        )
+
+
+@router.callback_query(F.data.startswith("cash:ok:") | F.data.startswith("cash:no:"))
+async def cb_withdraw_handle2(cq: CallbackQuery):
+    from database import finish_withdraw
+    from utils.roles import is_admin
+
+    if not is_admin(cq.from_user.id):
+        await cq.answer("⛔ 仅管理员可用", show_alert=True)
+        return
+    try:
+        req_id = int(cq.data.rsplit(":", 1)[1])
+    except (ValueError, IndexError):
+        await cq.answer("参数错误", show_alert=True)
+        return
+    approve = ":ok:" in cq.data
+    with SessionLocal() as session:
+        ok, note, user_id, amount = finish_withdraw(
+            session, req_id, approve, cq.from_user.id
+        )
+    if not ok:
+        await cq.answer(note, show_alert=True)
+        return
+    await cq.answer(note)
+    await cq.message.edit_text(f"{cq.message.text}\n\n{'✅ 已打款' if approve else '❌ 已拒绝，余额已退回'}")
+    if user_id:
+        try:
+            if approve:
+                await cq.bot.send_message(
+                    user_id,
+                    f"✅ <b>提现已处理</b>\n\n"
+                    f"金额：¥{amount:.4f} 元\n"
+                    "管理员已确认打款，请留意收款。",
+                )
+            else:
+                await cq.bot.send_message(
+                    user_id,
+                    f"❌ <b>提现申请被拒绝</b>\n\n"
+                    f"金额：¥{amount:.4f} 元已退回你的用户余额。\n"
+                    "如有疑问请直接联系管理员。",
+                )
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data == "membership:redeem")
