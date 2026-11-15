@@ -287,6 +287,10 @@ async def main() -> None:
     from utils.telethon_client import start_userbot
     asyncio.create_task(start_userbot(bot))
 
+    # 启动会员到期提醒 + 每日对账日报
+    from utils.reminders import start_reminders
+    asyncio.create_task(start_reminders(bot))
+
     # 启动支付自动到账轮询（本文件自带，不依赖额外文件）
     asyncio.create_task(start_auto_credit(bot))
 
