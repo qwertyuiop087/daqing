@@ -67,6 +67,7 @@ class Settings:
     MAX_PHONES: int = int(os.getenv("MAX_PHONES", "50000"))                       # 单次最多处理/插入手机号数
     MAX_UPLOAD_FILES: int = int(os.getenv("MAX_UPLOAD_FILES", "100"))             # 合并/重命名最多上传文件数
     HTTP_TIMEOUT: int = int(os.getenv("HTTP_TIMEOUT", "30"))                      # 调 Telegram API 超时（秒）
+    BOT_USERNAME: str = os.getenv("BOT_USERNAME", "").lstrip("@")                 # 机器人用户名（留空则启动时自动获取）
     MAX_ZIP_SIZE: int = int(os.getenv("MAX_ZIP_SIZE_MB", "20")) * 1024 * 1024      # ZIP 文件大小上限
     MAX_ZIP_TXT_FILES: int = int(os.getenv("MAX_ZIP_TXT_FILES", "500"))           # ZIP 内最多提取 TXT 数量
 
@@ -91,7 +92,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.96"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.97"))
 
 
 settings = Settings()
@@ -101,6 +102,14 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.97",
+        [
+            "邀请链接改成「机器人链接 + 邀请人ID」（如 t.me/xxx?start=ref_123456），一眼能看出是谁邀请的",
+            "被邀请的人能看到自己绑定了谁；邀请人能看到已邀请了哪些人（最近 10 个）",
+            "机器人用户名启动时自动获取并保存，链接不用手工配置",
+        ],
+    ),
     (
         "2026-10-28.96",
         [
