@@ -58,7 +58,7 @@ input,textarea{
   background:var(--surface);border:1px solid var(--line-2);border-radius:var(--r-s);
   padding:12px;outline:none;transition:border-color .16s ease;
 }
-input::placeholder,textarea::placeholder{color:var(--ink-3)}
+input::placeholder,textarea::placeholder{color:var(--ink-2)}
 input:hover,textarea:hover{border-color:#BFC6D6}
 input:focus,textarea:focus{border-color:var(--accent)}
 textarea{min-height:112px;resize:vertical;line-height:1.7}
@@ -89,7 +89,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
   display:grid;place-items:center;flex:none;
 }
 .brand-name{font-family:var(--serif);font-size:16px;font-weight:600;line-height:1.2}
-.brand-sub{font-size:11px;color:var(--ink-3);line-height:1.4}
+.brand-sub{font-size:11px;color:var(--ink-2);line-height:1.4}
 nav{display:flex;flex-direction:column;gap:4px}
 .rail a[data-p]{
   display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;
@@ -142,7 +142,7 @@ main{margin-left:248px;padding:32px;max-width:1016px}
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{
-  text-align:left;font-weight:600;font-size:12px;color:var(--ink-3);
+  text-align:left;font-weight:600;font-size:12px;color:var(--ink-2);
   padding:0 16px 12px 0;border-bottom:1px solid var(--line);white-space:nowrap;
 }
 td{padding:12px 16px 12px 0;border-bottom:1px solid var(--line);color:var(--ink-2);vertical-align:top}
@@ -264,7 +264,7 @@ input,textarea{
 }
 input:focus,textarea:focus{border-color:rgba(47,95,168,.65);background:rgba(255,255,255,.85)}
 /* 表格：行 hover 玻璃 */
-thead th{color:var(--ink-3);border-bottom:1px solid rgba(22,32,58,.12)}
+thead th{color:var(--ink-2);border-bottom:1px solid rgba(22,32,58,.12)}
 td{border-bottom:1px solid rgba(22,32,58,.08);color:var(--ink-2)}
 tbody tr:hover td{background:rgba(255,255,255,.55)}
 td .tag{background:rgba(255,255,255,.7);border-color:rgba(22,32,58,.14)}
@@ -430,7 +430,7 @@ table{min-width:100%}
         <div class="table-wrap">
           <table>
             <thead><tr><th>ID</th><th>用户</th><th>会员</th><th>洗数据余额</th><th>高级券</th><th>操作</th></tr></thead>
-            <tbody id="member-rows"><tr><td colspan="6" style="color:var(--ink-3)">加载中</td></tr></tbody>
+            <tbody id="member-rows"><tr><td colspan="6" style="color:var(--ink-2)">加载中</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -529,6 +529,18 @@ table{min-width:100%}
         <div class="row"><button onclick="saveOkpay()">保存 OKPay 配置</button><button class="ghost" onclick="testOkpay()">测试连接</button><button class="ghost" onclick="fillOkpayCallback()">用当前域名自动填回调地址</button></div><p id="okpay-test-result" style="margin-top:12px;font-size:12.5px;color:var(--ink-2);white-space:pre-wrap"></p>
       </div>
       </div>
+      <div class="card">
+        <div class="card-head"><h2>邀请返佣</h2><p>好友通过邀请链接进来后，充值洗数据 / 开通会员按比例返佣金进邀请人的洗数据余额</p></div>
+        <label>洗数据充值返佣比例（%）</label>
+        <input id="referral_wash_rate" type="text" placeholder="5">
+        <label>开通会员返佣比例（%）</label>
+        <input id="referral_member_rate" type="text" placeholder="10">
+        <label>总开关（1 开启 / 0 关闭）</label>
+        <input id="referral_enabled" type="text" placeholder="1">
+        <div class="row"><button onclick="saveReferral()">保存返佣设置</button></div>
+        <p style="margin-top:10px;font-size:12px;color:var(--ink-2)">用户入口：会员中心 →「🎁 邀请返佣」，链接格式 <code>https://t.me/机器人?start=ref_邀请码</code></p>
+      </div>
+
     </section>
 
     <section id="p-site" class="page" style="display:none">
@@ -626,7 +638,7 @@ table{min-width:100%}
         <div class="table-wrap">
           <table>
             <thead><tr><th>Telegram ID</th><th>身份</th><th>来源</th><th>操作</th></tr></thead>
-            <tbody id="adm-rows"><tr><td colspan="4" style="color:var(--ink-3)">加载中</td></tr></tbody>
+            <tbody id="adm-rows"><tr><td colspan="4" style="color:var(--ink-2)">加载中</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -640,7 +652,7 @@ table{min-width:100%}
         <div class="table-wrap">
           <table>
             <thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>详情</th></tr></thead>
-            <tbody id="audit-rows"><tr><td colspan="4" style="color:var(--ink-3)">加载中</td></tr></tbody>
+            <tbody id="audit-rows"><tr><td colspan="4" style="color:var(--ink-2)">加载中</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -658,7 +670,7 @@ table{min-width:100%}
         <div class="stat"><b id="w-refund">-</b><span>总退款（元）</span></div>
         <div class="stat"><b id="w-balance">-</b><span>用户剩余余额合计（元）</span></div>
       </div>
-      <p id="w-check" style="color:var(--ink-3);font-size:12px;margin:-8px 0 16px"></p>
+      <p id="w-check" style="color:var(--ink-2);font-size:12px;margin:-8px 0 16px"></p>
       <div class="row" style="margin-top:0;margin-bottom:16px">
         <input id="wash-q" placeholder="搜索 ID、用户名、昵称或文件名" style="flex:1;min-width:200px" onkeydown="if(event.key==='Enter')loadWashOrders()">
         <button onclick="loadWashOrders()"><svg class="ic ic-16"><use href="#i-search"/></svg>搜索</button>
@@ -673,7 +685,7 @@ table{min-width:100%}
         <div class="table-wrap">
           <table>
             <thead><tr><th>时间</th><th>用户</th><th>类型</th><th>行数</th><th>金额（元）</th><th>当前余额（元）</th><th>说明</th></tr></thead>
-            <tbody id="wash-rows"><tr><td colspan="7" style="color:var(--ink-3)">加载中</td></tr></tbody>
+            <tbody id="wash-rows"><tr><td colspan="7" style="color:var(--ink-2)">加载中</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -767,6 +779,9 @@ const KEY_TO_EL={
   okpay_shop_id:'okpay_shop_id',
   okpay_token:'okpay_token',
   okpay_callback_url:'okpay_callback_url',
+  referral_wash_rate:'referral_wash_rate',
+  referral_member_rate:'referral_member_rate',
+  referral_enabled:'referral_enabled',
 };
 
 async function loadAll(){
@@ -784,7 +799,7 @@ async function loadAll(){
       const who=(r.user||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
       const prize=(r.prize||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
       return `<tr><td>${r.time}</td><td>@${who}</td><td><span class="tag">${tags[r.source]||r.source}</span></td><td>${prize}</td></tr>`;
-    }).join('')||'<tr><td colspan="4" style="color:var(--ink-3)">暂无记录</td></tr>';
+    }).join('')||'<tr><td colspan="4" style="color:var(--ink-2)">暂无记录</td></tr>';
   }catch(e){toast(e.message,false);}
 }
 
@@ -812,13 +827,13 @@ async function loadMembers(){
       return `<tr>
         <td>${u.id}</td>
         <td>${esc(name)}</td>
-        <td>${esc(u.member_text)}${u.expires?'<br><span style="color:var(--ink-3);font-size:12px">'+esc(u.expires)+'</span>':''}</td>
+        <td>${esc(u.member_text)}${u.expires?'<br><span style="color:var(--ink-2);font-size:12px">'+esc(u.expires)+'</span>':''}</td>
         <td>¥${Number(u.wash_balance).toFixed(4)}</td>
         <td>${Number(u.lottery_tickets)||0}</td>
         <td><button class="ghost adjust-btn" style="height:32px;padding:0 12px" data-id="${u.id}" data-name="${esc(name)}">调整</button></td>
       </tr>`;
     }).join('');
-    $('member-rows').innerHTML=rows||'<tr><td colspan="6" style="color:var(--ink-3)">没有找到用户</td></tr>';
+    $('member-rows').innerHTML=rows||'<tr><td colspan="6" style="color:var(--ink-2)">没有找到用户</td></tr>';
   }catch(e){toast(e.message,false);}
 }
 
@@ -893,7 +908,7 @@ async function loadAudit(){
       <td>${esc(ACTION_NAMES[l.action]||l.action)}</td>
       <td>${esc(l.detail)}</td>
     </tr>`).join('');
-    $('audit-rows').innerHTML=rows||'<tr><td colspan="4" style="color:var(--ink-3)">暂无记录</td></tr>';
+    $('audit-rows').innerHTML=rows||'<tr><td colspan="4" style="color:var(--ink-2)">暂无记录</td></tr>';
   }catch(e){toast(e.message,false);}
 }
 
@@ -933,7 +948,7 @@ async function loadWashOrders(){
       const cls=v>=0?'positive':'negative';
       return `<tr>
         <td>${esc(o.time)}</td>
-        <td>${esc(o.user)}${o.user_id?'<br><span style="color:var(--ink-3);font-size:11px">'+o.user_id+'</span>':''}</td>
+        <td>${esc(o.user)}${o.user_id?'<br><span style="color:var(--ink-2);font-size:11px">'+o.user_id+'</span>':''}</td>
         <td><span class="tag ${tc}">${esc(tn)}</span></td>
         <td class="num">${Number(o.row_count)||0?Number(o.row_count).toLocaleString():'-'}</td>
         <td class="num ${cls}">${cost}</td>
@@ -941,7 +956,7 @@ async function loadWashOrders(){
         <td>${esc(o.filename)}</td>
       </tr>`;
     }).join('');
-    $('wash-rows').innerHTML=rows||'<tr><td colspan="7" style="color:var(--ink-3)">没有符合条件的账单</td></tr>';
+    $('wash-rows').innerHTML=rows||'<tr><td colspan="7" style="color:var(--ink-2)">没有符合条件的账单</td></tr>';
   }catch(e){toast(e.message,false);}
 }
 let washType='';
@@ -968,9 +983,9 @@ async function loadAdmins(){
     $('adm-rows').innerHTML=rows.length?rows.map(r=>`<tr>
       <td class="num">${r.id}</td>
       <td>${esc(r.role)}</td>
-      <td style="color:var(--ink-3)">${esc(r.src)}</td>
-      <td>${r.can?`<button class="ghost" onclick="removeAdmin(${r.id})">删除</button>`:'<span style="color:var(--ink-3)">不可删</span>'}</td>
-    </tr>`).join(''):'<tr><td colspan="4" style="color:var(--ink-3)">还没有管理员</td></tr>';
+      <td style="color:var(--ink-2)">${esc(r.src)}</td>
+      <td>${r.can?`<button class="ghost" onclick="removeAdmin(${r.id})">删除</button>`:'<span style="color:var(--ink-2)">不可删</span>'}</td>
+    </tr>`).join(''):'<tr><td colspan="4" style="color:var(--ink-2)">还没有管理员</td></tr>';
   }catch(e){toast(e.message,false);}
 }
 async function addAdmin(){
