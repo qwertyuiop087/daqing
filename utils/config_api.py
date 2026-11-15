@@ -123,6 +123,14 @@ def get_all_config(session) -> dict:
         "usdt_rate": database.get_config(session, "usdt_rate", ""),
         "welcome_text": database.get_config(session, "welcome_text", database.DEFAULT_WELCOME_TEXT),
         "lottery_notify_template": database.get_lottery_notify_template(session),
+        # 邀请返佣
+        "referral_enabled": database.get_config(session, "referral_enabled", "1"),
+        "referral_wash_rate": database.get_config(
+            session, "referral_wash_rate", str(database.DEFAULT_REFERRAL_WASH_RATE)
+        ),
+        "referral_member_rate": database.get_config(
+            session, "referral_member_rate", str(database.DEFAULT_REFERRAL_MEMBER_RATE)
+        ),
         # OKPay 收款（商户号 / 密钥 / 回调地址）
         "okpay_shop_id": database.get_config(session, "okpay_shop_id", ""),
         # 密钥只回掩码，避免明文下发到浏览器/日志；前端留空表示"不修改"
@@ -178,6 +186,17 @@ def save_config(session, key: str, value: str) -> None:
         database.set_config(session, "welcome_text", value)
         # 网页编辑不带消息实体（emoji/加粗），清掉 entities，机器人会按 HTML 渲染
         database.set_config(session, "welcome_entities", "")
+    elif key in ("referral_wash_rate", "referral_member_rate"):
+        v = value.strip().rstrip("%")
+        try:
+            rate = float(v)
+        except ValueError:
+            raise ValueError("返佣比例不是数字")
+        if not math.isfinite(rate) or rate < 0 or rate > 100:
+            raise ValueError("返佣比例需在 0 ~ 100 之间")
+        database.set_config(session, key, f"{rate:g}")
+    elif key == "referral_enabled":
+        database.set_config(session, "referral_enabled", "1" if value.strip() in ("1", "true", "on", "是") else "0")
     elif key in ("okpay_shop_id", "okpay_token", "okpay_callback_url"):
         val = value.strip()
         if key == "okpay_shop_id" and val and not val.isdigit():
