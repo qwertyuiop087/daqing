@@ -417,17 +417,24 @@ def search_members(session, q: str = "", limit: int = 100) -> list[dict]:
                 "member_text": member_text,
                 "expires": expires,
                 "wash_balance": round(u.wash_balance or 0, 4),
+                "cash_balance": round(u.cash_balance or 0, 4),
                 "lottery_tickets": int(u.lottery_tickets or 0),
             }
         )
     return out
 
 
-def adjust_member(session, user_id: int, days_delta: int = 0, balance_delta: float = 0.0) -> dict:
-    """调整用户会员天数 / 洗数据余额。正数增加、负数扣减。
+def adjust_member(
+    session,
+    user_id: int,
+    days_delta: int = 0,
+    balance_delta: float = 0.0,
+    cash_delta: float = 0.0,
+) -> dict:
+    """调整用户会员天数 / 洗数据余额 / 用户余额。正数增加、负数扣减。
 
     天数扣到 0 以下按到期处理；余额扣减时不足会抛 ValueError。
-    余额变动会写 WashOrder 账单（与机器人管理面板一致）。
+    洗数据余额变动写 WashOrder 账单；用户余额变动写 CashTransaction 流水。
     返回调整后的用户状态。
     """
     user = session.get(database.User, user_id)
@@ -438,7 +445,9 @@ def adjust_member(session, user_id: int, days_delta: int = 0, balance_delta: flo
     import math as _math
     if not _math.isfinite(float(days_delta)) or not _math.isfinite(float(balance_delta)):
         raise ValueError("调整数值格式错误")
-    if abs(days_delta) > 365000 or abs(balance_delta) > 1e9:
+    if not _math.isfinite(float(cash_delta)):
+        raise ValueError("调整数值格式错误")
+    if abs(days_delta) > 365000 or abs(balance_delta) > 1e9 or abs(cash_delta) > 1e9:
         raise ValueError("调整数值超出允许范围")
 
     changed = []
@@ -476,6 +485,42 @@ def adjust_member(session, user_id: int, days_delta: int = 0, balance_delta: flo
             )
             changed.append(f"余额 -¥{-balance_delta:.4f}")
         session.commit()
+
+    if cash_delta:
+        # 用户余额（可提现）：加钱走 add_cash_balance（自动记流水），
+        # 扣钱用条件更新保证不会扣成负数
+        if cash_delta > 0:
+            database.add_cash_balance(
+                session, user_id, cash_delta, "manual", "网页后台手动增加"
+            )
+            changed.append(f"用户余额 +¥{cash_delta:.4f}")
+        else:
+            from sqlalchemy import update as _update
+
+            need = -cash_delta
+            res = session.execute(
+                _update(database.User)
+                .where(
+                    database.User.id == user_id,
+                    database.func_coalesce(database.User.cash_balance) >= need,
+                )
+                .values(
+                    cash_balance=database.func_coalesce(database.User.cash_balance) + cash_delta
+                )
+            )
+            if res.rowcount != 1:
+                session.rollback()
+                raise ValueError("用户余额不足，无法扣减")
+            session.add(
+                database.CashTransaction(
+                    user_id=user_id,
+                    amount=round(cash_delta, 4),
+                    kind="manual",
+                    note="网页后台手动扣减",
+                )
+            )
+            session.commit()
+            changed.append(f"用户余额 -¥{need:.4f}")
 
     now = database.utcnow()
     if user.membership_expires_at and user.membership_expires_at > now:
