@@ -1111,6 +1111,26 @@ def bind_inviter(session, user: User, inviter: User) -> bool:
     return True
 
 
+def get_referrer(session, uid: int) -> User | None:
+    """我的邀请人（没绑定返回 None）。"""
+    user = session.get(User, uid)
+    if not user or not user.inviter_id:
+        return None
+    return session.get(User, user.inviter_id)
+
+
+def get_invitees(session, uid: int, limit: int = 10) -> list[User]:
+    """我邀请的人，最近注册的在前。"""
+    return list(
+        session.scalars(
+            select(User)
+            .where(User.inviter_id == uid)
+            .order_by(User.registered_at.desc())
+            .limit(limit)
+        )
+    )
+
+
 def get_referral_stats(session, uid: int) -> dict:
     """邀请统计：人数、累计返佣、最近记录。"""
     count = session.scalar(
