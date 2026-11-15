@@ -1,4 +1,5 @@
 """入口：/start、主菜单、取消操作。"""
+import html
 import json
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
