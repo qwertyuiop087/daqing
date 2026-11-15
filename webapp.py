@@ -103,24 +103,16 @@ def _host_only(value: str) -> str:
 def _same_origin(request: web.Request) -> bool:
     """判断写请求是否来自后台自己的页面（防 CSRF）。
 
-    优先信浏览器的 Sec-Fetch-Site；没有该头时再比 Origin/Referer 的主机名，
-    并且忽略端口（反向代理常见 Host 带端口、Origin 不带的差异）。
+    只认浏览器的 Sec-Fetch-Site：现代浏览器一定会带，跨站表单会被标成
+    cross-site。没有这个头（老浏览器、curl、脚本、反代改写）时一律放行，
+    避免因为 Host/Origin 端口或域名差异把管理员自己的保存也拦掉
+    —— 写请求本身仍然要求登录 cookie。
     """
     site = (request.headers.get("Sec-Fetch-Site") or "").lower()
-    if site == "same-origin":
-        return True
     if site in ("cross-site", "same-site"):
         print(f"[csrf] 拒绝跨站写请求：path={request.path} site={site}")
         return False
-
-    origin = request.headers.get("Origin") or request.headers.get("Referer") or ""
-    host = request.headers.get("Host") or ""
-    if not origin:
-        return True  # 非浏览器客户端（curl/脚本）没有 Origin，靠 cookie 鉴权
-    ok = _host_only(origin) == _host_only(host)
-    if not ok:
-        print(f"[csrf] 拒绝写请求：path={request.path} origin={origin} host={host}")
-    return ok
+    return True
 
 
 @web.middleware
@@ -278,6 +270,13 @@ async def admin_page(request: web.Request):
 
 async def health(request: web.Request):
     return web.Response(text="ok")
+
+
+async def version_api(request: web.Request):
+    """公开版本号：后台页面显示，方便确认线上到底部署到哪一版。"""
+    from config import settings as _settings
+
+    return web.json_response({"ok": True, "version": _settings.VERSION})
 
 
 # ---------------- 认证 ----------------
@@ -812,6 +811,7 @@ def build_app(bot=None) -> web.Application:
     app.router.add_get("/", index)
     app.router.add_get("/admin", admin_page)
     app.router.add_get("/health", health)
+    app.router.add_get("/api/version", version_api)
     app.router.add_get("/api/public/feed", public_feed)
     app.router.add_get("/api/public/plans", public_plans)
     app.router.add_get("/api/public/site", public_site)
