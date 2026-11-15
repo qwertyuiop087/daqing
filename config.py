@@ -92,7 +92,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-29.102"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-29.103"))
 
 
 settings = Settings()
@@ -102,6 +102,13 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-29.103",
+        [
+            "后台成员管理新增「用户余额」列，调整弹窗可以直接加减用户余额（记 manual 流水）",
+            "扣减用户余额时余额不足会被拒绝，不会扣成负数",
+        ],
+    ),
     (
         "2026-10-29.102",
         [
