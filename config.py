@@ -91,7 +91,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.95"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-28.96"))
 
 
 settings = Settings()
@@ -101,6 +101,15 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-28.96",
+        [
+            "新增邀请返佣：会员中心「🎁 邀请返佣」拿专属链接，好友充值/开会员按比例返到洗数据余额",
+            "新增会员到期提醒：到期前 7 天 / 3 天 / 1 天自动私聊提醒，带续费按钮",
+            "新增每日对账日报：每天 9 点给管理员推收入、消耗、退款、余额校验差额",
+            "后台「会员设置」可设置洗数据返佣比例、会员返佣比例与总开关",
+        ],
+    ),
     (
         "2026-10-28.95",
         [
