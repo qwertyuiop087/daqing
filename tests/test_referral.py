@@ -23,6 +23,7 @@ from database import (  # noqa: E402
     get_referral_rates,
     get_referral_stats,
     get_user_by_invite_code,
+    get_cash_balance,
     get_wash_balance,
     init_db,
     ensure_invite_code,
@@ -38,7 +39,7 @@ class TestReferral(unittest.TestCase):
         from sqlalchemy import delete as _del, update as _upd
         from database import User as _U
         with SessionLocal() as _s:
-            _s.execute(_upd(_U).where(_U.id.in_([600001, 600002])).values(wash_balance=0.0))
+            _s.execute(_upd(_U).where(_U.id.in_([600001, 600002])).values(wash_balance=0.0, cash_balance=0.0))
             _s.execute(_del(ReferralReward))
             _s.commit()
         self.inviter = 600001
@@ -89,7 +90,7 @@ class TestReferral(unittest.TestCase):
             s.commit()
         # 5% × 140 = 7 元
         with SessionLocal() as s:
-            self.assertAlmostEqual(get_wash_balance(s, self.inviter), 7.0, places=4)
+            self.assertAlmostEqual(get_cash_balance(s, self.inviter), 7.0, places=4)
             stats = get_referral_stats(s, self.inviter)
             self.assertEqual(stats["count"], 1)
             self.assertAlmostEqual(stats["total"], 7.0, places=4)
@@ -106,7 +107,7 @@ class TestReferral(unittest.TestCase):
             s.commit()
         # 10% × (20 USDT × 7) = 14 元
         with SessionLocal() as s:
-            self.assertAlmostEqual(get_wash_balance(s, self.inviter), 14.0, places=4)
+            self.assertAlmostEqual(get_cash_balance(s, self.inviter), 14.0, places=4)
 
     def test_no_inviter_no_reward(self):
         self._make_order("ref_none", 0, "10")
