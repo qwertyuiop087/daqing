@@ -92,7 +92,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-29.109"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-29.110"))
 
 
 settings = Settings()
@@ -102,6 +102,13 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-10-29.110",
+        [
+            "修小号被旧实例占着就一直不上线：改成后台每 30 秒自动接管，抢不到也不再弹告警",
+            "新增 /userbot 命令查看小号状态并「一键强制接管」，不用重新登录；租约从 150 秒缩到 90 秒",
+        ],
+    ),
     (
         "2026-10-29.109",
         [
