@@ -26,6 +26,8 @@ bot_instance = None
 _userbot_lock: asyncio.Lock | None = None
 # 当前心跳任务：重启客户端前先取消旧任务，避免任务无限累积
 _heartbeat_task: asyncio.Task | None = None
+# 抢锁失败时的后台等待任务（旧实例还占着锁，等它消失后自动接管）
+_acquire_retry_task: asyncio.Task | None = None
 # 掉线通知节流：30 分钟内最多主动提醒一次（恢复通知不受限）
 _last_offline_notify = 0.0
 _NOTIFY_MIN_INTERVAL = 1800
@@ -34,7 +36,7 @@ _NOTIFY_MIN_INTERVAL = 1800
 # ---------------- 小号单实例占用锁 ----------------
 _INSTANCE_ID = _uuid.uuid4().hex[:12]
 _OWNER_KEY = "userbot_owner"          # 兼容旧 key（无 session 指纹时使用）
-_OWNER_TTL = 150          # 租约有效期（秒）：心跳 30 秒续一次，超过 150 秒视为旧实例已死
+_OWNER_TTL = 90           # 租约有效期（秒）：心跳 30 秒续一次，超过 90 秒视为旧实例已死
 _OWNER_REFRESH = 30
 _current_owner_key = _OWNER_KEY
 
@@ -111,15 +113,6 @@ async def acquire_userbot_owner(
                 f"⛔ 另一个实例（{other}，{int(time.time() - ts)} 秒前有心跳）正在使用同一个小号，"
                 "本实例不连接，避免 session 被 Telegram 作废"
             )
-            if not notified:
-                notified = True
-                await _notify_admins(
-                    "⚠️ <b>同一个小号正在被另一个实例使用</b>\n\n"
-                    "为避免 session 被作废，本实例暂不连接。\n"
-                    "如果那个实例已经下线，1~2 分钟后会自动接管；"
-                    "也可以到管理面板「小号登录」重新登录（会强制接管）。",
-                    force=True,
-                )
             return False
         await asyncio.sleep(5)
 
@@ -349,6 +342,61 @@ def setup_handlers():
             return
 
 
+def _start_acquire_retry(bot=None, owner_key: str | None = None) -> None:
+    """启动（或复用）后台等待任务：每 30 秒尝试接管小号，抢到就上线。"""
+    global _acquire_retry_task
+    if _acquire_retry_task and not _acquire_retry_task.done():
+        return
+
+    async def _loop():
+        waited = 0
+        while True:
+            await asyncio.sleep(30)
+            waited += 30
+            try:
+                ours = await acquire_userbot_owner(
+                    wait_seconds=0, force=False, owner_key=owner_key
+                )
+            except Exception as e:
+                print(f"⚠️ 等待接管小号时出错：{e}")
+                continue
+            if ours:
+                print("✅ 旧实例已释放小号，正在自动接管…")
+                try:
+                    await start_userbot(bot, force=True)
+                except Exception as e:
+                    print(f"⚠️ 自动接管小号失败：{e}")
+                return
+            if waited == 300:  # 5 分钟还抢不到，才提醒一次
+                await _notify_admins(
+                    "⚠️ <b>小号被另一个实例占着</b>\n\n"
+                    "已经等了 5 分钟还没释放，大概率是同时跑了两份程序"
+                    "（比如 Railway 副本数 > 1，或另一个项目连了同一个数据库）。\n\n"
+                    "请只保留一个实例；急着用可以发 /userbot 强制接管。",
+                    force=True,
+                )
+            if waited >= 3600:  # 1 小时后停，避免空转
+                print("⏹ 等待接管小号超时（1 小时），停止重试")
+                return
+
+    _acquire_retry_task = asyncio.create_task(_loop())
+    print("⏳ 小号暂被其它实例占用，已安排在后台自动接管")
+
+
+async def force_takeover(bot=None) -> bool:
+    """管理员强制接管小号（/userbot 用）：抢锁并重连。"""
+    global _acquire_retry_task
+    if _acquire_retry_task and not _acquire_retry_task.done():
+        _acquire_retry_task.cancel()
+        _acquire_retry_task = None
+    try:
+        await stop_userbot()
+    except Exception:
+        pass
+    await start_userbot(bot, force=True)
+    return bool(userbot and userbot.is_connected())
+
+
 async def start_userbot(bot=None, force: bool = False):
     """启动小号客户端。可以在 bot 运行过程中调用，自动启动。
 
@@ -383,8 +431,11 @@ async def _start_userbot_inner(bot=None, force: bool = False):
     if not await acquire_userbot_owner(
         wait_seconds=0 if force else 20, force=force, owner_key=_owner_key
     ):
+        # 旧实例（例如部署中的残留容器）还占着锁：不打扰用户，
+        # 后台等它消失后自动接管，期间状态标 waiting
         with SessionLocal() as session:
-            set_config(session, "alt_status", "conflict")
+            set_config(session, "alt_status", "waiting")
+        _start_acquire_retry(bot_instance, _owner_key)
         return
 
     # 取消旧心跳：以前多次调用 start_userbot 会留下多个心跳循环，
