@@ -251,6 +251,15 @@ def admin_kb(is_super: bool = False) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def userbot_kb() -> InlineKeyboardMarkup:
+    """小号状态页：强制接管 / 重新登录。"""
+    b = InlineKeyboardBuilder()
+    b.button(text="🔑 强制接管并重连", callback_data="userbot:takeover")
+    b.button(text="👤 重新登录", callback_data="admin:alt_login")
+    b.adjust(2)
+    return b.as_markup()
+
+
 def alt_login_resend_kb() -> InlineKeyboardMarkup:
     """小号登录等验证码时的键盘：重发验证码 / 取消。"""
     b = InlineKeyboardBuilder()
