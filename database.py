@@ -1084,8 +1084,8 @@ def spend_lottery_ticket(session, user_id: int) -> bool:
 
 # ---------------- 邀请返佣 ----------------
 
-DEFAULT_REFERRAL_WASH_RATE = 3.0      # 洗数据充值返佣 3%
-DEFAULT_REFERRAL_MEMBER_RATE = 5.0    # 开通会员返佣 5%
+DEFAULT_REFERRAL_WASH_RATE = 4.0      # 洗数据充值返佣 4%
+DEFAULT_REFERRAL_MEMBER_RATE = 10.0   # 开通会员返佣 10%
 
 
 def get_referral_enabled(session) -> bool:
@@ -1377,20 +1377,26 @@ def get_cash_transactions(session, tg_id: int, limit: int = 10) -> list:
         )
     )
 
-def migrate_referral_defaults(session) -> list[str]:
-    """把库里的旧默认返佣（洗数据 5% / 会员 10%）改成新的 3% / 5%。
+REFERRAL_DEFAULTS_REV = "2"   # 改一次默认值就 +1，只迁移一次，之后手动改的不再被覆盖
 
-    只改「没设置过」和「还是旧默认值」的情况；管理员自己设过别的数字不动。
-    返回实际改动的项，便于启动日志。
+
+def migrate_referral_defaults(session) -> list[str]:
+    """按版本一次性把返佣默认值写进库（当前版：洗数据 4% / 会员 10%）。
+
+    用版本标记保证只覆盖一次：以后管理员在后台改的比例不会被重启冲掉。
     """
+    current_rev = get_config(session, "referral_defaults_rev", "")
+    if current_rev == REFERRAL_DEFAULTS_REV:
+        return []
+
     changed: list[str] = []
-    rules = (
-        ("referral_wash_rate", {"", "5", "5.0"}, "3"),
-        ("referral_member_rate", {"", "10", "10.0"}, "5"),
-    )
-    for key, old_values, new_value in rules:
-        current = (get_config(session, key, "") or "").strip()
-        if current in old_values:
+    for key, new_value in (
+        ("referral_wash_rate", f"{DEFAULT_REFERRAL_WASH_RATE:g}"),
+        ("referral_member_rate", f"{DEFAULT_REFERRAL_MEMBER_RATE:g}"),
+    ):
+        old_value = (get_config(session, key, "") or "").strip()
+        if old_value != new_value:
             set_config(session, key, new_value)
-            changed.append(f"{key}: {current or '空'} → {new_value}")
+            changed.append(f"{key}: {old_value or '空'} → {new_value}")
+    set_config(session, "referral_defaults_rev", REFERRAL_DEFAULTS_REV)
     return changed
