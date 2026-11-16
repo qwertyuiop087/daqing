@@ -44,7 +44,7 @@ from database import (
 )
 from states import AdminStates, CashStates, RedeemStates
 from utils.helpers import cleanup_state
-from utils.keyboards import alt_login_resend_kb, cash_kb, admin_kb, cancel_kb, membership_kb, menu_kb
+from utils.keyboards import userbot_kb, alt_login_resend_kb, cash_kb, admin_kb, cancel_kb, membership_kb, menu_kb
 from utils.roles import is_admin, is_super_admin
 
 router = Router(name="membership")
@@ -2207,6 +2207,81 @@ async def admin_wash_balance_input(message: Message, state: FSMContext, bot: Bot
 
 
 # ---------------- 小号登录 ----------------
+
+@router.message(Command("userbot", "小号"))
+async def cmd_userbot(message: Message):
+    """小号状态与强制接管（管理员）。"""
+    from database import get_config
+    from utils.roles import is_admin
+
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ 仅管理员可用。")
+        return
+
+    from utils import telethon_client as tc
+
+    with SessionLocal() as session:
+        status = get_config(session, "alt_status", "unknown")
+        username = get_config(session, "alt_username", "")
+        uid = get_config(session, "alt_user_id", "")
+        session_str = get_config(session, "alt_session", "")
+
+    if not session_str:
+        await message.answer(
+            "👤 <b>小号状态</b>\n\n还没登录小号。\n请到管理面板「小号登录」完成登录。",
+            reply_markup=alt_login_resend_kb(),
+        )
+        return
+
+    owner = ""
+    if session_str:
+        key = tc._session_key(session_str)
+        iid, ts = tc._read_owner(key)
+        if iid:
+            ago = int(time.time() - ts)
+            mine = "（本实例）" if iid == tc._INSTANCE_ID else ""
+            owner = f"\n占用实例：<code>{iid[:8]}</code>{mine}，{ago} 秒前心跳"
+
+    connected = bool(tc.userbot and tc.userbot.is_connected())
+    status_text = {
+        "online": "✅ 在线",
+        "waiting": "⏳ 等待接管（另一个实例占着）",
+        "offline": "⚠️ 离线",
+        "conflict": "⛔ 被占用",
+    }.get(status, status)
+
+    await message.answer(
+        f"👤 <b>小号状态</b>\n\n"
+        f"状态：{status_text}\n"
+        f"连接：{'已连接' if connected else '未连接'}\n"
+        f"账号：@{username or '未知'}（{uid or '-'}）"
+        f"{owner}\n\n"
+        "如果一直被占用，点「🔑 强制接管并重连」即可（旧实例会被踢下线）。",
+        reply_markup=userbot_kb(),
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data == "userbot:takeover")
+async def cb_userbot_takeover(cq: CallbackQuery, bot: Bot):
+    from utils.roles import is_admin
+
+    if not is_admin(cq.from_user.id):
+        await cq.answer("⛔ 仅管理员可用", show_alert=True)
+        return
+    await cq.answer("正在强制接管…")
+    from utils import telethon_client as tc
+
+    ok = False
+    try:
+        ok = await tc.force_takeover(bot)
+    except Exception as e:
+        await cq.message.answer(f"⚠️ 接管失败：{str(e)[:150]}")
+        return
+    await cq.message.answer(
+        "✅ 已强制接管，小号正在重连。" if ok else "⚠️ 已抢到占用权，但连接还没建立，请稍等或重新登录。"
+    )
+
 
 @router.callback_query(F.data == "admin:alt_login")
 async def admin_alt_login_start(cq: CallbackQuery, state: FSMContext):
