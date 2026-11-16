@@ -33,15 +33,25 @@ _NOTIFY_MIN_INTERVAL = 1800
 
 # ---------------- 小号单实例占用锁 ----------------
 _INSTANCE_ID = _uuid.uuid4().hex[:12]
-_OWNER_KEY = "userbot_owner"
+_OWNER_KEY = "userbot_owner"          # 兼容旧 key（无 session 指纹时使用）
 _OWNER_TTL = 150          # 租约有效期（秒）：心跳 30 秒续一次，超过 150 秒视为旧实例已死
 _OWNER_REFRESH = 30
+_current_owner_key = _OWNER_KEY
 
 
-def _read_owner() -> tuple[str, float]:
+def _session_key(session_str: str) -> str:
+    """按 session 指纹区分锁：同一个号才需要互斥，不同号/不同项目互不干扰。"""
+    import hashlib
+
+    digest = hashlib.sha256((session_str or "").encode("utf-8")).hexdigest()[:16]
+    return f"userbot_owner:{digest}"
+
+
+def _read_owner(key: str | None = None) -> tuple[str, float]:
+    key = key or _current_owner_key
     try:
         with SessionLocal() as session:
-            raw = get_config(session, _OWNER_KEY, "")
+            raw = get_config(session, key, "")
     except Exception:
         return "", 0.0
     if not raw or ":" not in raw:
@@ -53,53 +63,65 @@ def _read_owner() -> tuple[str, float]:
         return "", 0.0
 
 
-def _write_owner(force: bool = False) -> bool:
+def _write_owner(force: bool = False, key: str | None = None) -> bool:
     """把自己写成小号主人。force=True 时不看别人是否还在租期内。"""
+    key = key or _current_owner_key
     try:
         with SessionLocal() as session:
-            set_config(session, _OWNER_KEY, f"{_INSTANCE_ID}:{time.time()}")
+            set_config(session, key, f"{_INSTANCE_ID}:{time.time()}")
         return True
     except Exception as e:
         print(f"⚠️ 写入小号占用锁失败：{e}")
         return False
 
 
-async def acquire_userbot_owner(wait_seconds: int = 120, force: bool = False) -> bool:
-    """抢小号占用权。返回 True 表示本实例可以连接小号。"""
+async def acquire_userbot_owner(
+    wait_seconds: int = 20, force: bool = False, owner_key: str | None = None
+) -> bool:
+    """抢小号占用权。返回 True 表示本实例可以连接小号。
+
+    wait_seconds 默认只等 20 秒：网络抖动时不能因为等锁把启动流程卡住；
+    真的被别的实例占着，就不连（不连就不会把 session 弄废）。
+    """
+    global _current_owner_key
+    if owner_key:
+        _current_owner_key = owner_key
+    key = _current_owner_key
+
     if force:
-        _write_owner(force=True)
+        _write_owner(force=True, key=key)
         print(f"🔑 强制接管小号占用权（实例 {_INSTANCE_ID}）")
         return True
 
     deadline = time.time() + max(0, wait_seconds)
-    first = True
+    notified = False
     while True:
-        iid, ts = _read_owner()
+        iid, ts = _read_owner(key)
         stale = (time.time() - ts) > _OWNER_TTL
         if not iid or stale or iid == _INSTANCE_ID:
-            _write_owner()
-            await asyncio.sleep(0.5)  # 二次确认，避免两个实例同时写入
-            iid2, _ = _read_owner()
+            _write_owner(key=key)
+            await asyncio.sleep(0.3)  # 二次确认，避免两个实例同时写入
+            iid2, _ = _read_owner(key)
             if iid2 == _INSTANCE_ID:
                 print(f"🔑 已取得小号占用权（实例 {_INSTANCE_ID}）")
                 return True
         if time.time() >= deadline:
             other = iid[:8] if iid else "未知"
             print(
-                f"⛔ 另一个实例（{other}，{int(time.time() - ts)} 秒前有心跳）正在使用小号，"
+                f"⛔ 另一个实例（{other}，{int(time.time() - ts)} 秒前有心跳）正在使用同一个小号，"
                 "本实例不连接，避免 session 被 Telegram 作废"
             )
-            if first:
-                first = False
+            if not notified:
+                notified = True
                 await _notify_admins(
-                    "⚠️ <b>检测到另一个实例正在使用小号</b>\n\n"
-                    "为了避免 Telegram 作废 session，本实例暂不连接小号。\n"
-                    "如果旧实例已经下线，稍等 2~3 分钟会自动接管；"
+                    "⚠️ <b>同一个小号正在被另一个实例使用</b>\n\n"
+                    "为避免 session 被作废，本实例暂不连接。\n"
+                    "如果那个实例已经下线，1~2 分钟后会自动接管；"
                     "也可以到管理面板「小号登录」重新登录（会强制接管）。",
                     force=True,
                 )
             return False
-        await asyncio.sleep(10)
+        await asyncio.sleep(5)
 
 
 async def release_userbot_owner() -> None:
@@ -355,12 +377,25 @@ async def _start_userbot_inner(bot=None, force: bool = False):
         print("⚠️ 未登录小号，洗数据中转未启动，请在管理面板登录")
         return
 
-    # 抢「小号占用权」：另一个实例正在使用时绝不连接，
-    # 否则两个 IP 同时用一个 session，Telegram 会把它永久作废
-    if not await acquire_userbot_owner(wait_seconds=0 if force else 120, force=force):
+    # 抢「小号占用权」：同一个小号只能有一个实例连，
+    # 锁 key 带 session 指纹，不同小号/不同项目互不干扰
+    _owner_key = _session_key(session_str)
+    if not await acquire_userbot_owner(
+        wait_seconds=0 if force else 20, force=force, owner_key=_owner_key
+    ):
         with SessionLocal() as session:
             set_config(session, "alt_status", "conflict")
         return
+
+    # 取消旧心跳：以前多次调用 start_userbot 会留下多个心跳循环，
+    # 它们各自动 connect/disconnect，表现出来就是「小号一直自动退出登录」
+    if _heartbeat_task and not _heartbeat_task.done():
+        _heartbeat_task.cancel()
+        try:
+            await _heartbeat_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        _heartbeat_task = None
 
     # 如果已经在运行，先停止
     if userbot and userbot.is_connected():
@@ -405,28 +440,34 @@ async def _start_userbot_inner(bot=None, force: bool = False):
     print(f"✅ 小号客户端已启动，洗数据中转已开启... 小号用户名: @{me.username}（ID: {me.id}）")
 
     # 心跳检测：每2分钟检查一次是否在线，断线自动重连
+    my_client = userbot
+    my_owner_key = _owner_key
+
     async def heartbeat():
         tick = 0
         while True:
             await asyncio.sleep(30)
             tick += 1
             try:
-                # 每 30 秒续租；发现占用权被别人拿走（例如管理员重新登录），
-                # 立刻断开本实例，避免双连把 session 打死
-                iid, _ts = _read_owner()
+                # 已经不是当前 client（被新的 start_userbot 替换了）→ 安静退出
+                if userbot is not my_client:
+                    return
+
+                # 每 30 秒续租；只有占用权真的被别人拿走时才断开自己这一个 client
+                iid, _ts = _read_owner(my_owner_key)
                 if iid != _INSTANCE_ID:
                     print("⚠️ 小号占用权已被其它实例接管，本实例断开连接")
                     try:
-                        if userbot and userbot.is_connected():
-                            await userbot.disconnect()
+                        if my_client and my_client.is_connected():
+                            await my_client.disconnect()
                     except Exception:
                         pass
                     return
-                _write_owner()
+                _write_owner(key=my_owner_key)
 
                 if tick % 4 != 0:  # 每 2 分钟才做一次在线检查
                     continue
-                if not userbot:
+                if not my_client:
                     continue
 
                 if not userbot.is_connected():
