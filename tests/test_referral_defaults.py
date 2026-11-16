@@ -23,26 +23,29 @@ class TestReferralDefaults(unittest.TestCase):
             for k in ("referral_wash_rate", "referral_member_rate"):
                 db.set_config(s, k, "")
 
-    def test_defaults_are_three_and_five(self):
-        self.assertEqual(db.DEFAULT_REFERRAL_WASH_RATE, 3.0)
-        self.assertEqual(db.DEFAULT_REFERRAL_MEMBER_RATE, 5.0)
+    def test_defaults_are_four_and_ten(self):
+        self.assertEqual(db.DEFAULT_REFERRAL_WASH_RATE, 4.0)
+        self.assertEqual(db.DEFAULT_REFERRAL_MEMBER_RATE, 10.0)
         with db.SessionLocal() as s:
             wash, member = db.get_referral_rates(s)
-        self.assertAlmostEqual(wash, 3.0)
-        self.assertAlmostEqual(member, 5.0)
+        self.assertAlmostEqual(wash, 4.0)
+        self.assertAlmostEqual(member, 10.0)
 
     def test_old_defaults_migrated(self):
         with db.SessionLocal() as s:
-            db.set_config(s, "referral_wash_rate", "5")
-            db.set_config(s, "referral_member_rate", "10")
+            db.set_config(s, "referral_wash_rate", "3")
+            db.set_config(s, "referral_member_rate", "5")
+            db.set_config(s, "referral_defaults_rev", "")
             changed = db.migrate_referral_defaults(s)
             self.assertTrue(changed)
             wash, member = db.get_referral_rates(s)
-        self.assertAlmostEqual(wash, 3.0)
-        self.assertAlmostEqual(member, 5.0)
+        self.assertAlmostEqual(wash, 4.0)
+        self.assertAlmostEqual(member, 10.0)
 
-    def test_custom_values_untouched(self):
+    def test_custom_values_untouched_after_migration(self):
+        """迁移跑过一次以后，后台手改的比例不会再被重启覆盖。"""
         with db.SessionLocal() as s:
+            db.migrate_referral_defaults(s)  # 先完成本次迁移
             db.set_config(s, "referral_wash_rate", "12")
             db.set_config(s, "referral_member_rate", "20")
             self.assertEqual(db.migrate_referral_defaults(s), [])
