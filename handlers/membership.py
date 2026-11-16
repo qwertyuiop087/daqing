@@ -44,7 +44,7 @@ from database import (
 )
 from states import AdminStates, CashStates, RedeemStates
 from utils.helpers import cleanup_state
-from utils.keyboards import cash_kb, admin_kb, cancel_kb, membership_kb, menu_kb
+from utils.keyboards import alt_login_resend_kb, cash_kb, admin_kb, cancel_kb, membership_kb, menu_kb
 from utils.roles import is_admin, is_super_admin
 
 router = Router(name="membership")
@@ -2281,12 +2281,56 @@ async def admin_alt_login_step1(message: Message, state: FSMContext):
         await state.update_data(alt_client=client, alt_phone=phone, alt_sent=sent)
         await message.answer(
             "✅ 验证码已发送到你的小号 Telegram！\n\n"
-            "请把验证码发给我。",
+            "请把验证码发给我（<b>5 分钟内有效</b>）。\n"
+            "如果过期了，点下面按钮重发，不用重新输手机号。",
+            reply_markup=alt_login_resend_kb(),
+            parse_mode="HTML",
         )
         await state.set_state(AdminStates.alt_login_step2)
     except Exception as e:
         await message.answer(f"⚠️ 发送验证码失败：{e}", reply_markup=admin_kb(is_super=is_super_admin(message.from_user.id)))
         await cleanup_state(state)
+
+
+@router.callback_query(F.data == "admin:alt_resend")
+async def admin_alt_resend(cq: CallbackQuery, state: FSMContext):
+    """重新发送验证码（旧码会作废，用新的即可）。"""
+    if not is_admin(cq.from_user.id):
+        await cq.answer("⛔ 无权限", show_alert=True)
+        return
+    data = await state.get_data()
+    phone = data.get("alt_phone")
+    client = data.get("alt_client")
+    if not phone:
+        await cq.answer("请先重新开始，输入手机号", show_alert=True)
+        return
+    await cq.answer("正在重新发送…")
+    try:
+        from telethon import TelegramClient
+        from telethon.sessions import StringSession
+
+        # 旧 client 可能已经断开，重开一个更稳
+        try:
+            if client:
+                await client.disconnect()
+        except Exception:
+            pass
+        client = TelegramClient(
+            StringSession(), settings.TELETHON_API_ID, settings.TELETHON_API_HASH
+        )
+        await client.connect()
+        sent = await client.send_code_request(phone)
+        await state.update_data(alt_client=client, alt_sent=sent)
+        await cq.message.edit_text(
+            "📨 新的验证码已发送，请用<b>最新</b>那条验证码（旧的已失效）。",
+            reply_markup=alt_login_resend_kb(),
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        await cq.message.edit_text(
+            f"⚠️ 重新发送失败：{str(e)[:150]}\n\n可以点「取消」后重新走一遍。",
+            reply_markup=alt_login_resend_kb(),
+        )
 
 
 @router.message(AdminStates.alt_login_step2, F.text)
@@ -2333,8 +2377,42 @@ async def admin_alt_login_step2(message: Message, state: FSMContext, bot: Bot):
         from utils.telethon_client import start_userbot
         asyncio.create_task(start_userbot(bot, force=True))
     except Exception as e:
+        from telethon.errors import (
+            PhoneCodeExpiredError,
+            PhoneCodeInvalidError,
+            SessionPasswordNeededError,
+        )
+
+        # 验证码过期：自动重发一个新的，留在输入状态，不用从头再来
+        if isinstance(e, PhoneCodeExpiredError):
+            try:
+                sent = await client.send_code_request(phone)
+                await state.update_data(alt_sent=sent)
+                await message.answer(
+                    "⏰ 验证码过期了，已自动重发一条新的。\n\n"
+                    "请用<b>最新</b>收到的那条验证码（旧码已作废）。",
+                    reply_markup=alt_login_resend_kb(),
+                    parse_mode="HTML",
+                )
+            except Exception as e2:
+                await message.answer(
+                    f"⚠️ 验证码过期，自动重发也失败了：{str(e2)[:120]}\n\n"
+                    "请点「取消」后重新开始登录。"
+                )
+                await cleanup_state(state)
+            return
+
+        # 验证码输错：留在输入状态，让用户重新输
+        if isinstance(e, PhoneCodeInvalidError):
+            await message.answer(
+                "❌ 验证码不对，请重新输入（注意是<b>最新</b>收到的那条）。",
+                reply_markup=alt_login_resend_kb(),
+                parse_mode="HTML",
+            )
+            return
+
         # 遇到两步验证
-        if "Two-step" in str(e) or "password" in str(e):
+        if isinstance(e, SessionPasswordNeededError) or "Two-step" in str(e) or "password" in str(e):
             await message.answer(
                 "🔐 你的小号开了两步验证，请输入两步验证密码："
             )
