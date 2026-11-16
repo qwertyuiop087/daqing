@@ -280,6 +280,18 @@ async def main() -> None:
         session=session,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
+    # 一次性的返佣默认值迁移：把旧默认（洗数据 5% / 会员 10%）改成 3% / 5%
+    try:
+        from database import SessionLocal as _SessionLocal
+        from database import migrate_referral_defaults
+
+        with _SessionLocal() as _s:
+            _changed = migrate_referral_defaults(_s)
+        if _changed:
+            logging.info("返佣默认值已更新：%s", "；".join(_changed))
+    except Exception as e:
+        logging.warning("返佣默认值迁移失败：%s", e)
+
     dp = Dispatcher(storage=MemoryStorage())
     register_all_routers(dp)
 
