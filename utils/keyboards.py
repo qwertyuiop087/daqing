@@ -249,3 +249,12 @@ def admin_kb(is_super: bool = False) -> InlineKeyboardMarkup:
         _push_btn(b, text, callback_data)
     b.adjust(2)
     return b.as_markup()
+
+
+def alt_login_resend_kb() -> InlineKeyboardMarkup:
+    """小号登录等验证码时的键盘：重发验证码 / 取消。"""
+    b = InlineKeyboardBuilder()
+    b.button(text="📨 重新发送验证码", callback_data="admin:alt_resend")
+    b.button(text="❌ 取消", callback_data="cancel")
+    b.adjust(2)
+    return b.as_markup()
