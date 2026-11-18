@@ -39,6 +39,83 @@ from utils.pay_credit import credit_order
 
 logging.basicConfig(level=logging.INFO)
 
+
+# ---------------- Telegram 连接加固 ----------------
+# 问题现象（2026-11 排查）：
+#   1) 普通 API 调用偶发挂满 HTTP_TIMEOUT 才失败，报 "Request timeout error"；
+#   2) 用户上传的文件必定「下载失败：HTTP Client says - Request timeout error」。
+# 根因有两层：
+#   a) aiogram 的 Bot.download_file 默认 timeout=30 秒，而且是「整个下载」的总时长
+#      （aiohttp ClientTimeout(total=30)）。20MB 文件要求 5.3Mbps 稳定带宽，
+#      链路一抖就必然失败 —— 这是 (2) 的直接原因。
+#   b) Railway 的 NAT 会回收空闲 TCP，aiohttp 连接池却还拿着死连接复用；
+#      另外容器只有 IPv4 出口，DNS 若返回 AAAA，aiohttp 会先连 IPv6 黑洞。
+import socket as _socket
+
+import aiohttp as _aiohttp
+from aiogram.client.session.aiohttp import AiohttpSession as _AiohttpSession
+
+
+class TgSession(_AiohttpSession):
+    """强制 IPv4、禁用连接复用（绕开 NAT 死连接 / IPv6 黑洞）。"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        init = getattr(self, "_connector_init", None)
+        if isinstance(init, dict):  # aiogram 3.2x 的连接池参数，直接改它
+            init.update(limit=16, force_close=True, family=_socket.AF_INET)
+
+
+class TgBot(Bot):
+    """文件下载：超时 30 秒 → 120 秒，失败重试一次，并把字节数写进日志。"""
+
+    async def download_file(
+        self,
+        file_path,
+        destination=None,
+        timeout: int = 120,
+        chunk_size: int = 65536,
+        seek: bool = True,
+    ):
+        last_exc: Exception | None = None
+        for attempt in (1, 2):
+            t0 = time.perf_counter()
+            try:
+                result = await super().download_file(
+                    file_path,
+                    destination=destination,
+                    timeout=timeout,
+                    chunk_size=chunk_size,
+                    seek=seek,
+                )
+                logging.info(
+                    "⬇️ 文件下载完成 %.1fs（第 %d 次尝试）",
+                    time.perf_counter() - t0,
+                    attempt,
+                )
+                return result
+            except Exception as e:  # noqa: BLE001
+                last_exc = e
+                size = -1
+                try:
+                    if isinstance(destination, (str, os.PathLike)):
+                        size = os.path.getsize(destination)
+                except OSError:
+                    pass
+                # 关键诊断信息：失败时已写入多少字节
+                #   0 字节      → 连接根本没建立起来（死连接 / IPv6 黑洞）
+                #   几 MB       → 带宽不够，属于链路慢
+                logging.warning(
+                    "⬇️ 文件下载失败 %.1fs（第 %d 次），已写入 %s 字节：%s",
+                    time.perf_counter() - t0,
+                    attempt,
+                    size,
+                    e,
+                )
+                if attempt == 1:
+                    await asyncio.sleep(1)
+        raise last_exc
+
 # ---------------- 支付自动到账（内联在本文件，避免依赖单独模块） ----------------
 
 AUTO_CREDIT_INTERVAL = 1           # 扫描间隔（秒）
@@ -258,6 +335,30 @@ async def start_temp_cleanup() -> None:
 
 # ---------------- 主流程 ----------------
 
+async def _net_selftest(bot) -> None:
+    """启动时连打 3 次 getMe，把耗时写进日志：用于判断链路是否稳定。
+
+    正常应该 100~800 ms；如果出现接近超时（>5 秒）或失败，
+    说明是网络层问题，不是业务代码问题。
+    """
+    for i in range(3):
+        t0 = time.perf_counter()
+        try:
+            await bot.get_me()
+            logging.info(
+                "🛰 自检 getMe #%d 成功 %.0f ms",
+                i + 1,
+                (time.perf_counter() - t0) * 1000,
+            )
+        except Exception as e:
+            logging.warning(
+                "🛰 自检 getMe #%d 失败 %.0f ms：%s",
+                i + 1,
+                (time.perf_counter() - t0) * 1000,
+                e,
+            )
+        await asyncio.sleep(1)
+
 async def main() -> None:
     if not settings.BOT_TOKEN:
         raise SystemExit(
@@ -272,10 +373,10 @@ async def main() -> None:
 
     # 显式设置连接超时：跨境网络抖动时不要让请求无限期挂着，
     # 超时后 aiogram 会抛 TelegramNetworkError，轮询/webhook 会自动重试。
-    from aiogram.client.session.aiohttp import AiohttpSession
-
-    session = AiohttpSession(timeout=float(getattr(settings, "HTTP_TIMEOUT", 30) or 30))
-    bot = Bot(
+    # 超时从 30 秒下调到 15 秒：挂死的请求尽快失败，用户等待时间减半。
+    http_timeout = float(getattr(settings, "HTTP_TIMEOUT", 15) or 15)
+    session = TgSession(timeout=http_timeout)
+    bot = TgBot(
         token=settings.BOT_TOKEN,
         session=session,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -294,6 +395,9 @@ async def main() -> None:
 
     dp = Dispatcher(storage=MemoryStorage())
     register_all_routers(dp)
+
+    # 启动自检：把 getMe 的耗时打进日志，方便判断是不是网络层在拖
+    asyncio.create_task(_net_selftest(bot))
 
     # 记录机器人用户名：邀请链接要用它拼 t.me/xxx?start=ref_<id>
     try:
