@@ -298,8 +298,90 @@ async def _progress_tick(bot, code: str) -> None:
             chat_id=int(chat_id_s), message_id=int(msg_id_s), text=text
         )
         print(f"[wash-progress] {code} 进度 {done}/{total}")
+        await _maybe_send_report(bot, code, done, total)
     except Exception as e:
         print(f"[wash-progress] 刷新进度失败: {e}")
+
+
+# ---------------- 洗数据结果统计报告 ----------------
+
+def _report_begin(code: str, files: int, lines: int, phones: int, cost: float) -> None:
+    """提交时先记下本批的输入数据，等全部回传后算报告。"""
+    import time as _time
+
+    from database import set_config
+
+    try:
+        with SessionLocal() as session:
+            set_config(
+                session,
+                f"wash_meta:{code}",
+                json.dumps(
+                    {
+                        "files": int(files),
+                        "lines": int(lines),
+                        "phones": int(phones),
+                        "cost": float(cost),
+                        "ts": _time.time(),
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+    except Exception as e:
+        print(f"[wash-report] 登记报告数据失败: {e}")
+
+
+def _fmt_duration(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return f"{seconds} 秒"
+    minutes, sec = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes} 分 {sec} 秒"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours} 小时 {minutes} 分"
+
+
+_report_sent: set[str] = set()
+
+
+async def _maybe_send_report(bot, code: str, done: int, total: int) -> None:
+    """全部回传完毕后发一份统计报告，每个任务只发一次。"""
+    import time as _time
+
+    if total <= 0 or done < total or code in _report_sent:
+        return
+    _report_sent.add(code)
+    try:
+        with SessionLocal() as session:
+            raw = get_config(session, f"wash_meta:{code}", "")
+            user_id_str = get_config(session, f"wash_code:{code}", "")
+        meta = json.loads(raw) if raw else {}
+        if not meta or not user_id_str:
+            return
+        user_id = int(user_id_str.split(":")[0])
+
+        elapsed = _time.time() - float(meta.get("ts") or _time.time())
+        lines = int(meta.get("lines") or 0)
+        speed = (lines / elapsed) if elapsed > 0 else 0
+
+        text = (
+            f"📊 <b>洗数据完成报告</b>\n"
+            f"任务编号：<code>{html.escape(code)}</code>\n"
+            "────────────\n"
+            f"提交文件　{int(meta.get('files') or 0)} 个\n"
+            f"提交行数　{lines:,} 行\n"
+            f"号码总数　{int(meta.get('phones') or 0):,} 个\n"
+            f"结果文件　{done} 个（全部送达）\n"
+            "────────────\n"
+            f"耗时　　　{_fmt_duration(elapsed)}\n"
+            f"费用　　　¥{float(meta.get('cost') or 0):.4f}\n"
+            f"平均速度　{speed:.0f} 行/秒"
+        )
+        await bot.send_message(user_id, text, parse_mode="HTML")
+        print(f"[wash-report] 已发送报告 {code}（{lines} 行 / {elapsed:.0f} 秒）")
+    except Exception as e:
+        print(f"[wash-report] 发送报告失败: {e}")
 
 
 _last_undelivered_alert = 0.0
@@ -1314,6 +1396,14 @@ async def _wash_submit_impl(cq: CallbackQuery, state: FSMContext, bot: Bot) -> N
         _progress_begin(random_code, sent_ok, prog_msg.chat.id, prog_msg.message_id)
     except Exception as e:
         print(f"[wash-progress] 发送进度消息失败: {e}")
+    # 记录本批输入数据，全部回传后用来出统计报告
+    _report_begin(
+        random_code,
+        sent_ok,
+        total_lines,
+        sum(int(f.get("phones") or 0) for f in files),
+        cost,
+    )
     await cleanup_state(state)
 
 
