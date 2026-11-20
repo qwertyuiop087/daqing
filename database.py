@@ -788,6 +788,20 @@ def get_washed_breakdown(session) -> tuple[int, int]:
                                 type="refund",
                             )
                         )
+                        # 退款通知：这里拿不到 bot，先落库，由 main.py 的后台任务补发
+                        # key 里必须带随机码：同一秒内给同一个用户退两笔会撞主键
+                        session.add(
+                            AppConfig(
+                                key=(
+                                    f"refund_notice:{int(now)}:{uid}:"
+                                    f"{(row.key or '').split(':', 1)[-1]}"
+                                ),
+                                value=(
+                                    f"{uid}:{refund_amount}:{refund_lines}:"
+                                    f"{(row.key or '').split(':', 1)[-1]}"
+                                ),
+                            )
+                        )
                 except Exception:
                     pass
                 continue
