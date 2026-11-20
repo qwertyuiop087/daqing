@@ -19,6 +19,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.types import Message
 
 from config import settings
 from database import (
@@ -118,7 +119,7 @@ class TgBot(Bot):
 
 # ---------------- 支付自动到账（内联在本文件，避免依赖单独模块） ----------------
 
-AUTO_CREDIT_INTERVAL = 1           # 扫描间隔（秒）
+AUTO_CREDIT_INTERVAL = 3           # 扫描间隔（秒）：1 秒一次等于每天 8.6 万次查询，没必要
 ORDER_TIMEOUT_SECONDS = 24 * 3600  # 链上确认/渠道延迟很常见，5 分钟就判死会让用户付钱拿不到货     # 订单 5 分钟内未支付视为无效
 ORDER_CHECK_EVERY = 5              # 同一订单最多每 5 秒查一次支付状态
 AUTO_CREDIT_MAX_ORDERS = 50        # 每轮最多处理订单数
@@ -268,7 +269,7 @@ async def start_auto_credit(bot) -> None:
 # ---------------- 废弃临时目录清理 ----------------
 
 TEMP_CLEANUP_INTERVAL = 3600      # 每小时一次
-TEMP_KEEP_SECONDS = 24 * 3600     # 只清理 24 小时前的
+TEMP_KEEP_SECONDS = 6 * 3600      # 只保留 6 小时（原来是 24 小时，20MB 文件堆一天容易把磁盘写满）
 
 
 def _cleanup_stale_config_keys() -> None:
@@ -322,7 +323,7 @@ def _cleanup_stale_tempdirs() -> None:
 async def start_temp_cleanup() -> None:
     """每小时清理一次：废弃临时目录 + 过期的空号检测映射。"""
     while True:
-        await asyncio.sleep(TEMP_CLEANUP_INTERVAL)
+        # 先清一次再睡：重启那一刻就把上次留下的垃圾收掉，避免磁盘被历史文件占满
         try:
             await asyncio.to_thread(_cleanup_stale_tempdirs)
         except Exception as e:
@@ -331,9 +332,122 @@ async def start_temp_cleanup() -> None:
             await asyncio.to_thread(_cleanup_stale_config_keys)
         except Exception as e:
             logging.warning("⚠️ 配置键清理异常：%s", e)
+        await asyncio.sleep(TEMP_CLEANUP_INTERVAL)
 
 
 # ---------------- 主流程 ----------------
+
+async def _set_webhook_with_retry(
+    bot, url: str, secret_token: str, allowed_updates, attempts: int = 8
+) -> bool:
+    """设置 webhook，失败自动重试。
+
+    网络抖动时 set_webhook 会抛 TelegramNetworkError / TelegramServerError，
+    以前这里没有重试，异常直接退出进程 → Railway 反复重启 → 死循环。
+    """
+    from aiogram.exceptions import TelegramNetworkError, TelegramServerError
+
+    delay = 2.0
+    for attempt in range(1, attempts + 1):
+        try:
+            await bot.set_webhook(
+                url=url, secret_token=secret_token, allowed_updates=allowed_updates
+            )
+            logging.info("✅ Webhook 已设置：%s", url)
+            return True
+        except (TelegramNetworkError, TelegramServerError) as e:
+            logging.warning(
+                "set_webhook 失败（%d/%d）：%s，%.0fs 后重试",
+                attempt,
+                attempts,
+                e,
+                delay,
+            )
+            await asyncio.sleep(delay)
+            delay = min(delay * 1.5, 30)
+    logging.error("❌ set_webhook 连续失败 %d 次，服务继续运行但暂时收不到消息", attempts)
+    return False
+
+
+def _fmt_bytes(n: float) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024:
+            return f"{n:.1f}{unit}"
+        n /= 1024
+    return f"{n:.1f}TB"
+
+
+async def _diag_handler(message: Message) -> None:
+    """管理员自检命令 /diag：一条命令看完所有关键状态。"""
+    from utils.roles import admin_id_list
+
+    if message.from_user is None or message.from_user.id not in admin_id_list():
+        return
+
+    bot = message.bot
+    parts: list[str] = ["🩺 <b>自检报告</b>", ""]
+
+    # Telegram 连通性 + 延迟
+    t0 = time.perf_counter()
+    try:
+        await bot.get_me()
+        parts.append(f"· Telegram：正常 {(time.perf_counter() - t0) * 1000:.0f} ms")
+    except Exception as e:
+        parts.append(f"· Telegram：<b>异常</b> {type(e).__name__}: {str(e)[:60]}")
+
+    # 数据库
+    t0 = time.perf_counter()
+    try:
+        with SessionLocal() as s:
+            s.execute(select(User).limit(1))
+        parts.append(f"· 数据库：正常 {(time.perf_counter() - t0) * 1000:.0f} ms")
+    except Exception as e:
+        parts.append(f"· 数据库：<b>异常</b> {type(e).__name__}: {str(e)[:60]}")
+
+    # 小号（洗数据中转）
+    try:
+        from database import get_config as _gc
+        from utils.telethon_client import userbot as _ub
+
+        with SessionLocal() as s:
+            alt_id = _gc(s, "alt_user_id", "") or "未记录"
+            alt_status = _gc(s, "alt_status", "unknown")
+        if _ub is not None and _ub.is_connected():
+            parts.append(f"· 小号：在线（{alt_id}）")
+        else:
+            parts.append(f"· 小号：<b>离线</b>（状态 {alt_status}，ID {alt_id}）")
+    except Exception as e:
+        parts.append(f"· 小号：检测失败 {type(e).__name__}")
+
+    # 磁盘（满了会导致所有文件下载失败）
+    try:
+        import tempfile as _tf
+        import shutil as _sh
+
+        u = _sh.disk_usage(_tf.gettempdir())
+        parts.append(f"· 磁盘：剩余 {_fmt_bytes(u.free)} / 共 {_fmt_bytes(u.total)}")
+    except Exception:
+        pass
+
+    # 待支付订单
+    try:
+        with SessionLocal() as s:
+            n = len(
+                list(
+                    s.scalars(
+                        select(PaymentOrder)
+                        .where(PaymentOrder.status == "pending")
+                        .limit(1000)
+                    )
+                )
+            )
+        parts.append(f"· 待支付订单：{n}")
+    except Exception:
+        pass
+
+    parts.append(f"· 服务器时间：{time.strftime('%Y-%m-%d %H:%M:%S')}")
+    await message.answer("\n".join(parts), parse_mode=ParseMode.HTML)
+
 
 async def _net_selftest(bot) -> None:
     """启动时连打 3 次 getMe，把耗时写进日志：用于判断链路是否稳定。
@@ -395,6 +509,11 @@ async def main() -> None:
 
     dp = Dispatcher(storage=MemoryStorage())
     register_all_routers(dp)
+
+    # 管理员自检命令：/diag（一条命令看完 Telegram/DB/小号/磁盘）
+    from aiogram.filters import Command as _Command
+
+    dp.message.register(_diag_handler, _Command("diag", "诊断"))
 
     # 启动自检：把 getMe 的耗时打进日志，方便判断是不是网络层在拖
     asyncio.create_task(_net_selftest(bot))
@@ -498,7 +617,8 @@ async def main() -> None:
         # webhook 密钥：未配置时自动生成随机值，防止任何人伪造 update 打我们的接口。
         # set_webhook 与请求校验用的是同一份值，双方都能对上，无需额外配置。
         webhook_secret = settings.WEBHOOK_SECRET or secrets.token_hex(32)
-        await bot.set_webhook(
+        await _set_webhook_with_retry(
+            bot,
             url=f"{settings.WEBHOOK_DOMAIN}{settings.WEBHOOK_PATH}",
             secret_token=webhook_secret,
             allowed_updates=dp.resolve_used_update_types(),
@@ -512,7 +632,9 @@ async def main() -> None:
     else:
         # ---- 长轮询模式（本地调试） ----
         logging.info("长轮询模式启动")
-        await bot.delete_webhook(drop_pending_updates=True)
+        # drop_pending_updates=True 会把重启期间积压的消息直接丢掉（不是延迟，是消失）。
+        # 这里改成 False：重启后先把积压的 update 处理完，用户不会「发了没反应」。
+        await bot.delete_webhook(drop_pending_updates=False)
         asyncio.create_task(dp.start_polling(bot))
 
     runner = web.AppRunner(app, access_log=None)  # 关闭访问日志，避免被刷时刷爆日志
