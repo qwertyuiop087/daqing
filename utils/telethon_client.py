@@ -426,18 +426,11 @@ async def _start_userbot_inner(bot=None, force: bool = False):
         print("⚠️ 未登录小号，洗数据中转未启动，请在管理面板登录")
         return
 
-    # 抢「小号占用权」：同一个小号只能有一个实例连，
-    # 锁 key 带 session 指纹，不同小号/不同项目互不干扰
+    # 不做「占用权」互斥：部署时旧容器残留会让新实例干等 90 秒，
+    # 那段时间用户提交洗数据就是白白扣钱不处理。
+    # 现在直接连，并且把占用信息写进库，仅供面板显示参考。
     _owner_key = _session_key(session_str)
-    if not await acquire_userbot_owner(
-        wait_seconds=0 if force else 20, force=force, owner_key=_owner_key
-    ):
-        # 旧实例（例如部署中的残留容器）还占着锁：不打扰用户，
-        # 后台等它消失后自动接管，期间状态标 waiting
-        with SessionLocal() as session:
-            set_config(session, "alt_status", "waiting")
-        _start_acquire_retry(bot_instance, _owner_key)
-        return
+    _write_owner(force=True, key=_owner_key)
 
     # 取消旧心跳：以前多次调用 start_userbot 会留下多个心跳循环，
     # 它们各自动 connect/disconnect，表现出来就是「小号一直自动退出登录」
@@ -512,16 +505,8 @@ async def _start_userbot_inner(bot=None, force: bool = False):
                 if userbot is not my_client:
                     return
 
-                # 每 30 秒续租；只有占用权真的被别人拿走时才断开自己这一个 client
-                iid, _ts = _read_owner(my_owner_key)
-                if iid != _INSTANCE_ID:
-                    print("⚠️ 小号占用权已被其它实例接管，本实例断开连接")
-                    try:
-                        if my_client and my_client.is_connected():
-                            await my_client.disconnect()
-                    except Exception:
-                        pass
-                    return
+                # 不做占用权互斥：这里只续写心跳时间，供面板显示，
+                # 不再因为「别的实例也在跑」就断开自己（否则两个容器会互相踢）。
                 _write_owner(key=my_owner_key)
 
                 if tick % 4 != 0:  # 每 2 分钟才做一次在线检查
