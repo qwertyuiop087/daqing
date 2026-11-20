@@ -473,6 +473,52 @@ async def _net_selftest(bot) -> None:
             )
         await asyncio.sleep(1)
 
+async def start_refund_notices(bot) -> None:
+    """补发「洗数据超时退款」通知。
+
+    退款本身是在 database.get_washed_breakdown() 里做的：那是同步的数据库层，
+    拿不到 bot，所以只把通知落库（refund_notice:*），这里负责发出去并清理。
+    """
+    while True:
+        await asyncio.sleep(20)
+        try:
+            from database import AppConfig, SessionLocal, delete_config
+
+            with SessionLocal() as session:
+                rows = list(
+                    session.scalars(
+                        select(AppConfig)
+                        .where(AppConfig.key.like("refund_notice:%"))
+                        .limit(20)
+                    )
+                )
+                items = [(r.key or "", r.value or "") for r in rows]
+
+            for key, value in items:
+                try:
+                    uid_s, amount_s, lines_s, code = (value.split(":", 3) + ["", "", "", ""])[:4]
+                    uid = int(uid_s)
+                    text = (
+                        "💸 <b>洗数据超时退款</b>\n\n"
+                        f"任务编号：<code>{code}</code>\n"
+                        f"未回传行数：{int(lines_s or 0):,} 行\n"
+                        f"退款金额：¥{float(amount_s or 0):.4f}\n\n"
+                        "48 小时内没有收到洗数据结果，已按未回传部分退款到洗数据余额。"
+                    )
+                    await bot.send_message(uid, text, parse_mode=ParseMode.HTML)
+                    logging.info("💸 已发送超时退款通知：用户 %s 任务 %s", uid, code)
+                except Exception as e:
+                    logging.warning("退款通知发送失败（%s）：%s", key, e)
+                # 不论成功失败都删掉，避免坏数据反复重试刷屏
+                try:
+                    with SessionLocal() as session:
+                        delete_config(session, key)
+                except Exception:
+                    pass
+        except Exception as e:
+            logging.warning("退款通知扫描异常：%s", e)
+
+
 async def main() -> None:
     if not settings.BOT_TOKEN:
         raise SystemExit(
@@ -543,6 +589,9 @@ async def main() -> None:
 
     # 启动废弃临时目录清理（每小时一次，删除 24 小时前的）
     asyncio.create_task(start_temp_cleanup())
+
+    # 启动超时退款通知补发（退款在数据库层静默发生，这里负责告知用户）
+    asyncio.create_task(start_refund_notices(bot))
 
     # 启动洗数据结果补发：每分钟扫一次洗数据群最近 30 分钟的消息，
     # 把「已经处理好但没送到用户手上」的结果文件补发过去
