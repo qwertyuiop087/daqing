@@ -92,7 +92,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-10-29.110"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-20.1"))
 
 
 settings = Settings()
@@ -102,6 +102,19 @@ settings = Settings()
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-11-20.1",
+        [
+            "修「洗好的文件再发给机器人没反应」：回传只认小号发的、且编号真实存在的文件，其它文件照常处理",
+            "修「一次洗很多文件会重复发两遍」：实时投递和补发扫描改用同一套去重键",
+            "新增洗数据进度条（进度 N/M 请耐心等待）和完成后的统计报告（文件数/行数/号码数/耗时/费用/速度）",
+            "小号不再因为「另一个实例占着」等 90 秒才上线：启动即连接，心跳也不再互相踢",
+            "修「上传文件读不了」：下载超时 30 秒 → 120 秒并自动重试，失败时记录已传字节数",
+            "新增 /diag 自检命令：一条命令查看 Telegram 延迟、数据库、小号在线、磁盘剩余",
+            "重启不再丢弃积压消息；webhook 设置失败自动重试，不再启动即崩溃",
+            "超时退款会给用户发通知；临时文件保留 24 小时 → 6 小时，防止磁盘写满导致下载失败",
+        ],
+    ),
     (
         "2026-10-29.110",
         [
