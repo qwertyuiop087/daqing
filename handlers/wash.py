@@ -1175,6 +1175,21 @@ async def _wash_submit_impl(cq: CallbackQuery, state: FSMContext, bot: Bot) -> N
 
     await _stop_upload_render(cq.from_user.id)
 
+    # 小号没连上时直接拒绝提交。
+    # 原因：bot.send_document 走的是 Bot API，小号在不在线都会成功，
+    # 但这时没有任何客户端在监听，文件不会被转发到洗数据群 ——
+    # 用户会看到「提交成功」，钱也扣了，实际却一点没洗。
+    from utils import telethon_client as _tc
+
+    if not (_tc.userbot and _tc.userbot.is_connected()):
+        await cq.answer(
+            "洗数据小号还没连上（正在重连或未登录），暂时不能提交。\n"
+            "请等 1~2 分钟后再点「🚀 开始洗数据」；\n"
+            "还没恢复的话，去「小号状态」点「🔑 强制接管并重连」。",
+            show_alert=True,
+        )
+        return
+
     total_lines = sum(f["lines"] for f in files)
     total_phones = sum(f["phones"] for f in files)
 
