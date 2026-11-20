@@ -279,125 +279,6 @@ async def version_api(request: web.Request):
     return web.json_response({"ok": True, "version": _settings.VERSION})
 
 
-# ---------------- 洗数据存档（只有登录后台能访问，不对外开放） ----------------
-
-async def archive_page(request: web.Request):
-    _auth(request)
-    page = ROOT / "webadmin" / "static" / "archive.html"
-    if not page.exists():
-        return web.Response(
-            text="<h2 style='font-family:sans-serif'>缺少 archive.html</h2>",
-            content_type="text/html",
-        )
-    resp = web.FileResponse(page)
-    resp.headers["Cache-Control"] = "no-store, must-revalidate"
-    return resp
-
-
-def _archive_stmt(request: web.Request):
-    """按查询条件构造存档查询。"""
-    from sqlalchemy import select
-
-    q = request.query
-    stmt = select(database.WashArchive)
-    code = (q.get("code") or "").strip()
-    if code:
-        stmt = stmt.where(database.WashArchive.code == code)
-    uid = (q.get("uid") or "").strip()
-    if uid.isdigit():
-        stmt = stmt.where(database.WashArchive.user_id == int(uid))
-    days = (q.get("days") or "").strip()
-    if days.isdigit() and int(days) > 0:
-        from datetime import timedelta
-
-        stmt = stmt.where(
-            database.WashArchive.created_at >= database.utcnow() - timedelta(days=int(days))
-        )
-    return stmt.order_by(database.WashArchive.id.desc())
-
-
-async def archive_list_api(request: web.Request):
-    _auth(request)
-    from sqlalchemy import func, select
-
-    try:
-        limit = min(int(request.query.get("limit", "100") or 100), 500)
-    except ValueError:
-        limit = 100
-    with database.SessionLocal() as session:
-        rows = list(session.scalars(_archive_stmt(request).limit(limit)))
-        items = [
-            {
-                "id": r.id,
-                "code": r.code,
-                "user_id": r.user_id,
-                "filename": r.filename,
-                "size": r.size,
-                "created_at": r.created_at.strftime("%Y-%m-%d %H:%M:%S")
-                if r.created_at
-                else "",
-            }
-            for r in rows
-        ]
-        total = int(
-            session.scalar(select(func.count()).select_from(database.WashArchive)) or 0
-        )
-    return web.json_response({"ok": True, "items": items, "total": total})
-
-
-async def archive_download_api(request: web.Request):
-    _auth(request)
-    try:
-        rid = int(request.match_info["id"])
-    except (KeyError, ValueError):
-        raise web.HTTPBadRequest(text="参数错误")
-    with database.SessionLocal() as session:
-        row = session.get(database.WashArchive, rid)
-        if row is None:
-            raise web.HTTPNotFound(text="记录不存在")
-        path, filename = row.path, row.filename
-    if not os.path.isfile(path):
-        raise web.HTTPNotFound(text="存档文件已丢失（可能已过期清理）")
-    return web.FileResponse(
-        path,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-async def archive_zip_api(request: web.Request):
-    """把符合条件的存档打成一个 zip，方便一次性下载。"""
-    _auth(request)
-    import io
-    import zipfile
-
-    buf = io.BytesIO()
-    total = 0
-    count = 0
-    limit_bytes = 200 * 1024 * 1024  # 上限 200MB，防止把内存/响应撑爆
-    with database.SessionLocal() as session:
-        rows = list(session.scalars(_archive_stmt(request).limit(2000)))
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for r in rows:
-            try:
-                if not os.path.isfile(r.path):
-                    continue
-                size = os.path.getsize(r.path)
-                if total + size > limit_bytes:
-                    break
-                zf.write(r.path, arcname=f"{r.code}_{r.filename}")
-                total += size
-                count += 1
-            except Exception:
-                continue
-    return web.Response(
-        body=buf.getvalue(),
-        content_type="application/zip",
-        headers={
-            "Content-Disposition": f'attachment; filename="wash_archive_{count}.zip"'
-        },
-    )
-
-
 # ---------------- 认证 ----------------
 
 async def login(request: web.Request):
@@ -931,11 +812,6 @@ def build_app(bot=None) -> web.Application:
     app.router.add_get("/admin", admin_page)
     app.router.add_get("/health", health)
     app.router.add_get("/api/version", version_api)
-    # 洗数据存档（仅登录后台可访问）
-    app.router.add_get("/archive", archive_page)
-    app.router.add_get("/api/archive/list", archive_list_api)
-    app.router.add_get("/api/archive/download/{id}", archive_download_api)
-    app.router.add_get("/api/archive/zip", archive_zip_api)
     app.router.add_get("/api/public/feed", public_feed)
     app.router.add_get("/api/public/plans", public_plans)
     app.router.add_get("/api/public/site", public_site)
