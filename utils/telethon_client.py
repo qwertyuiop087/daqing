@@ -351,8 +351,9 @@ def _start_acquire_retry(bot=None, owner_key: str | None = None) -> None:
     async def _loop():
         waited = 0
         while True:
-            await asyncio.sleep(30)
-            waited += 30
+            # 每 10 秒探一次：旧实例一过期就尽快接管，别让用户干等 30 秒
+            await asyncio.sleep(10)
+            waited += 10
             try:
                 ours = await acquire_userbot_owner(
                     wait_seconds=0, force=False, owner_key=owner_key
