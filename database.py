@@ -167,6 +167,24 @@ class WashOrder(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class WashArchive(Base):
+    """洗数据结果存档：只在网页后台可下载，不对外开放。
+
+    机器人交付结果时是「原样转发 file_id」，本体不落盘；
+    这个表记录的是额外存的一份副本，方便事后查询/重发。
+    """
+
+    __tablename__ = "wash_archive"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(16), index=True)      # 任务编号
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)    # 收件用户
+    filename: Mapped[str] = mapped_column(String(255))              # 原始文件名
+    size: Mapped[int] = mapped_column(Integer, default=0)           # 字节数
+    path: Mapped[str] = mapped_column(String(512))                  # 存档路径
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
 class DropRecord(Base):
     """隐藏掉落记录：使用功能时概率掉落会员天数，管理员后台可查。"""
 
