@@ -2259,14 +2259,62 @@ async def cmd_userbot(message: Message):
         "conflict": "⛔ 被占用",
     }.get(status, status)
 
+    # 在线时顺手读出小号自己的手机号和完整账号信息
+    phone_line = ""
+    if connected:
+        try:
+            info = await tc.fetch_self_info()
+            if info.get("phone"):
+                phone_line = (
+                    f"\n手机号：<code>+{html.escape(info['phone'])}</code>"
+                )
+        except Exception:
+            pass
+
     await message.answer(
         f"👤 <b>小号状态</b>\n\n"
         f"状态：{status_text}\n"
         f"连接：{'已连接' if connected else '未连接'}\n"
-        f"账号：@{username or '未知'}（{uid or '-'}）"
+        f"账号：@{username or '未知'}（{uid or '-'}）{phone_line}"
         f"{owner}\n\n"
         "如果一直被占用，点「🔑 强制接管并重连」即可（旧实例会被踢下线）。",
         reply_markup=userbot_kb(),
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("phone", "手机号", "altphone"))
+async def cmd_alt_phone(message: Message):
+    """查看小号自己的手机号（忘记号码时用），仅管理员。"""
+    from utils.roles import is_admin
+
+    if not is_admin(message.from_user.id):
+        return
+
+    from utils import telethon_client as tc
+
+    if not (tc.userbot and tc.userbot.is_connected()):
+        await message.answer("⚠️ 小号未连接，先发 /userbot 点「🔑 强制接管并重连」。")
+        return
+
+    try:
+        info = await tc.fetch_self_info()
+    except Exception as e:
+        await message.answer(f"⚠️ 读取失败：{html.escape(str(e)[:150])}")
+        return
+
+    if not info:
+        await message.answer("⚠️ 没读到账号信息，小号可能刚掉线，稍等几秒再试。")
+        return
+
+    name = " ".join(x for x in (info.get("first_name"), info.get("last_name")) if x)
+    phone = info.get("phone") or ""
+    await message.answer(
+        "📱 <b>小号账号信息</b>\n\n"
+        f"手机号：<code>{('+' + phone) if phone else '未返回（可能已隐藏）'}</code>\n"
+        f"用户ID：<code>{info.get('id')}</code>\n"
+        f"用户名：@{info.get('username') or '无'}\n"
+        f"昵称：{html.escape(name) or '无'}",
         parse_mode="HTML",
     )
 
