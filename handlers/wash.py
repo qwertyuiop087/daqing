@@ -168,8 +168,25 @@ def _delivery_key(doc, filename: str) -> str:
     return f"{filename}|{getattr(doc, 'file_size', 0) or 0}"
 
 
+def _delivery_key_size(filename: str, size) -> str:
+    """补发扫描（wash_resend）使用的去重键：文件名 + 字节数。
+
+    实时投递和补发扫描必须用同一套键，否则「发过了」在另一边查不到，
+    同一个文件就会被发两遍——这就是之前「洗很多文件时重复发」的原因。
+    """
+    return f"{filename}|{int(size or 0)}"
+
+
+def _delivery_row_key(code: str, key: str) -> str:
+    """每个去重键单独存一行配置，避免并发投递时读-改-写互相覆盖。"""
+    import hashlib
+
+    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
+    return f"wash_sent:{code}:{digest}"
+
+
 def _delivery_keys(code: str) -> list:
-    """该任务已经投递过的结果文件键（用于去重，防止重复发/重复扣）。"""
+    """旧格式：一个 JSON 列表。保留读取，兼容升级前已经记录过的任务。"""
     with SessionLocal() as session:
         raw = get_config(session, f"wash_sent:{code}", "")
     if not raw:
@@ -184,16 +201,25 @@ def _delivery_keys(code: str) -> list:
 def _remember_delivery(code: str, key: str) -> None:
     from database import set_config
 
-    keys = _delivery_keys(code)
-    if key in keys:
-        return
-    keys = (keys + [key])[-100:]
-    with SessionLocal() as session:
-        set_config(session, f"wash_sent:{code}", json.dumps(keys, ensure_ascii=False))
+    row_key = _delivery_row_key(code, key)
+    try:
+        with SessionLocal() as session:
+            if get_config(session, row_key, ""):
+                return
+            set_config(session, row_key, "1")
+    except Exception:
+        # 并发写同一个键时可能撞唯一约束，说明别的任务已经记过了，忽略即可
+        pass
 
 
 def _already_delivered(code: str, key: str) -> bool:
-    return key in _delivery_keys(code)
+    if key in _delivery_keys(code):
+        return True
+    try:
+        with SessionLocal() as session:
+            return bool(get_config(session, _delivery_row_key(code, key), ""))
+    except Exception:
+        return False
 
 
 _last_undelivered_alert = 0.0
@@ -1278,7 +1304,12 @@ async def alt_user_reply(message: Message, bot: Bot):
         #    记账放在后面，记账只要出一点问题都不能影响交付（以前是先记账后发送，
         #    记账一抛异常就整条 update 被全局错误处理器吞掉，用户永远收不到文件）。
         dkey = _delivery_key(doc, filename)
-        if _already_delivered(random_code, dkey):
+        # 补发扫描用的是「文件名|大小」，这里必须同时记一份，否则实时发过的文件
+        # 在补发扫描里查不到（老版本就是这样把同一个文件又发了一遍）。
+        dkey_size = _delivery_key_size(filename, getattr(doc, "file_size", 0))
+        if _already_delivered(random_code, dkey) or _already_delivered(
+            random_code, dkey_size
+        ):
             print(f"⚠️ 这个结果文件已经发过了，跳过重复投递: {filename}")
             return
         ok = await _send_document_retry(
@@ -1292,6 +1323,7 @@ async def alt_user_reply(message: Message, bot: Bot):
             await _alert_undelivered(bot, filename, random_code, user_id)
             return
         _remember_delivery(random_code, dkey)
+        _remember_delivery(random_code, dkey_size)
         print(f"✅ 已把洗好的文件发给用户 {user_id}")
 
         # ② 送达后再记账（费用提交时已预扣，这里只记流水，不重复扣费）
