@@ -222,6 +222,83 @@ def _already_delivered(code: str, key: str) -> bool:
         return False
 
 
+# ---------------- 洗数据进度推送 ----------------
+# 每个回传文件插一行 wash_prog:{码}:{hash}，用 COUNT 统计进度。
+# 这样并发回传时不需要「读-改-写」计数器，不会丢数。
+
+def _progress_mark_key(code: str, key: str) -> str:
+    import hashlib
+
+    return f"wash_prog:{code}:{hashlib.sha1(key.encode('utf-8')).hexdigest()[:16]}"
+
+
+def _progress_count(code: str) -> int:
+    from sqlalchemy import func
+
+    from database import AppConfig
+
+    try:
+        with SessionLocal() as session:
+            return int(
+                session.scalar(
+                    select(func.count())
+                    .select_from(AppConfig)
+                    .where(AppConfig.key.like(f"wash_prog:{code}:%"))
+                )
+                or 0
+            )
+    except Exception:
+        return 0
+
+
+def _progress_begin(code: str, total: int, chat_id: int, message_id: int) -> None:
+    """登记本批任务的文件总数和进度消息位置。"""
+    from database import set_config
+
+    try:
+        with SessionLocal() as session:
+            set_config(session, f"wash_prog_total:{code}", str(int(total)))
+            set_config(session, f"wash_prog_msg:{code}", f"{chat_id}:{message_id}")
+    except Exception as e:
+        print(f"[wash-progress] 登记进度失败: {e}")
+
+
+def _progress_mark(code: str, key: str) -> None:
+    from database import set_config
+
+    row_key = _progress_mark_key(code, key)
+    try:
+        with SessionLocal() as session:
+            if get_config(session, row_key, ""):
+                return
+            set_config(session, row_key, "1")
+    except Exception:
+        pass
+
+
+async def _progress_tick(bot, code: str) -> None:
+    """每回传一个文件刷新一次进度消息。任何异常都不能影响文件交付。"""
+    try:
+        with SessionLocal() as session:
+            total = int(get_config(session, f"wash_prog_total:{code}", "0") or 0)
+            meta = get_config(session, f"wash_prog_msg:{code}", "")
+        if total <= 0 or ":" not in meta:
+            return
+        done = min(_progress_count(code), total)
+        chat_id_s, msg_id_s = meta.split(":", 1)
+        finished = done >= total
+        text = (
+            f"{'✅' if finished else '⏳'} <b>洗数据{'已完成' if finished else '处理中'}</b>\n\n"
+            f"进度：<b>{done}/{total}</b>\n"
+            + ("全部结果已发送完毕。" if finished else "洗好的文件会一个个发给你，请稍等。")
+        )
+        await bot.edit_message_text(
+            chat_id=int(chat_id_s), message_id=int(msg_id_s), text=text
+        )
+    except Exception as e:
+        print(f"[wash-progress] 刷新进度失败: {e}")
+
+
 _last_undelivered_alert = 0.0
 
 
@@ -1226,6 +1303,15 @@ async def _wash_submit_impl(cq: CallbackQuery, state: FSMContext, bot: Bot) -> N
         "正在处理中，完成后会自动把结果发回给你，请稍等。",
         reply_markup=menu_kb(user_id),
     )
+    # 单独发一条进度消息，后面每回传一个文件就编辑它
+    try:
+        prog_msg = await cq.message.answer(
+            f"⏳ <b>洗数据处理中</b>\n\n进度：<b>0/{sent_ok}</b>\n"
+            "洗好的文件会一个个发给你，请稍等。"
+        )
+        _progress_begin(random_code, sent_ok, prog_msg.chat.id, prog_msg.message_id)
+    except Exception as e:
+        print(f"[wash-progress] 发送进度消息失败: {e}")
     await cleanup_state(state)
 
 
@@ -1324,6 +1410,8 @@ async def alt_user_reply(message: Message, bot: Bot):
             return
         _remember_delivery(random_code, dkey)
         _remember_delivery(random_code, dkey_size)
+        _progress_mark(random_code, dkey)
+        await _progress_tick(bot, random_code)
         print(f"✅ 已把洗好的文件发给用户 {user_id}")
 
         # ② 送达后再记账（费用提交时已预扣，这里只记流水，不重复扣费）
