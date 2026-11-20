@@ -49,6 +49,17 @@ class Settings:
     # Railway 上建议创建 Postgres 并把连接串填到这里，保证数据持久化。
     DATABASE_URL: str = _clean_env(os.getenv("DATABASE_URL", ""))
 
+    # 洗数据结果存档（只在网页后台可下载，不对外开放）
+    # Railway 必须挂 Volume 到 ARCHIVE_DIR，否则每次重部署都会被清空
+    ARCHIVE_ENABLED: bool = _clean_env(os.getenv("ARCHIVE_ENABLED", "1")).lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+    ARCHIVE_DIR: str = _clean_env(os.getenv("ARCHIVE_DIR", "/data/archive"))
+    ARCHIVE_KEEP_DAYS: int = int(_clean_env(os.getenv("ARCHIVE_KEEP_DAYS", "30")) or 30)
+
     # Webhook 模式：填入 Railway 分配的域名（如 https://xxx.up.railway.app）后启用 Webhook；
     # 留空则使用长轮询模式（适合本地调试）。
     WEBHOOK_DOMAIN: str = os.getenv("WEBHOOK_DOMAIN", "").rstrip("/")
