@@ -2243,6 +2243,15 @@ async def cmd_userbot(message: Message):
             owner = f"\n占用实例：<code>{iid[:8]}</code>{mine}，{ago} 秒前心跳"
 
     connected = bool(tc.userbot and tc.userbot.is_connected())
+    # 自愈：客户端确实连着就以实际连接为准，别让面板停留在旧状态
+    # （部署时旧容器退出可能把「离线」写回数据库，新容器其实已经连上了）
+    if connected and status != "online":
+        try:
+            with SessionLocal() as session:
+                set_config(session, "alt_status", "online")
+            status = "online"
+        except Exception:
+            pass
     status_text = {
         "online": "✅ 在线",
         "waiting": "⏳ 等待接管（另一个实例占着）",
