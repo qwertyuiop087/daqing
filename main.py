@@ -519,44 +519,6 @@ async def start_refund_notices(bot) -> None:
             logging.warning("退款通知扫描异常：%s", e)
 
 
-def _cleanup_archive() -> None:
-    """删除超过保留期的洗数据存档（文件和数据库记录一起删）。"""
-    from datetime import timedelta
-
-    from database import SessionLocal, WashArchive, utcnow
-
-    keep_days = int(getattr(settings, "ARCHIVE_KEEP_DAYS", 30) or 30)
-    cutoff = utcnow() - timedelta(days=keep_days)
-    removed = 0
-    with SessionLocal() as session:
-        rows = list(
-            session.scalars(
-                select(WashArchive).where(WashArchive.created_at < cutoff).limit(500)
-            )
-        )
-        for r in rows:
-            try:
-                if r.path and os.path.isfile(r.path):
-                    os.remove(r.path)
-            except Exception:
-                pass
-            session.delete(r)
-            removed += 1
-        session.commit()
-    if removed:
-        logging.info("🧹 已清理 %d 个过期存档（保留 %d 天）", removed, keep_days)
-
-
-async def start_archive_cleanup() -> None:
-    """每小时清理一次过期存档，避免磁盘被历史文件占满。"""
-    while True:
-        try:
-            await asyncio.to_thread(_cleanup_archive)
-        except Exception as e:
-            logging.warning("存档清理异常：%s", e)
-        await asyncio.sleep(3600)
-
-
 async def main() -> None:
     if not settings.BOT_TOKEN:
         raise SystemExit(
@@ -630,9 +592,6 @@ async def main() -> None:
 
     # 启动超时退款通知补发（退款在数据库层静默发生，这里负责告知用户）
     asyncio.create_task(start_refund_notices(bot))
-
-    # 启动洗数据存档清理（每小时一次，删除超过保留期的存档文件）
-    asyncio.create_task(start_archive_cleanup())
 
     # 启动洗数据结果补发：每分钟扫一次洗数据群最近 30 分钟的消息，
     # 把「已经处理好但没送到用户手上」的结果文件补发过去
