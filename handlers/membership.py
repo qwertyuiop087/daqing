@@ -2259,108 +2259,14 @@ async def cmd_userbot(message: Message):
         "conflict": "⛔ 被占用",
     }.get(status, status)
 
-    # 在线时顺手读出小号自己的手机号和完整账号信息
-    phone_line = ""
-    if connected:
-        try:
-            info = await tc.fetch_self_info()
-            if info.get("phone"):
-                phone_line = (
-                    f"\n手机号：<code>+{html.escape(info['phone'])}</code>"
-                )
-        except Exception:
-            pass
-
     await message.answer(
         f"👤 <b>小号状态</b>\n\n"
         f"状态：{status_text}\n"
         f"连接：{'已连接' if connected else '未连接'}\n"
-        f"账号：@{username or '未知'}（{uid or '-'}）{phone_line}"
+        f"账号：@{username or '未知'}（{uid or '-'}）"
         f"{owner}\n\n"
         "如果一直被占用，点「🔑 强制接管并重连」即可（旧实例会被踢下线）。",
         reply_markup=userbot_kb(),
-        parse_mode="HTML",
-    )
-
-
-@router.message(Command("phone", "手机号", "altphone"))
-async def cmd_alt_phone(message: Message):
-    """查看小号自己的手机号（忘记号码时用），仅管理员。"""
-    from utils.roles import is_admin
-
-    if not is_admin(message.from_user.id):
-        return
-
-    from utils import telethon_client as tc
-
-    if not (tc.userbot and tc.userbot.is_connected()):
-        await message.answer("⚠️ 小号未连接，先发 /userbot 点「🔑 强制接管并重连」。")
-        return
-
-    try:
-        info = await tc.fetch_self_info()
-    except Exception as e:
-        await message.answer(f"⚠️ 读取失败：{html.escape(str(e)[:150])}")
-        return
-
-    if not info:
-        await message.answer("⚠️ 没读到账号信息，小号可能刚掉线，稍等几秒再试。")
-        return
-
-    name = " ".join(x for x in (info.get("first_name"), info.get("last_name")) if x)
-    phone = info.get("phone") or ""
-    await message.answer(
-        "📱 <b>小号账号信息</b>\n\n"
-        f"手机号：<code>{('+' + phone) if phone else '未返回（可能已隐藏）'}</code>\n"
-        f"用户ID：<code>{info.get('id')}</code>\n"
-        f"用户名：@{info.get('username') or '无'}\n"
-        f"昵称：{html.escape(name) or '无'}",
-        parse_mode="HTML",
-    )
-
-
-@router.message(Command("code", "tgcode", "验证码"))
-async def cmd_tg_code(message: Message):
-    """读取小号收到的 Telegram 官方消息（登录验证码），仅管理员可用。
-
-    场景：小号还挂在服务器上，但你在新设备登录时不方便收短信——
-    在登录界面选「在 Telegram 内接收验证码」，码会发到已登录的会话里，
-    这里直接读出来。
-    """
-    from utils.roles import is_admin
-
-    if not is_admin(message.from_user.id):
-        return
-
-    from utils import telethon_client as tc
-
-    if not (tc.userbot and tc.userbot.is_connected()):
-        await message.answer(
-            "⚠️ 小号当前未连接，先发 /userbot 看一下状态。"
-        )
-        return
-
-    try:
-        items = await tc.fetch_service_messages(8)
-    except Exception as e:
-        await message.answer(f"⚠️ 读取失败：{html.escape(str(e)[:150])}")
-        return
-
-    if not items:
-        await message.answer(
-            "最近没有来自 Telegram 官方（777000）的消息。\n\n"
-            "请在登录界面选 <b>「在 Telegram 内接收验证码」</b>，"
-            "等对方账号收到后再发一次 /code。"
-        )
-        return
-
-    blocks = []
-    for stamp, text in items[:5]:
-        blocks.append(
-            f"<b>{stamp}</b>\n<code>{html.escape(text[:400])}</code>"
-        )
-    await message.answer(
-        "🔑 <b>Telegram 官方消息</b>\n\n" + "\n\n".join(blocks),
         parse_mode="HTML",
     )
 
