@@ -545,68 +545,6 @@ async def _start_userbot_inner(bot=None, force: bool = False):
     _heartbeat_task = asyncio.create_task(heartbeat())
 
 
-async def fetch_self_info() -> dict:
-    """读出小号自己的账号信息（含手机号）。
-
-    session 还在线时，Telegram 会把自己的手机号一并返回，
-    所以忘记号码时可以直接从这里取。
-    """
-    client = userbot
-    if client is None or not client.is_connected():
-        return {}
-    me = await client.get_me()
-    if me is None:
-        return {}
-
-    phone = getattr(me, "phone", "") or ""
-    if not phone:
-        # 有些 session 的 get_me 不带 phone，兜底走 getFullUser
-        try:
-            from telethon import functions
-
-            full = await client(functions.users.GetFullUserRequest(id="me"))
-            users = getattr(full, "users", None) or []
-            if users:
-                phone = getattr(users[0], "phone", "") or ""
-        except Exception:
-            phone = ""
-
-    return {
-        "id": me.id,
-        "username": me.username or "",
-        "first_name": me.first_name or "",
-        "last_name": me.last_name or "",
-        "phone": phone,
-        "premium": bool(getattr(me, "premium", False)),
-    }
-
-
-async def fetch_service_messages(limit: int = 8) -> list[tuple[str, str]]:
-    """读取 Telegram 官方服务号（777000）最近的消息。
-
-    用途：在别处登录这个小号时，Telegram 会把登录验证码作为官方消息
-    发到已登录的会话里，这里把它读出来，方便管理员取回验证码。
-    返回 [(时间, 文本), ...]，新的在前。
-    """
-    client = userbot
-    if client is None or not client.is_connected():
-        return []
-    try:
-        msgs = await client.get_messages(777000, limit=limit)
-    except Exception:
-        # 部分 session 没有实体缓存，先解析一下再取
-        await client.get_entity(777000)
-        msgs = await client.get_messages(777000, limit=limit)
-    out: list[tuple[str, str]] = []
-    for m in msgs or []:
-        text = (getattr(m, "message", "") or "").strip()
-        if not text:
-            continue
-        stamp = m.date.strftime("%m-%d %H:%M:%S") if getattr(m, "date", None) else ""
-        out.append((stamp, text))
-    return out
-
-
 async def stop_userbot():
     """停止小号客户端（删除小号时调用）。"""
     global userbot, _heartbeat_task
