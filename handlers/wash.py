@@ -286,19 +286,27 @@ async def _progress_tick(bot, code: str) -> None:
             # 升级前提交的老任务没有登记进度，打印一行方便排查
             print(f"[wash-progress] {code} 未登记进度（total={total}, meta={meta!r}）")
             return
-        done = min(_progress_count(code), total)
+        raw_done = _progress_count(code)
+        done = min(raw_done, total)
         chat_id_s, msg_id_s = meta.split(":", 1)
-        finished = done >= total
+        finished = raw_done >= total
+        # 先安排报告（每来一个文件就重置计时），再编辑消息：
+        # 编辑可能因为「内容没变」报错，不能让它挡住报告计时
+        if finished:
+            _schedule_report(bot, code)
         text = (
             f"{'✅' if finished else '⏳'} <b>洗数据{'已完成' if finished else '处理中'}</b>\n\n"
             f"进度：<b>{done}/{total}</b> "
             + ("全部结果已发送完毕。" if finished else "请耐心等待。")
         )
-        await bot.edit_message_text(
-            chat_id=int(chat_id_s), message_id=int(msg_id_s), text=text
-        )
+        try:
+            await bot.edit_message_text(
+                chat_id=int(chat_id_s), message_id=int(msg_id_s), text=text
+            )
+        except Exception as e:
+            # 内容没变 / 消息被删 都无所谓，进度只是辅助信息
+            print(f"[wash-progress] 编辑失败（不影响交付）：{e}")
         print(f"[wash-progress] {code} 进度 {done}/{total}")
-        await _maybe_send_report(bot, code, done, total)
     except Exception as e:
         print(f"[wash-progress] 刷新进度失败: {e}")
 
@@ -343,24 +351,56 @@ def _fmt_duration(seconds: float) -> str:
 
 
 _report_sent: set[str] = set()
+_report_tasks: dict[str, asyncio.Task] = {}
+
+# 结果到齐后不立刻发报告：洗数据服务常常一个源文件回传多个结果文件，
+# 而且是隔几秒陆续到的。等这么久没新文件再发，避免报告夹在两个文件中间。
+REPORT_QUIET_SECONDS = 15
 
 
-async def _maybe_send_report(bot, code: str, done: int, total: int) -> None:
-    """全部回传完毕后发一份统计报告，每个任务只发一次。"""
+def _schedule_report(bot, code: str) -> None:
+    """安排一次报告：期间每来一个新结果就重新计时。"""
+    old = _report_tasks.get(code)
+    if old is not None and not old.done():
+        old.cancel()
+    _report_tasks[code] = asyncio.create_task(_report_after_quiet(bot, code))
+
+
+async def _report_after_quiet(bot, code: str) -> None:
+    me = asyncio.current_task()
+    try:
+        await asyncio.sleep(REPORT_QUIET_SECONDS)
+    except asyncio.CancelledError:
+        return
+    try:
+        await _maybe_send_report(bot, code)
+    finally:
+        if _report_tasks.get(code) is me:
+            _report_tasks.pop(code, None)
+
+
+async def _maybe_send_report(bot, code: str) -> None:
+    """安静期满后发一份统计报告，每个任务只发一次。"""
     import time as _time
 
-    if total <= 0 or done < total or code in _report_sent:
+    if code in _report_sent:
         return
-    _report_sent.add(code)
     try:
         with SessionLocal() as session:
+            total = int(get_config(session, f"wash_prog_total:{code}", "0") or 0)
             raw = get_config(session, f"wash_meta:{code}", "")
             user_id_str = get_config(session, f"wash_code:{code}", "")
+        # 还没回传齐就别发，等下一个文件到达时会重新安排
+        if total <= 0 or _progress_count(code) < total:
+            return
+        _report_sent.add(code)
+
         meta = json.loads(raw) if raw else {}
         if not meta or not user_id_str:
             return
         user_id = int(user_id_str.split(":")[0])
 
+        delivered = _progress_count(code)
         elapsed = _time.time() - float(meta.get("ts") or _time.time())
         lines = int(meta.get("lines") or 0)
         speed = (lines / elapsed) if elapsed > 0 else 0
@@ -372,7 +412,7 @@ async def _maybe_send_report(bot, code: str, done: int, total: int) -> None:
             f"提交文件　{int(meta.get('files') or 0)} 个\n"
             f"提交行数　{lines:,} 行\n"
             f"号码总数　{int(meta.get('phones') or 0):,} 个\n"
-            f"结果文件　{done} 个（全部送达）\n"
+            f"结果文件　{delivered} 个（全部送达）\n"
             "────────────\n"
             f"耗时　　　{_fmt_duration(elapsed)}\n"
             f"费用　　　¥{float(meta.get('cost') or 0):.4f}\n"
