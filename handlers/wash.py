@@ -283,18 +283,21 @@ async def _progress_tick(bot, code: str) -> None:
             total = int(get_config(session, f"wash_prog_total:{code}", "0") or 0)
             meta = get_config(session, f"wash_prog_msg:{code}", "")
         if total <= 0 or ":" not in meta:
+            # 升级前提交的老任务没有登记进度，打印一行方便排查
+            print(f"[wash-progress] {code} 未登记进度（total={total}, meta={meta!r}）")
             return
         done = min(_progress_count(code), total)
         chat_id_s, msg_id_s = meta.split(":", 1)
         finished = done >= total
         text = (
             f"{'✅' if finished else '⏳'} <b>洗数据{'已完成' if finished else '处理中'}</b>\n\n"
-            f"进度：<b>{done}/{total}</b>\n"
-            + ("全部结果已发送完毕。" if finished else "洗好的文件会一个个发给你，请稍等。")
+            f"进度：<b>{done}/{total}</b> "
+            + ("全部结果已发送完毕。" if finished else "请耐心等待。")
         )
         await bot.edit_message_text(
             chat_id=int(chat_id_s), message_id=int(msg_id_s), text=text
         )
+        print(f"[wash-progress] {code} 进度 {done}/{total}")
     except Exception as e:
         print(f"[wash-progress] 刷新进度失败: {e}")
 
@@ -1306,8 +1309,7 @@ async def _wash_submit_impl(cq: CallbackQuery, state: FSMContext, bot: Bot) -> N
     # 单独发一条进度消息，后面每回传一个文件就编辑它
     try:
         prog_msg = await cq.message.answer(
-            f"⏳ <b>洗数据处理中</b>\n\n进度：<b>0/{sent_ok}</b>\n"
-            "洗好的文件会一个个发给你，请稍等。"
+            f"⏳ <b>洗数据处理中</b>\n\n进度：<b>0/{sent_ok}</b> 请耐心等待。"
         )
         _progress_begin(random_code, sent_ok, prog_msg.chat.id, prog_msg.message_id)
     except Exception as e:
