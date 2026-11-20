@@ -481,14 +481,21 @@ async def _start_userbot_inner(bot=None, force: bool = False):
         )
         return
 
-    # 把小号的用户名和 user_id 存到数据库
-    me = await userbot.get_me()
+    # 连接已经成功，先把状态写成在线。
+    # 以前「get_me 失败」会让函数直接抛异常退出，客户端明明连着，
+    # 数据库里却还是旧的离线状态 —— 表现出来就是「显示离线但能正常用」。
     with SessionLocal() as session:
-        set_config(session, "alt_username", me.username or "")
-        set_config(session, "alt_user_id", str(me.id))
         set_config(session, "alt_status", "online")
 
-    print(f"✅ 小号客户端已启动，洗数据中转已开启... 小号用户名: @{me.username}（ID: {me.id}）")
+    # 用户名和 user_id 单独取：失败不影响使用，也不影响在线状态
+    try:
+        me = await userbot.get_me()
+        with SessionLocal() as session:
+            set_config(session, "alt_username", me.username or "")
+            set_config(session, "alt_user_id", str(me.id))
+        print(f"✅ 小号客户端已启动，洗数据中转已开启... 小号用户名: @{me.username}（ID: {me.id}）")
+    except Exception as e:
+        print(f"⚠️ 小号已连接，但获取账号信息失败（不影响使用）：{e}")
 
     # 心跳检测：每2分钟检查一次是否在线，断线自动重连
     my_client = userbot
