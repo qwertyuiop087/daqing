@@ -424,6 +424,63 @@ async def _maybe_send_report(bot, code: str) -> None:
         print(f"[wash-report] 发送报告失败: {e}")
 
 
+# ---------------- 结果存档（后台可下载，不对外开放） ----------------
+
+_ARCHIVE_SEM: asyncio.Semaphore | None = None
+
+
+def _archive_sem() -> asyncio.Semaphore:
+    global _ARCHIVE_SEM
+    if _ARCHIVE_SEM is None:
+        _ARCHIVE_SEM = asyncio.Semaphore(2)  # 同时最多存 2 个，别把带宽吃满
+    return _ARCHIVE_SEM
+
+
+async def _archive_result(bot, file_id: str, code: str, user_id: int, filename: str) -> None:
+    """把回传的结果文件额外存一份到磁盘，供网页后台下载。
+
+    这是「附加动作」：任何失败都只打日志，绝不能影响用户已经收到的文件。
+    """
+    try:
+        from config import settings as _settings
+
+        if not getattr(_settings, "ARCHIVE_ENABLED", False):
+            return
+    except Exception:
+        return
+
+    async with _archive_sem():
+        try:
+            import datetime as _dt
+
+            from database import WashArchive
+            from services.file_ops import sanitize_filename
+
+            safe = sanitize_filename(filename or "result.txt")
+            day = _dt.datetime.now().strftime("%Y%m%d")
+            out_dir = os.path.join(settings.ARCHIVE_DIR, day, code)
+            os.makedirs(out_dir, exist_ok=True)
+            path = os.path.join(out_dir, f"{uuid.uuid4().hex[:8]}_{safe}")
+
+            await bot.download_file(file_id, destination=path)
+
+            size = os.path.getsize(path)
+            with SessionLocal() as session:
+                session.add(
+                    WashArchive(
+                        code=code,
+                        user_id=user_id,
+                        filename=safe,
+                        size=size,
+                        path=path,
+                    )
+                )
+                session.commit()
+            print(f"[wash-archive] 已存档 {code}/{safe}（{size} 字节）")
+        except Exception as e:
+            print(f"[wash-archive] 存档失败（不影响交付）：{e}")
+
+
 _last_undelivered_alert = 0.0
 
 
@@ -1559,6 +1616,10 @@ async def alt_user_reply(message: Message, bot: Bot):
         _remember_delivery(random_code, dkey_size)
         _progress_mark(random_code, dkey)
         await _progress_tick(bot, random_code)
+        # 额外存一份到磁盘，供网页后台下载；异步做，不拖慢交付
+        asyncio.create_task(
+            _archive_result(bot, doc.file_id, random_code, user_id, filename)
+        )
         print(f"✅ 已把洗好的文件发给用户 {user_id}")
 
         # ② 送达后再记账（费用提交时已预扣，这里只记流水，不重复扣费）
