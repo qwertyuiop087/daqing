@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>洗数据存档</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0f1420; color: #e6e9ef;
+  }
+  h1 { font-size: 18px; margin: 0 0 16px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; }
+  input, select {
+    background: #1a2130; color: #e6e9ef; border: 1px solid #2b3548;
+    border-radius: 6px; padding: 7px 10px; font-size: 13px; outline: none;
+  }
+  input:focus, select:focus { border-color: #3d6fd8; }
+  button {
+    background: #2d6cdf; color: #fff; border: 0; border-radius: 6px;
+    padding: 8px 14px; font-size: 13px; cursor: pointer;
+  }
+  button.ghost { background: #232c3d; }
+  button:hover { filter: brightness(1.1); }
+  .hint { color: #8b97ab; font-size: 12px; margin-left: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid #1e2637; }
+  th { color: #8b97ab; font-weight: 500; font-size: 12px; }
+  tr:hover td { background: #151c29; }
+  a { color: #6ea8ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .empty { padding: 40px; text-align: center; color: #6b7688; }
+  .warn {
+    background: #2a1f14; border: 1px solid #5a3d1a; color: #f0c07a;
+    padding: 10px 12px; border-radius: 6px; font-size: 12px; margin-bottom: 16px;
+  }
+</style>
+</head>
+<body>
+<h1>📦 洗数据存档</h1>
+<div class="warn" id="warn" style="display:none">
+  ⚠️ 存档目录不可写或未挂载磁盘，新结果不会被保存。请在 Railway 挂载 Volume 到 <code>ARCHIVE_DIR</code>。
+</div>
+<div class="bar">
+  <select id="days">
+    <option value="1">最近 1 天</option>
+    <option value="7" selected>最近 7 天</option>
+    <option value="30">最近 30 天</option>
+    <option value="0">全部</option>
+  </select>
+  <input id="uid" placeholder="用户 ID（可选）" size="14">
+  <input id="code" placeholder="任务编号（可选）" size="12">
+  <button onclick="load()">查询</button>
+  <button class="ghost" onclick="zipAll()">⬇️ 打包下载</button>
+  <a class="hint" href="/admin">← 返回后台</a>
+</div>
+<table>
+  <thead>
+    <tr><th>时间</th><th>任务编号</th><th>用户</th><th>文件名</th><th>大小</th><th></th></tr>
+  </thead>
+  <tbody id="rows"></tbody>
+</table>
+<div class="empty" id="empty" style="display:none">没有找到存档记录</div>
+
+<script>
+function qs() {
+  const p = new URLSearchParams();
+  const d = document.getElementById('days').value;
+  if (d && d !== '0') p.set('days', d);
+  const uid = document.getElementById('uid').value.trim();
+  if (uid) p.set('uid', uid);
+  const code = document.getElementById('code').value.trim();
+  if (code) p.set('code', code);
+  return p.toString();
+}
+function fmtSize(n) {
+  if (!n) return '-';
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+async function load() {
+  const tbody = document.getElementById('rows');
+  tbody.innerHTML = '<tr><td colspan="6">加载中…</td></tr>';
+  try {
+    const r = await fetch('/api/archive/list?limit=300&' + qs());
+    if (r.status === 401) { location.href = '/admin'; return; }
+    const data = await r.json();
+    const items = data.items || [];
+    tbody.innerHTML = '';
+    document.getElementById('empty').style.display = items.length ? 'none' : 'block';
+    for (const it of items) {
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + it.created_at + '</td>' +
+        '<td>' + it.code + '</td>' +
+        '<td>' + it.user_id + '</td>' +
+        '<td>' + escapeHtml(it.filename) + '</td>' +
+        '<td>' + fmtSize(it.size) + '</td>' +
+        '<td><a href="/api/archive/download/' + it.id + '">下载</a></td>';
+      tbody.appendChild(tr);
+    }
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="6">加载失败：' + e + '</td></tr>';
+  }
+}
+function escapeHtml(s) {
+  return (s || '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+function zipAll() {
+  location.href = '/api/archive/zip?' + qs();
+}
+load();
+</script>
+</body>
+</html>
