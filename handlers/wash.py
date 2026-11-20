@@ -4,6 +4,7 @@ import html
 import json
 import math
 import os
+import re
 import secrets
 import string
 import uuid
@@ -35,13 +36,50 @@ from utils.keyboards import cancel_kb, menu_kb
 
 
 class FromAltUserFilter(BaseFilter):
-    """只匹配小号发的消息"""
+    """只匹配「小号」发来的消息。
+
+    严格比较：alt_user_id 为空或不是纯数字时一律不匹配，
+    避免配置异常（空值/带空格）时把普通用户的文件也当成回传结果吞掉。
+    """
     async def __call__(self, message: Message) -> bool:
         if not message.from_user:
             return False
         with SessionLocal() as session:
-            alt_user_id = get_config(session, "alt_user_id", "")
-        return str(message.from_user.id) == alt_user_id
+            alt_user_id = (get_config(session, "alt_user_id", "") or "").strip()
+        if not alt_user_id.isdigit():
+            return False
+        return message.from_user.id == int(alt_user_id)
+
+
+_RESULT_CODE_RE = re.compile(r"([a-zA-Z0-9]{7})_")
+
+
+class KnownResultCodeFilter(BaseFilter):
+    """只认「结果编号确实存在」的文件。
+
+    回传逻辑必须排在普通文件处理之前，但绝不能把别人的文件截胡：
+    只要文件名/说明里的 7 位编号在数据库里查不到（用户自己发的、
+    转发多次的、编号已过期的），就放行给后面的普通流程处理。
+    """
+    async def __call__(self, message: Message) -> bool:
+        doc = message.document
+        if not doc:
+            return False
+        text = (doc.file_name or "") + " " + (message.caption or "")
+        m = _RESULT_CODE_RE.search(text)
+        if not m:
+            return False
+        code = m.group(1)
+        try:
+            with SessionLocal() as session:
+                if get_config(session, f"wash_code:{code}", ""):
+                    return True
+                if get_config(session, f"phone_check_code:{code}", ""):
+                    return True
+        except Exception:
+            # 数据库异常时保持旧行为：仍按回传结果处理
+            return True
+        return False
 
 router = Router(name="wash")
 
@@ -1167,7 +1205,7 @@ async def _wash_submit_impl(cq: CallbackQuery, state: FSMContext, bot: Bot) -> N
 
 # ---------------- 监听小号回传的所有文件，判断是洗数据还是空号检测 ----------------
 
-@wash_reply_router.message(F.document, FromAltUserFilter())
+@wash_reply_router.message(F.document, FromAltUserFilter(), KnownResultCodeFilter())
 async def alt_user_reply(message: Message, bot: Bot):
     """监听小号发回的文件，判断是洗数据还是空号检测，分别处理。"""
     doc = message.document
