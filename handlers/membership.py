@@ -2271,6 +2271,52 @@ async def cmd_userbot(message: Message):
     )
 
 
+@router.message(Command("code", "tgcode", "验证码"))
+async def cmd_tg_code(message: Message):
+    """读取小号收到的 Telegram 官方消息（登录验证码），仅管理员可用。
+
+    场景：小号还挂在服务器上，但你在新设备登录时不方便收短信——
+    在登录界面选「在 Telegram 内接收验证码」，码会发到已登录的会话里，
+    这里直接读出来。
+    """
+    from utils.roles import is_admin
+
+    if not is_admin(message.from_user.id):
+        return
+
+    from utils import telethon_client as tc
+
+    if not (tc.userbot and tc.userbot.is_connected()):
+        await message.answer(
+            "⚠️ 小号当前未连接，先发 /userbot 看一下状态。"
+        )
+        return
+
+    try:
+        items = await tc.fetch_service_messages(8)
+    except Exception as e:
+        await message.answer(f"⚠️ 读取失败：{html.escape(str(e)[:150])}")
+        return
+
+    if not items:
+        await message.answer(
+            "最近没有来自 Telegram 官方（777000）的消息。\n\n"
+            "请在登录界面选 <b>「在 Telegram 内接收验证码」</b>，"
+            "等对方账号收到后再发一次 /code。"
+        )
+        return
+
+    blocks = []
+    for stamp, text in items[:5]:
+        blocks.append(
+            f"<b>{stamp}</b>\n<code>{html.escape(text[:400])}</code>"
+        )
+    await message.answer(
+        "🔑 <b>Telegram 官方消息</b>\n\n" + "\n\n".join(blocks),
+        parse_mode="HTML",
+    )
+
+
 @router.callback_query(F.data == "userbot:takeover")
 async def cb_userbot_takeover(cq: CallbackQuery, bot: Bot):
     from utils.roles import is_admin
