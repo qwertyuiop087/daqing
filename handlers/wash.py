@@ -355,7 +355,7 @@ _report_tasks: dict[str, asyncio.Task] = {}
 
 # 结果到齐后不立刻发报告：洗数据服务常常一个源文件回传多个结果文件，
 # 而且是隔几秒陆续到的。安静几秒没有新文件就发，避免报告夹在两个文件中间。
-REPORT_QUIET_SECONDS = 5
+REPORT_QUIET_SECONDS = 4
 
 
 def _schedule_report(bot, code: str) -> None:
