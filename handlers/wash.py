@@ -596,7 +596,8 @@ def wash_recharge_kb() -> InlineKeyboardBuilder:
     b.button(text="🔙 返回", callback_data="menu:wash")
     b.adjust(3, 1, 1)
     return b.as_markup()
-@router.callback_query(F.data == "menu:wash")
+
+
 def _tier_price_text(prices: list) -> str:
     """把阶梯价渲染成多行文本（苹果 iMessage 专用）。"""
     lines = []
@@ -612,6 +613,7 @@ def _tier_price_text(prices: list) -> str:
     return "\n".join(lines)
 
 
+@router.callback_query(F.data == "menu:wash")
 async def menu_wash(cq: CallbackQuery, state: FSMContext):
     await cq.answer()
     with SessionLocal() as session:
