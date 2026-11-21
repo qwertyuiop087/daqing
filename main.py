@@ -445,6 +445,39 @@ async def _diag_handler(message: Message) -> None:
     except Exception:
         pass
 
+    # 账目对账：余额合计 vs 全期流水推算
+    try:
+        from sqlalchemy import func as _func
+
+        from database import WashOrder
+
+        with SessionLocal() as s:
+            balance = float(
+                s.scalar(select(_func.coalesce(_func.sum(User.wash_balance), 0.0)))
+                or 0.0
+            )
+
+            def _total(t: str) -> float:
+                return float(
+                    s.scalar(
+                        select(_func.coalesce(_func.sum(WashOrder.cost), 0.0)).where(
+                            WashOrder.type == t
+                        )
+                    )
+                    or 0.0
+                )
+
+            check = _total("recharge") + _total("lottery") - _total("deduct") + _total(
+                "refund"
+            )
+        diff = balance - check
+        flag = "✅" if abs(diff) < 1 else "⚠️"
+        parts.append(
+            f"· 账目：余额 ¥{balance:,.2f} / 流水 ¥{check:,.2f} / 差 ¥{diff:,.2f} {flag}"
+        )
+    except Exception as e:
+        parts.append(f"· 账目：检查失败 {type(e).__name__}")
+
     parts.append(f"· 服务器时间：{time.strftime('%Y-%m-%d %H:%M:%S')}")
     await message.answer("\n".join(parts), parse_mode=ParseMode.HTML)
 
