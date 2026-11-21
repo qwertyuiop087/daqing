@@ -664,6 +664,65 @@ def set_wash_prices(session, prices: list[dict]) -> None:
     set_config(session, "wash_prices", json.dumps(prices, ensure_ascii=False))
 
 
+# ---------------- 各洗数据类型单价（元/万行） ----------------
+# 规则：im（苹果）不在表里，继续走上面的阶梯价；
+# 其它类型一律按「元/万行 × 行数/10000」计费。
+DEFAULT_WASH_SVC_PRICES: dict[str, float] = {
+    "ZFB": 50.0,     # 支付宝
+    "男女": 35.0,    # 微信（男女）
+    "WXID": 50.0,    # 微信 ID
+    "DZ": 100.0,     # 地址
+    "XM": 60.0,      # 姓名
+    "SFZ": 120.0,    # 身份证
+    "XN": 85.0,      # 姓名年龄
+    "SN": 60.0,      # 年龄
+    "手转Q": 30.0,   # 手洗 Q
+    "Q转手": 30.0,   # Q 洗手
+}
+
+
+def get_wash_svc_prices(session) -> dict[str, float]:
+    """读取各类型单价（元/万行）。存储格式：ZFB:50,男女:35"""
+    prices = dict(DEFAULT_WASH_SVC_PRICES)
+    raw = get_config(session, "wash_svc_prices", "")
+    if not raw:
+        return prices
+    for item in raw.replace("，", ",").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        sep = ":" if ":" in item else ("：" if "：" in item else "")
+        if not sep:
+            continue
+        k, _, v = item.partition(sep)
+        k, v = k.strip(), v.strip()
+        try:
+            prices[k] = float(v)
+        except ValueError:
+            continue
+    return prices
+
+
+def set_wash_svc_prices(session, prices: dict[str, float]) -> None:
+    """保存各类型单价。"""
+    text = ",".join(f"{k}:{float(v):g}" for k, v in prices.items())
+    set_config(session, "wash_svc_prices", text)
+
+
+def calc_wash_service_cost(session, code: str, row_count: int) -> float:
+    """按「洗数据类型」计算费用。
+
+    - im / 未知类型：走原有阶梯价（calc_wash_cost）
+    - 其它类型：单价（元/万行）× 行数 / 10000
+    """
+    if not code or code == "im":
+        return calc_wash_cost(session, row_count)
+    per_wan = float(get_wash_svc_prices(session).get(code, 0.0) or 0.0)
+    if per_wan <= 0:
+        return calc_wash_cost(session, row_count)
+    return round(per_wan * row_count / 10000.0, 4)
+
+
 # ---------------- 洗数据价格下限 / 累计配额 ----------------
 
 DEFAULT_WASH_PRICE_FLOOR = 0.0010  # 每行最低单价（元），设置的档位单价不得低于此值
