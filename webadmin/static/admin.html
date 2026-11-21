@@ -505,6 +505,12 @@ table{min-width:100%}
         <div class="row"><button onclick="save('wash_prices')">保存</button><button class="ghost" onclick="reset('wash_prices')">重置默认</button></div>
       </div>
       <div class="card">
+        <div class="card-head"><h2>各类型单价</h2><p>按钮上显示的 W 价格，单位元/万行；苹果 iMessage 不在此列，仍走上面的阶梯价</p></div>
+        <div class="hint">格式 <code>类型:单价</code>，逗号分隔。示例 <code>ZFB:50,男女:35,DZ:100,SFZ:120</code></div>
+        <textarea id="wash_svc_prices"></textarea>
+        <div class="row"><button onclick="save('wash_svc_prices')">保存</button><button class="ghost" onclick="reset('wash_svc_prices')">重置默认</button></div>
+      </div>
+      <div class="card">
         <div class="card-head"><h2>价格下限</h2><p>所有档位单价不得低于此值，单位元/行</p></div>
         <input id="wash_price_floor" type="text">
         <div class="row"><button onclick="save('wash_price_floor')">保存</button><button class="ghost" onclick="reset('wash_price_floor')">重置默认</button></div>
@@ -783,6 +789,7 @@ const KEY_TO_EL={
   plans:'plans',
   welcome_text:'welcome_text',
   wash_prices:'wash_prices',
+  wash_svc_prices:'wash_svc_prices',
   wash_price_floor:'wash_price_floor',
   wash_quota:'wash_quota',
   usdt_rate:'usdt_rate',
