@@ -1241,9 +1241,7 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
         cq,
         f"🧼 <b>选择要洗的数据类型</b>\n\n"
         f"本批 {len(files)} 个文件，共 "
-        f"{sum(int(f.get('lines') or 0) for f in files):,} 行\n\n"
-        "按钮上的 W 是单价（元/万行）。\n"
-        "选好之后才会扣费并转发给小号。",
+        f"{sum(int(f.get('lines') or 0) for f in files):,} 行",
         reply_markup=wash_service_kb(prices),
     )
 
