@@ -98,6 +98,32 @@ class Settings:
 settings = Settings()
 
 
+# ---------------- 洗数据类型 ----------------
+# (小号发给洗数据群的关键词, 给客户看的名字)
+# 用户选类型后，小号转发文件时把关键词作为 caption 发出去，洗数据群据此分辨业务。
+# 新增类型只改这里即可，两边都会生效。
+WASH_SERVICES: list[tuple[str, str]] = [
+    ("im", "🍎 苹果 iMessage"),
+    ("ZFB", "💙 支付宝"),
+    ("男女", "💚 微信（男女）"),
+    ("WXID", "💚 微信 ID"),
+    ("DZ", "📍 地址"),
+    ("XM", "👤 姓名"),
+    ("SFZ", "🪪 身份证"),
+    ("XN", "👤 姓名年龄"),
+    ("SN", "🎂 年龄"),
+    ("手转Q", "📱 手洗 Q"),
+    ("Q转手", "📱 Q 洗手"),
+]
+
+# 小号转发时认这些 caption（发给洗数据群）
+WASH_CAPTIONS: set[str] = {code for code, _ in WASH_SERVICES}
+
+# 关键词 → 中文名（回传/报告里显示用）
+WASH_SERVICE_LABELS: dict[str, str] = {code: label for code, label in WASH_SERVICES}
+
+
+
 # ---------------- 版本更新说明 ----------------
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
