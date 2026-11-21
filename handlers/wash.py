@@ -29,6 +29,8 @@ from database import (
     WashOrder,
     add_wash_balance,
     calc_wash_cost,
+    calc_wash_service_cost,
+    get_wash_svc_prices,
     get_config,
     get_usdt_rate_async,
     get_wash_balance,
@@ -937,11 +939,18 @@ def _upload_session(user_id: int) -> dict:
     return sess
 
 
-def wash_service_kb() -> InlineKeyboardMarkup:
-    """洗数据类型选择键盘（两列，取消单独一行）。"""
+def wash_service_kb(prices: dict | None = None) -> InlineKeyboardMarkup:
+    """洗数据类型选择键盘（两列，取消单独一行）。
+
+    价格直接写在按钮上，例如「💙 支付宝 · W50」；
+    苹果 iMessage 的单价是阶梯价，按钮上不显示，点进去才看得到。
+    """
+    prices = prices or {}
     b = InlineKeyboardBuilder()
-    for code, label in WASH_SERVICES:
-        b.button(text=label, callback_data=f"wash:svc:{code}")
+    for code, label, default in WASH_SERVICES:
+        price = float(prices.get(code, default) or 0)
+        text = f"{label} · W{price:g}" if price > 0 else label
+        b.button(text=text, callback_data=f"wash:svc:{code}")
     b.adjust(2)
     rows = b.export()
     rows.append([InlineKeyboardButton(text="❌ 取消", callback_data="cancel")])
@@ -965,7 +974,8 @@ def _upload_status_text(files: list, total: int, cost: float) -> str:
     return (
         f"📥 已收到 <b>{len(files)}</b> 个文件，共 <b>{total:,}</b> 行\n"
         f"{shown}\n\n"
-        f"当前单价：¥{per:.6f}/行 · 预估费用：¥{cost:.4f}\n\n"
+        f"苹果阶梯价估算：¥{per:.6f}/行 · 约 ¥{cost:.4f}\n"
+        "（其它类型的单价见下一步的按钮，以所选类型为准）\n\n"
         "继续发文件，或点「🚀 开始洗数据」。\n"
         f"（只收 TXT，一次最多 {WASH_MAX_FILES} 个）"
     )
@@ -1218,13 +1228,16 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
         )
         return
     await cq.answer()
+    with SessionLocal() as session:
+        prices = get_wash_svc_prices(session)
     await _edit_or_answer(
         cq,
         f"🧼 <b>选择要洗的数据类型</b>\n\n"
         f"本批 {len(files)} 个文件，共 "
         f"{sum(int(f.get('lines') or 0) for f in files):,} 行\n\n"
+        "按钮上的 W 是单价（元/万行）。\n"
         "选好之后才会扣费并转发给小号。",
-        reply_markup=wash_service_kb(),
+        reply_markup=wash_service_kb(prices),
     )
 
 
@@ -1232,7 +1245,7 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
 async def wash_submit_service(cq: CallbackQuery, state: FSMContext, bot: Bot):
     """第二步：用选中的类型真正提交。"""
     code = (cq.data or "").split(":", 2)[-1]
-    labels = dict(WASH_SERVICES)
+    labels = {code: label for code, label, _p in WASH_SERVICES}
     label = labels.get(code)
     if not label:
         await cq.answer("未知的数据类型，请重新选择。", show_alert=True)
@@ -1322,9 +1335,9 @@ async def _wash_submit_impl(
         await cleanup_state(state)
         return
 
-    # 按总行数计费
+    # 按「所选类型」计费：im 走阶梯价，其它类型按元/万行
     with SessionLocal() as session:
-        cost = calc_wash_cost(session, total_lines)
+        cost = calc_wash_service_cost(session, svc_code, total_lines)
         balance = get_wash_balance(session, cq.from_user.id)
     if balance < cost:
         await _edit_or_answer(
