@@ -110,7 +110,11 @@ def _pending_task_count(session) -> int:
 
 
 def collect_daily_report() -> str:
-    """生成昨天的对账日报文本。"""
+    """生成昨天的对账日报文本。
+
+    注意：日报里的「收入/消耗」只统计前一天；
+    「对账」用的是全期累计（余额本身就是累计值），两者不能混。
+    """
     start, end = _day_range_bj(1)
     yesterday = (_now_bj() - timedelta(days=1)).strftime("%m-%d")
 
@@ -127,6 +131,7 @@ def collect_daily_report() -> str:
         recharge_orders = [o for o in paid if not (o.days or 0)]
         member_orders = [o for o in paid if (o.days or 0)]
 
+        # 当日流水
         washes = list(
             session.scalars(
                 select(WashOrder).where(
@@ -150,33 +155,43 @@ def collect_daily_report() -> str:
         total_balance = session.scalar(
             select(func.coalesce(func.sum(User.wash_balance), 0.0))
         ) or 0.0
-        sum_recharge = session.scalar(
-            select(func.coalesce(func.sum(WashOrder.cost), 0.0)).where(
-                WashOrder.type == "recharge"
+
+        # 全期累计流水（对账用）
+        def _total(t: str) -> float:
+            return float(
+                session.scalar(
+                    select(func.coalesce(func.sum(WashOrder.cost), 0.0)).where(
+                        WashOrder.type == t
+                    )
+                )
+                or 0.0
             )
-        ) or 0.0
-        sum_lottery = session.scalar(
-            select(func.coalesce(func.sum(WashOrder.cost), 0.0)).where(
-                WashOrder.type == "lottery"
-            )
-        ) or 0.0
-        sum_deduct = session.scalar(
-            select(func.coalesce(func.sum(WashOrder.cost), 0.0)).where(
-                WashOrder.type == "deduct"
-            )
-        ) or 0.0
-        sum_refund = session.scalar(
-            select(func.coalesce(func.sum(WashOrder.cost), 0.0)).where(
-                WashOrder.type == "refund"
-            )
-        ) or 0.0
+
+        sum_recharge = _total("recharge")
+        sum_lottery = _total("lottery")
+        sum_deduct = _total("deduct")
+        sum_refund = _total("refund")
+
         pending_orders = session.scalar(
             select(func.count(PaymentOrder.id)).where(PaymentOrder.status == "pending")
         ) or 0
         pending_tasks = _pending_task_count(session)
 
+    def _sum(rows) -> float:
+        return sum(abs(float(w.cost or 0)) for w in rows)
+
+    # ---------------- 当日 ----------------
+    day_recharge = _sum(recharge_rows)
+    day_deduct = _sum(deduct)
+    day_refund = _sum(refund)
+    day_lottery = _sum(lottery_rows)
     income = sum(float(o.amount or 0) for o in paid)
-    check = round(float(sum_recharge + sum_lottery + sum_deduct + sum_refund), 4)
+
+    # ---------------- 全期对账 ----------------
+    # 账本符号在历史数据里不统一（扣费有正有负、退款存负数），
+    # 所以一律取绝对值再按「类型」决定加减，避免正负号把账算反。
+    #   余额 = 充值 + 抽奖发放 - 洗数据扣费 + 退款
+    check = round(sum_recharge + sum_lottery - sum_deduct + sum_refund, 4)
     diff = round(float(total_balance) - check, 4)
 
     def money(x) -> str:
@@ -184,23 +199,23 @@ def collect_daily_report() -> str:
 
     return (
         f"📊 <b>对账日报（{yesterday}）</b>\n\n"
-        f"💰 <b>收入</b>\n"
-        f"· 洗数据充值：{money(sum(w.cost for w in recharge_rows))}"
-        f"（{len(recharge_rows)} 笔）\n"
+        f"💰 <b>收入（当日）</b>\n"
+        f"· 洗数据充值：{money(day_recharge)}（{len(recharge_rows)} 笔）\n"
         f"· 会员开通：{len(member_orders)} 单\n"
         f"· 其它充值订单：{len(recharge_orders)} 笔\n"
         f"· 实收 USDT：{income:g}\n\n"
-        f"🧼 <b>消耗</b>\n"
-        f"· 洗数据扣费：{money(sum_deduct)}（{len(deduct)} 条）\n"
-        f"· 退款：{money(abs(sum(w.cost for w in refund)))}（{len(refund)} 条）\n\n"
+        f"🧼 <b>消耗（当日）</b>\n"
+        f"· 洗数据扣费：{money(day_deduct)}（{len(deduct)} 条）\n"
+        f"· 退款：{money(day_refund)}（{len(refund)} 条）\n\n"
         f"👥 <b>用户</b>\n"
         f"· 新增：{new_users} 人\n"
         f"· 会员总数：{members} 人\n\n"
-        f"🎁 抽奖发放：{money(sum_lottery)}（{len(lottery_rows)} 次）\n\n"
-        f"🔍 <b>对账</b>\n"
+        f"🎁 <b>抽奖发放（当日）</b>：{money(day_lottery)}（{len(lottery_rows)} 次）\n\n"
+        f"🔍 <b>对账（全期累计）</b>\n"
         f"· 用户余额合计：{money(total_balance)}\n"
-        f"· 账目校验：{money(check)}\n"
-        f"· 差额：{money(diff)}（正常应接近 0）\n\n"
+        f"· 流水推算余额：{money(check)}\n"
+        f"· 差额：{money(diff)}"
+        f"{' ✅' if abs(diff) < 1 else ' ⚠️'}\n\n"
         f"⚠️ <b>待处理</b>\n"
         f"· 待支付订单：{pending_orders} 个\n"
         f"· 未回传洗数据任务：{pending_tasks} 个"
