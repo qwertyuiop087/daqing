@@ -670,7 +670,6 @@ def set_wash_prices(session, prices: list[dict]) -> None:
 DEFAULT_WASH_SVC_PRICES: dict[str, float] = {
     "ZFB": 50.0,     # 支付宝
     "男女": 35.0,    # 微信（男女）
-    "WXID": 50.0,    # 微信 ID
     "DZ": 100.0,     # 地址
     "XM": 60.0,      # 姓名
     "SFZ": 120.0,    # 身份证
