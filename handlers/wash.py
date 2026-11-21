@@ -603,6 +603,7 @@ async def menu_wash(cq: CallbackQuery, state: FSMContext):
         balance = get_wash_balance(session, cq.from_user.id)
         from database import get_wash_prices
         prices = get_wash_prices(session)
+        svc_prices = get_wash_svc_prices(session)
         quota = get_wash_quota(session)
         washed = get_washed_total(session)
 
@@ -628,6 +629,20 @@ async def menu_wash(cq: CallbackQuery, state: FSMContext):
     else:
         quota_text = f"📊 累计已洗：<b>{washed:,}</b> 行（未设上限）\n"
 
+    # 各类型单价（元/万行），苹果走上面的阶梯价
+    svc_items = []
+    for code, label, default in WASH_SERVICES:
+        if code == "im":
+            continue
+        price = float(svc_prices.get(code, default) or 0)
+        if price <= 0:
+            continue
+        svc_items.append(f"{label} W{price:g}")
+    svc_lines = []
+    for i in range(0, len(svc_items), 2):
+        svc_lines.append("  " + " · ".join(svc_items[i : i + 2]))
+    svc_text = "\n".join(svc_lines)
+
     await cq.message.edit_text(
         "🧼 <b>洗数据</b>\n\n"
         f"当前余额：<b>¥{balance:.4f} 元</b>\n"
@@ -635,6 +650,9 @@ async def menu_wash(cq: CallbackQuery, state: FSMContext):
         "────────────\n"
         "<b>阶梯定价（每行价格）：</b>\n"
         f"{price_text}\n"
+        "<b>各类型单价（元/万行）：</b>\n"
+        f"{svc_text}\n"
+        "（🍎 苹果走上面的阶梯价，其余按所选类型计价）\n\n"
         "洗的越多越便宜，洗完再扣费。",
         reply_markup=wash_main_kb(balance),
         parse_mode="HTML",
