@@ -1949,6 +1949,17 @@ def delete_or_cancel_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def alt_login_kb() -> InlineKeyboardMarkup:
+    """小号登录入口：扫码或手机号。"""
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    b = InlineKeyboardBuilder()
+    b.button(text="📱 扫码登录", callback_data="admin:alt_qr")
+    b.button(text="🗑️ 删除小号", callback_data="admin:alt_delete")
+    b.button(text="❌ 取消", callback_data="admin:home")
+    b.adjust(1, 2)
+    return b.as_markup()
+
+
 # ---------------- 洗数据账单 ----------------
 
 @router.callback_query(F.data == "admin:alt_delete")
@@ -2332,13 +2343,190 @@ async def admin_alt_login_start(cq: CallbackQuery, state: FSMContext):
         f"状态：{status}\n"
         f"{info_text}\n\n"
         "────────────\n"
+        "<b>方式一：扫码登录</b>（推荐）\n"
+        "点下面的「📱 扫码登录」，用手机 Telegram 扫一下即可。\n\n"
+        "<b>方式二：手机号登录</b>\n"
         "发送你的小号手机号（带国家码）：\n"
-        "例如：<code>+8613800138000</code>\n\n"
+        "例如：<code>+8613800138000</code>\n"
         "然后会发送验证码到小号，再发验证码登录。",
-        reply_markup=delete_or_cancel_kb(),
+        reply_markup=alt_login_kb(),
         parse_mode="HTML",
     )
     await state.set_state(AdminStates.alt_login_step1)
+
+
+# ---------------- 小号扫码登录 ----------------
+
+_QR_LOGINS: dict[int, dict] = {}
+
+
+async def _qr_close(client) -> None:
+    try:
+        await client.disconnect()
+    except Exception:
+        pass
+
+
+def _qr_cancel(admin_id: int) -> None:
+    item = _QR_LOGINS.pop(admin_id, None)
+    if not item:
+        return
+    item["cancelled"] = True
+    task = item.get("task")
+    if task and not task.done():
+        task.cancel()
+    client = item.get("client")
+    if client is not None:
+        asyncio.create_task(_qr_close(client))
+
+
+def _qr_png(url: str) -> bytes:
+    """把 tg://login?token=... 渲染成 PNG（segno 纯 Python，无额外依赖）。"""
+    import io
+
+    import segno
+
+    buf = io.BytesIO()
+    segno.make(url, error="m").save(buf, kind="png", scale=8, border=2)
+    return buf.getvalue()
+
+
+@router.callback_query(F.data == "admin:alt_qr")
+async def admin_alt_qr_start(cq: CallbackQuery, state: FSMContext, bot: Bot):
+    """扫码登录小号：生成二维码 → 轮询是否已扫 → 成功后保存会话。"""
+    if not is_admin(cq.from_user.id):
+        await cq.answer("⛔ 无权限", show_alert=True)
+        return
+    if not settings.TELETHON_API_ID or not settings.TELETHON_API_HASH:
+        await cq.answer("未配置 TELETHON_API_ID / TELETHON_API_HASH", show_alert=True)
+        return
+    await cq.answer("正在生成二维码…")
+
+    _qr_cancel(cq.from_user.id)
+    try:
+        from telethon import TelegramClient
+        from telethon.sessions import StringSession
+
+        client = TelegramClient(
+            StringSession(),
+            settings.TELETHON_API_ID,
+            settings.TELETHON_API_HASH,
+        )
+        await client.connect()
+        qr = await client.qr_login()
+    except Exception as e:
+        await cq.message.answer(f"⚠️ 生成二维码失败：{str(e)[:150]}")
+        return
+
+    from aiogram.types import BufferedInputFile
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+    kb = InlineKeyboardBuilder()
+    kb.button(text="❌ 取消扫码", callback_data="admin:alt_qr_cancel")
+    kb.adjust(1)
+    msg = await cq.message.answer_photo(
+        BufferedInputFile(_qr_png(qr.url), filename="qr.png"),
+        caption=(
+            "📱 <b>扫码登录小号</b>\n\n"
+            "手机 Telegram → 设置 → 设备 → 扫描二维码。\n"
+            "二维码约 25 秒自动刷新，扫完会自动继续。"
+        ),
+        reply_markup=kb.as_markup(),
+        parse_mode="HTML",
+    )
+    _QR_LOGINS[cq.from_user.id] = {
+        "client": client,
+        "cancelled": False,
+        "task": None,
+    }
+    task = asyncio.create_task(
+        _qr_wait_loop(cq.from_user.id, client, qr, msg, state, bot)
+    )
+    _QR_LOGINS[cq.from_user.id]["task"] = task
+
+
+async def _qr_wait_loop(admin_id, client, qr, msg, state, bot):
+    """等扫码：超时就刷新二维码，扫成功就保存会话并启动小号。"""
+    from aiogram.types import BufferedInputFile
+    from telethon.errors import SessionPasswordNeededError
+
+    item = _QR_LOGINS.get(admin_id)
+    for attempt in range(20):  # 约 8 分钟
+        if not item or item.get("cancelled"):
+            return
+        try:
+            me = await qr.wait(timeout=25)
+
+            session_str = client.session.save()
+            from database import set_config
+
+            with SessionLocal() as session:
+                set_config(session, "alt_session", session_str)
+                set_config(session, "alt_username", me.username or "")
+                set_config(session, "alt_user_id", str(me.id))
+                set_config(session, "alt_status", "online")
+
+            await msg.answer(
+                "✅ 扫码登录成功！\n\n"
+                f"用户名：@{me.username or '无'}\n"
+                f"名字：{me.first_name}\n\n"
+                "洗数据中转已自动启动。"
+            )
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+            from utils.telethon_client import start_userbot
+
+            asyncio.create_task(start_userbot(bot, force=True))
+            _QR_LOGINS.pop(admin_id, None)
+            return
+
+        except asyncio.TimeoutError:
+            try:
+                await qr.recreate()
+            except Exception as e:
+                await msg.answer(
+                    f"⚠️ 二维码刷新失败：{str(e)[:120]}\n\n请重新点「📱 扫码登录」。"
+                )
+                break
+            try:
+                await msg.answer_photo(
+                    BufferedInputFile(_qr_png(qr.url), filename="qr.png"),
+                    caption=f"🔄 二维码已刷新（{attempt + 2}/20），扫这张。",
+                )
+            except Exception:
+                pass
+
+        except SessionPasswordNeededError:
+            await state.update_data(alt_client=client)
+            await state.set_state(AdminStates.alt_login_step3)
+            await msg.answer("🔐 小号开了两步验证，请把两步验证密码发我。")
+            _QR_LOGINS.pop(admin_id, None)
+            return
+
+        except Exception as e:
+            await msg.answer(f"⚠️ 扫码登录失败：{str(e)[:150]}")
+            break
+
+    try:
+        await client.disconnect()
+    except Exception:
+        pass
+    _QR_LOGINS.pop(admin_id, None)
+
+
+@router.callback_query(F.data == "admin:alt_qr_cancel")
+async def admin_alt_qr_cancel(cq: CallbackQuery):
+    if not is_admin(cq.from_user.id):
+        await cq.answer("⛔ 无权限", show_alert=True)
+        return
+    _qr_cancel(cq.from_user.id)
+    await cq.answer("已取消")
+    try:
+        await cq.message.edit_caption(caption="❌ 已取消扫码登录")
+    except Exception:
+        pass
 
 
 @router.message(AdminStates.alt_login_step1, F.text)
