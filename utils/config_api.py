@@ -83,6 +83,35 @@ def _plans_to_text(plans: list[dict]) -> str:
     return ",".join(f"{int(p['days'])}:{float(p['price']):g}" for p in plans)
 
 
+def parse_wash_svc_prices_input(text: str) -> dict:
+    """解析「类型:单价」文本，例如 ZFB:50,男女:35,DZ:100。格式错误抛 ValueError。"""
+    result: dict = {}
+    for item in (text or "").replace("，", ",").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        sep = ":" if ":" in item else ("：" if "：" in item else "")
+        if not sep:
+            raise ValueError(f"「{item}」格式错误，应为 类型:单价")
+        k, _, v = item.partition(sep)
+        k = k.strip()
+        try:
+            price = float(v.strip())
+        except ValueError:
+            raise ValueError(f"「{item}」单价不是数字")
+        if not math.isfinite(price) or price < 0:
+            raise ValueError(f"「{item}」单价需为 ≥ 0 的数字")
+        result[k] = price
+    if not result:
+        raise ValueError("至少要填一个类型的单价")
+    return result
+
+
+def _wash_svc_prices_to_text(prices: dict) -> str:
+    """类型单价 → 「类型:单价」文本（与后台输入格式一致）。"""
+    return ",".join(f"{k}:{float(v):g}" for k, v in (prices or {}).items())
+
+
 def _wash_prices_to_text(prices: list[dict]) -> str:
     """阶梯定价 → 「行数:单价」文本（与后台输入格式一致）。"""
     return ",".join(f"{int(p['min_rows'])}:{float(p['price_per_row']):g}" for p in prices)
@@ -118,6 +147,9 @@ def get_all_config(session) -> dict:
         "lottery_redeem": _redeem_to_text(database.get_lottery_redeem(session)),
         "plans": _plans_to_text(database.get_plans(session)),
         "wash_prices": _wash_prices_to_text(database.get_wash_prices(session)),
+        "wash_svc_prices": _wash_svc_prices_to_text(
+            database.get_wash_svc_prices(session)
+        ),
         "wash_price_floor": database.get_wash_price_floor(session),
         "wash_quota": database.get_wash_quota(session),
         "usdt_rate": database.get_config(session, "usdt_rate", ""),
@@ -158,6 +190,8 @@ def save_config(session, key: str, value: str) -> None:
         database.set_plans(session, parse_plans_input(value))
     elif key == "wash_prices":
         database.set_wash_prices(session, parse_wash_prices_input(value))
+    elif key == "wash_svc_prices":
+        database.set_wash_svc_prices(session, parse_wash_svc_prices_input(value))
     elif key == "wash_price_floor":
         try:
             v = float(value)
@@ -226,6 +260,8 @@ def reset_config(session, key: str) -> None:
         database.set_plans(session, json.loads(database.DEFAULT_PLANS))
     elif key == "wash_prices":
         database.set_wash_prices(session, database.DEFAULT_WASH_PRICES)
+    elif key == "wash_svc_prices":
+        database.set_wash_svc_prices(session, dict(database.DEFAULT_WASH_SVC_PRICES))
     elif key == "wash_price_floor":
         database.set_wash_price_floor(session, database.DEFAULT_WASH_PRICE_FLOOR)
     elif key == "wash_quota":
