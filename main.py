@@ -667,6 +667,19 @@ async def main() -> None:
                     pass
             return
         logging.error("未处理异常：%s", exc, exc_info=(type(exc), exc, exc.__traceback__))
+        # 把出错的文件:行号也带上，否则只看到「类型」根本无从查起
+        try:
+            import traceback as _tb
+
+            _frames = _tb.extract_tb(exc.__traceback__)
+            _last = _frames[-1] if _frames else None
+            where = (
+                f"{_last.filename.rsplit('/', 1)[-1]}:{_last.lineno}（{_last.name}）"
+                if _last
+                else "未知"
+            )
+        except Exception:
+            where = "未知"
         now = time.time()
         if now - _err_notify_state["ts"] < 1800:
             return
@@ -678,6 +691,7 @@ async def main() -> None:
                     uid,
                     f"⚠️ <b>机器人出现异常</b>\n\n"
                     f"类型：{type(exc).__name__}\n"
+                    f"位置：<code>{where}</code>\n"
                     f"详情：{str(exc)[:300]}",
                     parse_mode=ParseMode.HTML,
                 )
