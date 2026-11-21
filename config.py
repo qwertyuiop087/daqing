@@ -102,25 +102,25 @@ settings = Settings()
 # (小号发给洗数据群的关键词, 给客户看的名字)
 # 用户选类型后，小号转发文件时把关键词作为 caption 发出去，洗数据群据此分辨业务。
 # 新增类型只改这里即可，两边都会生效。
-WASH_SERVICES: list[tuple[str, str]] = [
-    ("im", "🍎 苹果 iMessage"),
-    ("ZFB", "💙 支付宝"),
-    ("男女", "💚 微信（男女）"),
-    ("WXID", "💚 微信 ID"),
-    ("DZ", "📍 地址"),
-    ("XM", "👤 姓名"),
-    ("SFZ", "🪪 身份证"),
-    ("XN", "👤 姓名年龄"),
-    ("SN", "🎂 年龄"),
-    ("手转Q", "📱 手洗 Q"),
-    ("Q转手", "📱 Q 洗手"),
+WASH_SERVICES: list[tuple[str, str, float]] = [
+    ("im", "🍎 苹果 iMessage", 0),        # 0 = 按钮上不显示价格，按阶梯价计费
+    ("ZFB", "💙 支付宝", 50),
+    ("男女", "💚 微信（男女）", 35),
+    ("WXID", "💚 微信 ID", 50),
+    ("DZ", "📍 地址", 100),
+    ("XM", "👤 姓名", 60),
+    ("SFZ", "🪪 身份证", 120),
+    ("XN", "👤 姓名年龄", 85),
+    ("SN", "🎂 年龄", 60),
+    ("手转Q", "📱 手洗 Q", 30),
+    ("Q转手", "📱 Q 洗手", 30),
 ]
 
 # 小号转发时认这些 caption（发给洗数据群）
-WASH_CAPTIONS: set[str] = {code for code, _ in WASH_SERVICES}
+WASH_CAPTIONS: set[str] = {code for code, _label, _price in WASH_SERVICES}
 
 # 关键词 → 中文名（回传/报告里显示用）
-WASH_SERVICE_LABELS: dict[str, str] = {code: label for code, label in WASH_SERVICES}
+WASH_SERVICE_LABELS: dict[str, str] = {code: label for code, label, _p in WASH_SERVICES}
 
 
 
