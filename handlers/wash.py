@@ -12,11 +12,17 @@ import uuid
 from aiogram import Bot, F, Router
 from aiogram.filters import BaseFilter, Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery,
+    FSInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import select
 
-from config import settings
+from config import WASH_SERVICES, settings
 from database import (
     PaymentOrder,
     SessionLocal,
@@ -313,7 +319,9 @@ async def _progress_tick(bot, code: str) -> None:
 
 # ---------------- 洗数据结果统计报告 ----------------
 
-def _report_begin(code: str, files: int, lines: int, phones: int, cost: float) -> None:
+def _report_begin(
+    code: str, files: int, lines: int, phones: int, cost: float, service: str = ""
+) -> None:
     """提交时先记下本批的输入数据，等全部回传后算报告。"""
     import time as _time
 
@@ -330,6 +338,7 @@ def _report_begin(code: str, files: int, lines: int, phones: int, cost: float) -
                         "lines": int(lines),
                         "phones": int(phones),
                         "cost": float(cost),
+                        "service": service or "",
                         "ts": _time.time(),
                     },
                     ensure_ascii=False,
@@ -408,7 +417,12 @@ async def _maybe_send_report(bot, code: str) -> None:
         text = (
             f"📊 <b>洗数据完成报告</b>\n"
             f"任务编号：<code>{html.escape(code)}</code>\n"
-            "────────────\n"
+            + (
+                f"数据类型：{html.escape(str(meta.get('service') or ''))}\n"
+                if meta.get("service")
+                else ""
+            )
+            + "────────────\n"
             f"提交文件　{int(meta.get('files') or 0)} 个\n"
             f"提交行数　{lines:,} 行\n"
             f"号码总数　{int(meta.get('phones') or 0):,} 个\n"
@@ -923,6 +937,17 @@ def _upload_session(user_id: int) -> dict:
     return sess
 
 
+def wash_service_kb() -> InlineKeyboardMarkup:
+    """洗数据类型选择键盘（两列，取消单独一行）。"""
+    b = InlineKeyboardBuilder()
+    for code, label in WASH_SERVICES:
+        b.button(text=label, callback_data=f"wash:svc:{code}")
+    b.adjust(2)
+    rows = b.export()
+    rows.append([InlineKeyboardButton(text="❌ 取消", callback_data="cancel")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 def wash_upload_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="🚀 开始洗数据", callback_data="wash:submit")
@@ -1183,11 +1208,38 @@ async def wash_got_file(message: Message, state: FSMContext, bot: Bot):
 
 @router.callback_query(F.data == "wash:submit")
 async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
-    """提交整批文件（外壳）：任何异常都必须让用户看到提示，不能静默无响应。"""
-    # 先立刻回一个可见的提示，避免用户点了按钮以为没反应
-    await cq.answer("正在提交，请稍等…")
+    """第一步：先让用户选要洗的数据类型。"""
+    data = await state.get_data()
+    files = list(data.get("files") or [])
+    if not files:
+        await cq.answer(
+            "没找到上传的文件（可能是机器人刚重启）。\n请重新发一次文件再点开始洗数据。",
+            show_alert=True,
+        )
+        return
+    await cq.answer()
+    await _edit_or_answer(
+        cq,
+        f"🧼 <b>选择要洗的数据类型</b>\n\n"
+        f"本批 {len(files)} 个文件，共 "
+        f"{sum(int(f.get('lines') or 0) for f in files):,} 行\n\n"
+        "选好之后才会扣费并转发给小号。",
+        reply_markup=wash_service_kb(),
+    )
+
+
+@router.callback_query(F.data.startswith("wash:svc:"))
+async def wash_submit_service(cq: CallbackQuery, state: FSMContext, bot: Bot):
+    """第二步：用选中的类型真正提交。"""
+    code = (cq.data or "").split(":", 2)[-1]
+    labels = dict(WASH_SERVICES)
+    label = labels.get(code)
+    if not label:
+        await cq.answer("未知的数据类型，请重新选择。", show_alert=True)
+        return
+    await cq.answer(f"已选择：{label}")
     try:
-        await _wash_submit_impl(cq, state, bot)
+        await _wash_submit_impl(cq, state, bot, svc_code=code, svc_label=label)
     except Exception as e:
         print(f"[wash] submit failed: {e}")
         try:
@@ -1201,7 +1253,13 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
             pass
 
 
-async def _wash_submit_impl(cq: CallbackQuery, state: FSMContext, bot: Bot) -> None:
+async def _wash_submit_impl(
+    cq: CallbackQuery,
+    state: FSMContext,
+    bot: Bot,
+    svc_code: str = "im",
+    svc_label: str = "🍎 苹果 iMessage",
+) -> None:
     """提交整批文件：按总行数计费（档位越高单价越低），预扣费后转发到洗数据群。"""
     data = await state.get_data()
     files = list(data.get("files") or [])
@@ -1363,7 +1421,7 @@ async def _wash_submit_impl(cq: CallbackQuery, state: FSMContext, bot: Bot) -> N
             await bot.send_document(
                 chat_id=int(alt_user_id),
                 document=FSInputFile(f["path"], filename=new_filename),
-                caption="im",
+                caption=svc_code,
             )
             sent_ok += 1
             sent_names.append(new_filename)
@@ -1458,6 +1516,7 @@ async def _wash_submit_impl(cq: CallbackQuery, state: FSMContext, bot: Bot) -> N
         total_lines,
         sum(int(f.get("phones") or 0) for f in files),
         cost,
+        svc_label,
     )
     await cleanup_state(state)
 
