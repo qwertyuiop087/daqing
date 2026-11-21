@@ -36,8 +36,8 @@ _NOTIFY_MIN_INTERVAL = 1800
 # ---------------- 小号单实例占用锁 ----------------
 _INSTANCE_ID = _uuid.uuid4().hex[:12]
 _OWNER_KEY = "userbot_owner"          # 兼容旧 key（无 session 指纹时使用）
-_OWNER_TTL = 90           # 租约有效期（秒）：心跳 30 秒续一次，超过 90 秒视为旧实例已死
-_OWNER_REFRESH = 30
+_OWNER_TTL = 60           # 租约有效期（秒）：心跳 20 秒续一次，超过 60 秒视为旧实例已死
+_OWNER_REFRESH = 20
 _current_owner_key = _OWNER_KEY
 
 
@@ -426,11 +426,19 @@ async def _start_userbot_inner(bot=None, force: bool = False):
         print("⚠️ 未登录小号，洗数据中转未启动，请在管理面板登录")
         return
 
-    # 不做「占用权」互斥：部署时旧容器残留会让新实例干等 90 秒，
-    # 那段时间用户提交洗数据就是白白扣钱不处理。
-    # 现在直接连，并且把占用信息写进库，仅供面板显示参考。
+    # 必须抢到「小号占用权」才连接。
+    # 原因：Railway 部署时新旧容器会并存几十秒，两个实例用同一份 session
+    # 从不同 IP 同时连 Telegram 会触发 AuthKeyDuplicated，session 被永久作废。
+    # 抢不到就等旧容器消失后自动接管（期间状态标 waiting，提交会被拦住）。
     _owner_key = _session_key(session_str)
-    _write_owner(force=True, key=_owner_key)
+    if not await acquire_userbot_owner(
+        wait_seconds=0 if force else 12, force=force, owner_key=_owner_key
+    ):
+        with SessionLocal() as session:
+            set_config(session, "alt_status", "waiting")
+        print("⏳ 小号被其它实例占着，已安排后台自动接管（不会重复连接，避免 session 被废）")
+        _start_acquire_retry(bot_instance, _owner_key)
+        return
 
     # 取消旧心跳：以前多次调用 start_userbot 会留下多个心跳循环，
     # 它们各自动 connect/disconnect，表现出来就是「小号一直自动退出登录」
@@ -467,9 +475,22 @@ async def _start_userbot_inner(bot=None, force: bool = False):
             except Exception as e:
                 print(f"⚠️ 预解析会话失败（{target}）：{e}")
     except Exception as e:
-        print(f"❌ 小号登录失败：{e}")
+        text = str(e)
+        print(f"❌ 小号登录失败：{text}")
+        # session 被 Telegram 作废：重连多少次都没用，只能重新登录
+        if "authorization key" in text.lower() or "two different ip" in text.lower():
+            with SessionLocal() as session:
+                set_config(session, "alt_status", "invalid")
+            await _notify_admins(
+                "⛔ <b>小号 session 已失效，必须重新登录</b>\n\n"
+                "Telegram 判定这份会话被两个 IP 同时使用，已永久作废。\n\n"
+                "修复：管理面板 → 🔑 小号登录 → 输手机号 → 收验证码 → 登录。\n"
+                "（重新登录前，洗数据功能不可用）",
+                force=True,
+            )
+            return
         await _notify_admins(
-            f"⚠️ <b>洗数据小号登录失败</b>\n\n{str(e)[:200]}\n\n"
+            f"⚠️ <b>洗数据小号登录失败</b>\n\n{text[:200]}\n\n"
             "洗数据中转不可用，请到管理面板「小号登录」重新登录。",
             force=True,
         )
@@ -498,18 +519,27 @@ async def _start_userbot_inner(bot=None, force: bool = False):
     async def heartbeat():
         tick = 0
         while True:
-            await asyncio.sleep(30)
+            await asyncio.sleep(20)
             tick += 1
             try:
                 # 已经不是当前 client（被新的 start_userbot 替换了）→ 安静退出
                 if userbot is not my_client:
                     return
 
-                # 不做占用权互斥：这里只续写心跳时间，供面板显示，
-                # 不再因为「别的实例也在跑」就断开自己（否则两个容器会互相踢）。
+                # 占用权被别人拿走（例如刚部署的新容器强推）：主动断开自己，
+                # 绝不能两个实例同时连着同一个 session。
+                iid, _ts = _read_owner(my_owner_key)
+                if iid != _INSTANCE_ID:
+                    print("⚠️ 小号占用权已被其它实例接管，本实例断开连接")
+                    try:
+                        if my_client and my_client.is_connected():
+                            await my_client.disconnect()
+                    except Exception:
+                        pass
+                    return
                 _write_owner(key=my_owner_key)
 
-                if tick % 4 != 0:  # 每 2 分钟才做一次在线检查
+                if tick % 6 != 0:  # 每 2 分钟才做一次在线检查
                     continue
                 if not my_client:
                     continue
