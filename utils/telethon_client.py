@@ -12,7 +12,7 @@ import uuid as _uuid
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
-from config import settings
+from config import WASH_CAPTIONS, settings
 from database import SessionLocal, get_config, set_config
 
 
@@ -209,7 +209,7 @@ def setup_handlers():
         filename = event.message.file.name or "unnamed"
 
         # 洗数据：caption 是 im
-        if caption.strip() == "im":
+        if caption.strip() in WASH_CAPTIONS:
             with SessionLocal() as session:
                 wash_chat_id = get_config(session, "wash_chat_id", "")
             if not wash_chat_id:
