@@ -41,7 +41,8 @@ async def menu_split(cq: CallbackQuery, state: FSMContext):
     await state.set_state(SplitStates.waiting_file)
     await cq.answer()
     await cq.message.edit_text(
-        f"📄 <b>文件切割</b>\n\n请发送要切割的 <b>TXT 文件</b>（≤{settings.MAX_FILE_SIZE // 1024 // 1024}MB）。",
+        f"📄 <b>文件切割</b>\n\n请发送要切割的 <b>TXT / MD 文件</b>（≤{settings.MAX_FILE_SIZE // 1024 // 1024}MB）。\n"
+        "（MD 文件会按纯文本切割，输出仍是 .txt）",
         reply_markup=cancel_kb(),
     )
 
@@ -49,8 +50,8 @@ async def menu_split(cq: CallbackQuery, state: FSMContext):
 @router.message(SplitStates.waiting_file, F.document)
 async def split_got_file(message: Message, state: FSMContext, bot: Bot):
     doc = message.document
-    if not (doc.file_name or "").lower().endswith((".txt", ".text")):
-        await message.answer("⚠️ 请发送 <b>.txt</b> 文件。")
+    if not (doc.file_name or "").lower().endswith((".txt", ".text", ".md", ".markdown")):
+        await message.answer("⚠️ 请发送 <b>.txt</b> 或 <b>.md</b> 文件。")
         return
     if doc.file_size and doc.file_size > settings.MAX_FILE_SIZE:
         await message.answer(f"⚠️ 文件过大，最大支持 {settings.MAX_FILE_SIZE // 1024 // 1024}MB。")
