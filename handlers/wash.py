@@ -597,39 +597,28 @@ def wash_recharge_kb() -> InlineKeyboardBuilder:
     b.adjust(3, 1, 1)
     return b.as_markup()
 @router.callback_query(F.data == "menu:wash")
+def _tier_price_text(prices: list) -> str:
+    """把阶梯价渲染成多行文本（苹果 iMessage 专用）。"""
+    lines = []
+    for i, p in enumerate(prices):
+        min_rows = int(p["min_rows"])
+        if i + 1 < len(prices):
+            max_rows = int(prices[i + 1]["min_rows"]) - 1
+            lines.append(
+                f"  {min_rows:,} ~ {max_rows:,} 行：¥{p['price_per_row']:.4f}/行"
+            )
+        else:
+            lines.append(f"  {min_rows:,} 行以上：¥{p['price_per_row']:.4f}/行")
+    return "\n".join(lines)
+
+
 async def menu_wash(cq: CallbackQuery, state: FSMContext):
     await cq.answer()
     with SessionLocal() as session:
         balance = get_wash_balance(session, cq.from_user.id)
-        from database import get_wash_prices
-        prices = get_wash_prices(session)
         svc_prices = get_wash_svc_prices(session)
-        quota = get_wash_quota(session)
-        washed = get_washed_total(session)
 
-    # 生成价格表
-    price_text = ""
-    for i, p in enumerate(prices):
-        min_rows = p["min_rows"]
-        # 下一档的 min 就是当前档的 max
-        if i + 1 < len(prices):
-            max_rows = prices[i + 1]["min_rows"] - 1
-            price_text += f"  {min_rows:,} ~ {max_rows:,} 行：¥{p['price_per_row']:.4f}/行\n"
-        else:
-            price_text += f"  {min_rows:,} 行以上：¥{p['price_per_row']:.4f}/行\n"
-
-    # 累计已洗数据量
-    if quota > 0:
-        remain = max(0, quota - washed)
-        quota_text = (
-            f"📊 累计已洗：<b>{washed:,}</b> 行 / 总配额：<b>{quota:,}</b> 行"
-            f"（剩余 <b>{remain:,}</b> 行）\n"
-            + ("⚠️ 配额已用完，暂不能提交新的洗数据任务！\n" if remain <= 0 else "")
-        )
-    else:
-        quota_text = f"📊 累计已洗：<b>{washed:,}</b> 行（未设上限）\n"
-
-    # 各类型单价（元/万行），苹果走上面的阶梯价
+    # 各类型单价（元/万行）；苹果 iMessage 的价格点进去才看
     svc_items = []
     for code, label, default in WASH_SERVICES:
         if code == "im":
@@ -638,22 +627,20 @@ async def menu_wash(cq: CallbackQuery, state: FSMContext):
         if price <= 0:
             continue
         svc_items.append(f"{label} W{price:g}")
-    svc_lines = []
-    for i in range(0, len(svc_items), 2):
-        svc_lines.append("  " + " · ".join(svc_items[i : i + 2]))
+    svc_lines = [
+        "  " + " · ".join(svc_items[i : i + 2])
+        for i in range(0, len(svc_items), 2)
+    ]
     svc_text = "\n".join(svc_lines)
 
     await cq.message.edit_text(
         "🧼 <b>洗数据</b>\n\n"
         f"当前余额：<b>¥{balance:.4f} 元</b>\n"
-        f"{quota_text}"
         "────────────\n"
-        "<b>阶梯定价（每行价格）：</b>\n"
-        f"{price_text}\n"
         "<b>各类型单价（元/万行）：</b>\n"
         f"{svc_text}\n"
-        "（🍎 苹果走上面的阶梯价，其余按所选类型计价）\n\n"
-        "洗的越多越便宜，洗完再扣费。",
+        "（🍎 苹果 iMessage 按行数阶梯计价，选类型后可看）\n\n"
+        "洗完再扣费。",
         reply_markup=wash_main_kb(balance),
         parse_mode="HTML",
     )
@@ -1261,13 +1248,51 @@ async def wash_submit(cq: CallbackQuery, state: FSMContext, bot: Bot):
 
 @router.callback_query(F.data.startswith("wash:svc:"))
 async def wash_submit_service(cq: CallbackQuery, state: FSMContext, bot: Bot):
-    """第二步：用选中的类型真正提交。"""
+    """第二步：选中类型。
+
+    苹果 iMessage 是阶梯价，先展示价格明细让用户确认；
+    其它类型价格已经写在按钮上，直接提交。
+    """
     code = (cq.data or "").split(":", 2)[-1]
     labels = {code: label for code, label, _p in WASH_SERVICES}
     label = labels.get(code)
     if not label:
         await cq.answer("未知的数据类型，请重新选择。", show_alert=True)
         return
+
+    # 苹果：先给价格明细 + 预计费用，再确认扣费
+    if code == "im":
+        data = await state.get_data()
+        files = list(data.get("files") or [])
+        if not files:
+            await cq.answer("没找到上传的文件，请重新上传。", show_alert=True)
+            return
+        total_lines = sum(int(f.get("lines") or 0) for f in files)
+        with SessionLocal() as session:
+            from database import get_wash_prices
+
+            prices = get_wash_prices(session)
+            estimate = calc_wash_cost(session, total_lines)
+            balance = get_wash_balance(session, cq.from_user.id)
+        await cq.answer()
+        kb = InlineKeyboardBuilder()
+        kb.button(text="✅ 确认扣费并提交", callback_data="wash:svcok:im")
+        kb.button(text="❌ 取消", callback_data="cancel")
+        kb.adjust(1)
+        await _edit_or_answer(
+            cq,
+            "🍎 <b>苹果 iMessage</b>\n\n"
+            "<b>阶梯定价（每行价格）：</b>\n"
+            f"{_tier_price_text(prices)}\n"
+            "────────────\n"
+            f"本批：<b>{total_lines:,}</b> 行（{len(files)} 个文件）\n"
+            f"预计费用：<b>¥{estimate:.4f}</b>\n"
+            f"当前余额：¥{balance:.4f}\n\n"
+            "确认后才会扣费并转发。",
+            reply_markup=kb.as_markup(),
+        )
+        return
+
     await cq.answer(f"已选择：{label}")
     try:
         await _wash_submit_impl(cq, state, bot, svc_code=code, svc_label=label)
@@ -1278,6 +1303,26 @@ async def wash_submit_service(cq: CallbackQuery, state: FSMContext, bot: Bot):
                 cq,
                 "⚠️ 提交失败：" + html.escape(str(e)[:150])
                 + "\n\n请再点一次「🚀 开始洗数据」；如果还是不行，重新上传一次文件。",
+                reply_markup=menu_kb(cq.from_user.id),
+            )
+        except Exception:
+            pass
+
+
+@router.callback_query(F.data == "wash:svcok:im")
+async def wash_submit_confirm_im(cq: CallbackQuery, state: FSMContext, bot: Bot):
+    """苹果 iMessage：用户确认阶梯价后再真正提交。"""
+    await cq.answer("正在提交…")
+    label = {c: l for c, l, _p in WASH_SERVICES}.get("im", "🍎 苹果 iMessage")
+    try:
+        await _wash_submit_impl(cq, state, bot, svc_code="im", svc_label=label)
+    except Exception as e:
+        print(f"[wash] submit failed: {e}")
+        try:
+            await _edit_or_answer(
+                cq,
+                "⚠️ 提交失败：" + html.escape(str(e)[:150])
+                + "\n\n请再点一次「🚀 开始洗数据」。",
                 reply_markup=menu_kb(cq.from_user.id),
             )
         except Exception:
