@@ -1448,7 +1448,7 @@ async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: 
 
 def _import_text_into_db(text: str) -> dict:
     """把文本里的号码全部按「苹果」写进库，返回统计。"""
-    from database import normalize_profile_phone, upsert_phone_profiles
+    from database import normalize_profile_phone
 
     pairs = []
     bad = 0
@@ -1464,13 +1464,13 @@ def _import_text_into_db(text: str) -> dict:
         if len(pairs) >= 1000000:
             break
 
-    added = updated = 0
-    for i in range(0, len(pairs), 2000):
+    from database import bulk_add_phone_profiles
+
+    written = 0
+    for i in range(0, len(pairs), 20000):
         with SessionLocal() as session:
-            a, u = upsert_phone_profiles(session, pairs[i : i + 2000])
-            added += a
-            updated += u
-    return {"rows": len(pairs), "bad": bad, "added": added, "updated": updated}
+            written += bulk_add_phone_profiles(session, pairs[i : i + 20000])
+    return {"rows": len(pairs), "bad": bad, "added": written, "updated": 0}
 
 
 def _profile_total() -> int:
@@ -1491,8 +1491,7 @@ def _import_report(stat: dict) -> str:
     return (
         "✅ <b>导入完成</b>\n\n"
         f"有效行：{stat['rows']:,}\n"
-        f"新增：{stat['added']:,}\n"
-        f"更新：{stat['updated']:,}\n"
+        f"已写入：{stat['added']:,}（重复自动跳过）\n"
         f"无法识别：{stat['bad']:,}\n\n"
         f"库内号码总数：<b>{_profile_total():,}</b>"
     )
