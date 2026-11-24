@@ -1358,17 +1358,17 @@ async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: 
         per_wan = float(get_wash_svc_prices(session).get("IMDB", 20.0) or 0)
         balance = get_wash_balance(session, user_id)
 
-    apple = [p for p in uniq if kinds.get(p) == "苹果"]
-    android = [p for p in uniq if kinds.get(p) == "安卓"]
-    miss = [p for p in uniq if p not in kinds]
-    hits = len(apple) + len(android)
+    # 库里的都是苹果号：撞到 = 苹果，撞不到 = 安卓
+    apple = [p for p in uniq if p in kinds]
+    android = [p for p in uniq if p not in kinds]
+    hits = len(apple)
     cost = round(per_wan * hits / 10000.0, 4)
 
     if cost > 0 and balance < cost:
         await _edit_or_answer(
             cq,
             "⚠️ 余额不足！\n\n"
-            f"命中：{hits:,} 个（苹果 {len(apple):,} / 安卓 {len(android):,}）\n"
+            f"命中苹果：{hits:,} 个\n"
             f"本次费用：¥{cost:.4f} 元\n当前余额：¥{balance:.4f} 元\n\n"
             "撞库按命中数计费，未命中的不收费。",
             reply_markup=wash_main_kb(balance),
@@ -1401,7 +1401,7 @@ async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: 
     workdir = (await state.get_data()).get("workdir") or get_workdir(user_id)
     os.makedirs(workdir, exist_ok=True)
 
-    for fname, rows in (("苹果.txt", apple), ("安卓.txt", android), ("未命中.txt", miss)):
+    for fname, rows in (("苹果.txt", apple), ("安卓.txt", android)):
         if not rows:
             continue
         path = os.path.join(workdir, fname)
@@ -1424,10 +1424,9 @@ async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: 
         f"提交号码：{total:,} 个\n"
         f"苹果：{len(apple):,} 个\n"
         f"安卓：{len(android):,} 个\n"
-        f"未命中：{len(miss):,} 个\n"
-        f"命中率：{rate:.1f}%\n\n"
-        f"费用：¥{cost:.4f}（按命中 {hits:,} 个计，未命中不收费）\n\n"
-        "结果已按 苹果/安卓/未命中 分别发出。",
+        f"苹果占比：{rate:.1f}%\n\n"
+        f"费用：¥{cost:.4f}（按命中 {hits:,} 个计）\n\n"
+        "结果已按 苹果/安卓 分别发出。",
         reply_markup=menu_kb(user_id),
     )
     await cleanup_state(state)
@@ -1443,11 +1442,11 @@ async def imdb_import_cmd(message: Message, state: FSMContext):
     await state.set_state(AdminStates.imdb_import)
     await message.answer(
         "📥 <b>导入撞库号码库</b>\n\n"
-        "请发送 TXT/CSV 文件，每行一个号码 + 类型：\n"
-        "<code>13800138000,苹果</code>\n"
-        "<code>13900139000,安卓</code>\n\n"
-        "分隔符用逗号、空格、Tab 都行；\n"
-        "类型写「苹果 / ios / apple」都认作苹果，「安卓 / and」认作安卓。\n"
+        "直接把历史文件发过来就行，<b>里面的号码全部当作苹果号</b>。\n\n"
+        "每行一个号码即可，带其它字段也没关系（会自动提取 11 位号码）：\n"
+        "<code>13800138000</code>\n"
+        "<code>13800138000,蓝号</code>\n"
+        "<code>+8613900139000</code>\n\n"
         "一次最多 50 万行。",
         reply_markup=cancel_kb(),
     )
@@ -1484,18 +1483,12 @@ async def imdb_import_file(message: Message, state: FSMContext, bot: Bot):
         line = line.strip()
         if not line:
             continue
-        parts = line.replace("\t", ",").replace(" ", ",").split(",")
-        phone = normalize_profile_phone(parts[0])
-        kind = ""
-        tail = " ".join(parts[1:]).lower()
-        if any(k in tail for k in ("苹果", "ios", "apple", "imessage")):
-            kind = "苹果"
-        elif any(k in tail for k in ("安卓", "and", "android")):
-            kind = "安卓"
-        if not phone or not kind:
+        # 只取号码：库里全部是苹果号，其它字段忽略
+        phone = normalize_profile_phone(line)
+        if not phone:
             bad += 1
             continue
-        pairs.append((phone, kind))
+        pairs.append((phone, "苹果"))
         if len(pairs) >= 500000:
             break
 
