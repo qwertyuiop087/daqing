@@ -1330,45 +1330,51 @@ async def wash_submit_confirm_im(cq: CallbackQuery, state: FSMContext, bot: Bot)
 
 
 async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: list) -> None:
-    """苹果iM撞库：拿上传的号码去本地号码库里碰撞，输出 苹果/安卓/未命中。"""
-    from services.file_ops import decode_bytes, read_file
+    """苹果iM撞库：逐文件查本地号码库，输出「原名_苹果_N.txt / 原名_安卓_N.txt」。"""
+    from services.file_ops import decode_bytes, read_file, sanitize_filename
     from utils.phone_db import extract_phones
 
     user_id = cq.from_user.id
-    all_phones: list[str] = []
+
+    # 1) 逐个文件读号码（每个文件单独出结果）
+    batches: list[tuple[str, list[str]]] = []
     for f in files:
+        name = f.get("name") or "input.txt"
         try:
             text = decode_bytes(read_file(f["path"]))
-            all_phones.extend(extract_phones(text))
+            phones = extract_phones(text)
         except Exception as e:
-            print(f"[imdb] 读取失败 {f.get('name')}：{e}")
+            print(f"[imdb] 读取失败 {name}：{e}")
+            continue
+        uniq = list(dict.fromkeys(p for p in phones if p))
+        if uniq:
+            batches.append((name, uniq))
 
-    uniq = list(dict.fromkeys(p for p in all_phones if p))
-    if not uniq:
+    if not batches:
         await _edit_or_answer(
             cq, "⚠️ 文件里没有识别到手机号。", reply_markup=menu_kb(user_id)
         )
         await cleanup_state(state)
         return
 
+    all_phones = [p for _name, lst in batches for p in lst]
+
     from database import lookup_phone_profiles
 
     with SessionLocal() as session:
-        kinds = lookup_phone_profiles(session, uniq)
+        kinds = lookup_phone_profiles(session, all_phones)
         per_wan = float(get_wash_svc_prices(session).get("IMDB", 20.0) or 0)
         balance = get_wash_balance(session, user_id)
 
-    # 库里的都是苹果号：撞到 = 苹果，撞不到 = 安卓
-    apple = [p for p in uniq if p in kinds]
-    android = [p for p in uniq if p not in kinds]
-    hits = len(apple)
-    cost = round(per_wan * hits / 10000.0, 4)
+    apple_total = sum(1 for p in all_phones if p in kinds)
+    android_total = len(all_phones) - apple_total
+    cost = round(per_wan * apple_total / 10000.0, 4)
 
     if cost > 0 and balance < cost:
         await _edit_or_answer(
             cq,
             "⚠️ 余额不足！\n\n"
-            f"命中苹果：{hits:,} 个\n"
+            f"命中苹果：{apple_total:,} 个\n"
             f"本次费用：¥{cost:.4f} 元\n当前余额：¥{balance:.4f} 元\n\n"
             "撞库按命中数计费，未命中的不收费。",
             reply_markup=wash_main_kb(balance),
@@ -1391,7 +1397,7 @@ async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: 
                 WashOrder(
                     user_id=user_id,
                     filename="苹果iM撞库",
-                    row_count=hits,
+                    row_count=apple_total,
                     cost=cost,
                     type="deduct",
                 )
@@ -1401,32 +1407,38 @@ async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: 
     workdir = (await state.get_data()).get("workdir") or get_workdir(user_id)
     os.makedirs(workdir, exist_ok=True)
 
-    for fname, rows in (("苹果.txt", apple), ("安卓.txt", android)):
-        if not rows:
-            continue
-        path = os.path.join(workdir, fname)
-        try:
-            with open(path, "w", encoding="utf-8") as fh:
-                fh.write("\n".join(rows))
-            await bot.send_document(
-                chat_id=cq.message.chat.id,
-                document=FSInputFile(path, filename=fname),
-                caption=f"{fname.replace('.txt', '')} {len(rows):,} 个",
-            )
-        except Exception as e:
-            print(f"[imdb] 发送 {fname} 失败：{e}")
+    # 2) 每个源文件出两个结果：原名_苹果_N / 原名_安卓_N
+    for name, uniq in batches:
+        stem = (sanitize_filename(os.path.splitext(name)[0]) or "result")[:50]
+        apple = [p for p in uniq if p in kinds]
+        android = [p for p in uniq if p not in kinds]
+        for label, rows in (("苹果", apple), ("安卓", android)):
+            if not rows:
+                continue
+            fname = f"{stem}_{label}_{len(rows)}.txt"
+            path = os.path.join(workdir, fname)
+            try:
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write("\n".join(rows))
+                await bot.send_document(
+                    chat_id=cq.message.chat.id,
+                    document=FSInputFile(path, filename=fname),
+                    caption=f"{label} {len(rows):,} 个",
+                )
+            except Exception as e:
+                print(f"[imdb] 发送 {fname} 失败：{e}")
 
-    total = len(uniq)
-    rate = (hits / total * 100) if total else 0
+    total = len(all_phones)
+    rate = (apple_total / total * 100) if total else 0
     await _edit_or_answer(
         cq,
         "🍎 <b>苹果iM撞库完成</b>\n\n"
-        f"提交号码：{total:,} 个\n"
-        f"苹果：{len(apple):,} 个\n"
-        f"安卓：{len(android):,} 个\n"
+        f"提交文件：{len(batches)} 个 / 号码 {total:,} 个\n"
+        f"苹果：{apple_total:,} 个\n"
+        f"安卓：{android_total:,} 个\n"
         f"苹果占比：{rate:.1f}%\n\n"
-        f"费用：¥{cost:.4f}（按命中 {hits:,} 个计）\n\n"
-        "结果已按 苹果/安卓 分别发出。",
+        f"费用：¥{cost:.4f}（按命中 {apple_total:,} 个计）\n\n"
+        "文件已按「原名_苹果_数量 / 原名_安卓_数量」发出。",
         reply_markup=menu_kb(user_id),
     )
     await cleanup_state(state)
