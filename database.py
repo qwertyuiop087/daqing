@@ -227,6 +227,56 @@ def upsert_phone_profiles(session, pairs) -> tuple[int, int]:
     return added, updated
 
 
+def bulk_add_phone_profiles(session, pairs, chunk: int = 5000) -> int:
+    """批量写入 (号码, 类型)，用多行 INSERT + ON CONFLICT DO NOTHING。
+
+    逐条 ORM add 对几十万行太慢，这里按方言生成多行 INSERT。
+    返回实际提交的行数（重复的会被数据库忽略）。
+    """
+    from sqlalchemy import insert
+
+    items = [
+        {"phone": p, "kind": k}
+        for p, k in pairs
+        if p and k in ("苹果", "安卓")
+    ]
+    if not items:
+        return 0
+
+    dialect = ""
+    try:
+        dialect = session.bind.dialect.name if session.bind is not None else ""
+    except Exception:
+        dialect = ""
+
+    stmt = None
+    try:
+        if dialect == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as _ins
+
+            stmt = _ins(PhoneProfile).on_conflict_do_nothing(
+                index_elements=["phone"]
+            )
+        elif dialect == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as _ins
+
+            stmt = _ins(PhoneProfile).on_conflict_do_nothing(
+                index_elements=["phone"]
+            )
+    except Exception:
+        stmt = None
+    if stmt is None:
+        stmt = insert(PhoneProfile)
+
+    written = 0
+    for i in range(0, len(items), chunk):
+        part = items[i : i + chunk]
+        session.execute(stmt, part)
+        session.commit()
+        written += len(part)
+    return written
+
+
 def lookup_phone_profiles(session, phones) -> dict[str, str]:
     """批量查询号码类型，返回 {号码: 苹果/安卓}。"""
     result: dict[str, str] = {}
