@@ -1446,50 +1446,9 @@ async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: 
     await cleanup_state(state)
 
 
-@router.message(Command("导入库", "imdb_import"))
-async def imdb_import_cmd(message: Message, state: FSMContext):
-    """管理员：上传历史号码库（号码,苹果/安卓）。"""
-    from utils.roles import is_admin
-
-    if not is_admin(message.from_user.id):
-        return
-    await state.set_state(AdminStates.imdb_import)
-    await message.answer(
-        "📥 <b>导入撞库号码库</b>\n\n"
-        "直接把历史文件发过来就行，<b>里面的号码全部当作苹果号</b>。\n\n"
-        "每行一个号码即可，带其它字段也没关系（会自动提取 11 位号码）：\n"
-        "<code>13800138000</code>\n"
-        "<code>13800138000,蓝号</code>\n"
-        "<code>+8613900139000</code>\n\n"
-        "一次最多 50 万行。",
-        reply_markup=cancel_kb(),
-    )
-
-
-@router.message(AdminStates.imdb_import, F.document)
-async def imdb_import_file(message: Message, state: FSMContext, bot: Bot):
-    from services.file_ops import decode_bytes, read_file, sanitize_filename
+def _import_text_into_db(text: str) -> dict:
+    """把文本里的号码全部按「苹果」写进库，返回统计。"""
     from database import normalize_profile_phone, upsert_phone_profiles
-    from utils.roles import is_admin
-
-    if not is_admin(message.from_user.id):
-        return
-    doc = message.document
-    if doc.file_size and doc.file_size > settings.MAX_FILE_SIZE:
-        await message.answer("⚠️ 文件太大，请控制在 20MB 以内。")
-        return
-
-    workdir = get_workdir(message.from_user.id)
-    name = sanitize_filename(doc.file_name or "import.txt")
-    path = os.path.join(workdir, name)
-    await message.answer("⏳ 正在下载并导入，请稍等…")
-    try:
-        file = await bot.get_file(doc.file_id)
-        await bot.download_file(file.file_path, destination=path)
-        text = decode_bytes(read_file(path))
-    except Exception as e:
-        await message.answer(f"⚠️ 读取文件失败：{str(e)[:120]}")
-        return
 
     pairs = []
     bad = 0
@@ -1497,13 +1456,12 @@ async def imdb_import_file(message: Message, state: FSMContext, bot: Bot):
         line = line.strip()
         if not line:
             continue
-        # 只取号码：库里全部是苹果号，其它字段忽略
         phone = normalize_profile_phone(line)
         if not phone:
             bad += 1
             continue
         pairs.append((phone, "苹果"))
-        if len(pairs) >= 500000:
+        if len(pairs) >= 1000000:
             break
 
     added = updated = 0
@@ -1512,16 +1470,160 @@ async def imdb_import_file(message: Message, state: FSMContext, bot: Bot):
             a, u = upsert_phone_profiles(session, pairs[i : i + 2000])
             added += a
             updated += u
+    return {"rows": len(pairs), "bad": bad, "added": added, "updated": updated}
 
-    await message.answer(
+
+def _profile_total() -> int:
+    from sqlalchemy import func
+
+    from database import PhoneProfile
+
+    try:
+        with SessionLocal() as session:
+            return int(
+                session.scalar(select(func.count()).select_from(PhoneProfile)) or 0
+            )
+    except Exception:
+        return 0
+
+
+def _import_report(stat: dict) -> str:
+    return (
         "✅ <b>导入完成</b>\n\n"
-        f"有效行：{len(pairs):,}\n"
-        f"新增：{added:,}\n"
-        f"更新：{updated:,}\n"
-        f"无法识别：{bad:,}",
+        f"有效行：{stat['rows']:,}\n"
+        f"新增：{stat['added']:,}\n"
+        f"更新：{stat['updated']:,}\n"
+        f"无法识别：{stat['bad']:,}\n\n"
+        f"库内号码总数：<b>{_profile_total():,}</b>"
+    )
+
+
+async def _import_from_url(message: Message, url: str) -> None:
+    """从链接导入（不受 Telegram 20MB 限制）。"""
+    import aiohttp
+    from services.file_ops import decode_bytes, read_file
+
+    max_bytes = 500 * 1024 * 1024
+    workdir = get_workdir(message.from_user.id)
+    path = os.path.join(workdir, "import_url.txt")
+    tip = await message.answer("⏳ 正在从链接下载（上限 500MB）…")
+
+    size = 0
+    try:
+        timeout = aiohttp.ClientTimeout(total=1800)
+        async with aiohttp.ClientSession(timeout=timeout) as sess:
+            async with sess.get(url) as resp:
+                if resp.status != 200:
+                    await tip.edit_text(f"⚠️ 下载失败：HTTP {resp.status}")
+                    return
+                with open(path, "wb") as fh:
+                    async for chunk in resp.content.iter_chunked(256 * 1024):
+                        size += len(chunk)
+                        if size > max_bytes:
+                            await tip.edit_text("⚠️ 文件超过 500MB，请拆分后再导入。")
+                            return
+                        fh.write(chunk)
+    except Exception as e:
+        await tip.edit_text(f"⚠️ 下载失败：{str(e)[:150]}")
+        return
+
+    await tip.edit_text(
+        f"⏳ 下载完成（{size / 1024 / 1024:.1f}MB），正在导入，请稍等…"
+    )
+    try:
+        text = decode_bytes(read_file(path))
+        stat = await asyncio.to_thread(_import_text_into_db, text)
+    except Exception as e:
+        await tip.edit_text(f"⚠️ 导入失败：{str(e)[:150]}")
+        return
+
+    await tip.edit_text(_import_report(stat), parse_mode="HTML")
+
+
+@router.message(Command("导入库", "imdb_import"))
+async def imdb_import_cmd(message: Message, state: FSMContext):
+    """管理员：导入撞库号码库。支持直接发文件、或 /导入库 <链接>。"""
+    from utils.roles import is_admin
+
+    if not is_admin(message.from_user.id):
+        return
+
+    parts = (message.text or "").split(maxsplit=1)
+    arg = parts[1].strip() if len(parts) > 1 else ""
+    if arg.startswith(("http://", "https://")):
+        await _import_from_url(message, arg)
+        return
+
+    await state.set_state(AdminStates.imdb_import)
+    await message.answer(
+        "📥 <b>导入撞库号码库</b>\n\n"
+        "库里的号码<b>全部当作苹果号</b>，每行一个号码即可（带其它字段也行）。\n\n"
+        "<b>三种方式：</b>\n"
+        "1️⃣ 直接发文件（≤20MB，Telegram 限制）\n"
+        "2️⃣ <code>/导入库 https://.../库.txt</code>（大文件走链接，≤500MB）\n"
+        "3️⃣ 分多次发文件，发完发 <code>/完成导入</code>\n\n"
+        "每行示例：\n"
+        "<code>13800138000</code>\n"
+        "<code>13800138000,蓝号</code>\n"
+        "<code>+8613900139000</code>",
+        reply_markup=cancel_kb(),
+    )
+
+
+@router.message(Command("完成导入"))
+async def imdb_import_done(message: Message, state: FSMContext):
+    from utils.roles import is_admin
+
+    if not is_admin(message.from_user.id):
+        return
+    if await state.get_state() == AdminStates.imdb_import.state:
+        await cleanup_state(state)
+    await message.answer(
+        f"✅ 已结束导入。\n\n库内号码总数：<b>{_profile_total():,}</b>",
         parse_mode="HTML",
     )
-    await cleanup_state(state)
+
+
+@router.message(AdminStates.imdb_import, F.document)
+async def imdb_import_file(message: Message, state: FSMContext, bot: Bot):
+    from services.file_ops import decode_bytes, read_file, sanitize_filename
+    from utils.roles import is_admin
+
+    if not is_admin(message.from_user.id):
+        return
+    doc = message.document
+    if doc.file_size and doc.file_size > settings.MAX_FILE_SIZE:
+        await message.answer(
+            "⚠️ 文件超过 20MB（Telegram 限制），改用链接方式：\n"
+            "把文件传到任意直链后发 <code>/导入库 https://...</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    workdir = get_workdir(message.from_user.id)
+    name = sanitize_filename(doc.file_name or "import.txt")
+    path = os.path.join(workdir, name)
+    tip = await message.answer("⏳ 正在下载并导入，请稍等…")
+    try:
+        file = await bot.get_file(doc.file_id)
+        await bot.download_file(file.file_path, destination=path)
+        text = decode_bytes(read_file(path))
+    except Exception as e:
+        await tip.edit_text(f"⚠️ 读取文件失败：{str(e)[:120]}")
+        return
+
+    try:
+        stat = await asyncio.to_thread(_import_text_into_db, text)
+    except Exception as e:
+        await tip.edit_text(f"⚠️ 导入失败：{str(e)[:150]}")
+        return
+
+    # 不清状态：可以继续发下一个文件，发完了用 /完成导入
+    await tip.edit_text(
+        _import_report(stat)
+        + "\n\n（可以继续发文件；全部发完发 <code>/完成导入</code>）",
+        parse_mode="HTML",
+    )
 
 
 async def _wash_submit_impl(
