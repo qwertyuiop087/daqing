@@ -802,7 +802,7 @@ DEFAULT_WASH_SVC_PRICES: dict[str, float] = {
     "SN": 60.0,      # 年龄
     "手转Q": 30.0,   # 手洗 Q
     "Q转手": 30.0,   # Q 洗手
-    "IMDB": 20.0,    # 苹果iM撞库（按命中数计费）
+    "IMDB": 9.0,     # 苹果iM撞库（按提交数计费）
 }
 
 
