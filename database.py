@@ -167,6 +167,76 @@ class WashOrder(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class PhoneProfile(Base):
+    """号码画像库（撞库用）：号码 → 苹果/安卓。
+
+    数据来源：管理员用 /导入库 上传的历史结果文件。
+    撞库时只查这张表，不调用外部洗数据服务。
+    """
+
+    __tablename__ = "phone_profiles"
+
+    phone: Mapped[str] = mapped_column(String(20), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(8), index=True)  # 苹果 / 安卓
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+def normalize_profile_phone(raw: str) -> str:
+    """从任意文本里取出 11 位手机号。"""
+    import re as _re
+
+    digits = _re.sub(r"\D", "", raw or "")
+    if len(digits) > 11:
+        digits = digits[-11:]
+    return digits if len(digits) == 11 else ""
+
+
+def upsert_phone_profiles(session, pairs) -> tuple[int, int]:
+    """批量写入 (号码, 类型)，返回 (新增, 更新)。"""
+    batch = {}
+    for phone, kind in pairs:
+        if phone and kind in ("苹果", "安卓"):
+            batch[phone] = kind
+    if not batch:
+        return 0, 0
+
+    existing: dict[str, str] = {}
+    phones = list(batch)
+    for i in range(0, len(phones), 500):
+        chunk = phones[i : i + 500]
+        for row in session.scalars(
+            select(PhoneProfile).where(PhoneProfile.phone.in_(chunk))
+        ):
+            existing[row.phone] = row.kind
+
+    added = updated = 0
+    for phone, kind in batch.items():
+        if phone in existing:
+            if existing[phone] != kind:
+                row = session.get(PhoneProfile, phone)
+                if row is not None:
+                    row.kind = kind
+                    updated += 1
+        else:
+            session.add(PhoneProfile(phone=phone, kind=kind))
+            added += 1
+    session.commit()
+    return added, updated
+
+
+def lookup_phone_profiles(session, phones) -> dict[str, str]:
+    """批量查询号码类型，返回 {号码: 苹果/安卓}。"""
+    result: dict[str, str] = {}
+    uniq = [p for p in dict.fromkeys(phones) if p]
+    for i in range(0, len(uniq), 500):
+        chunk = uniq[i : i + 500]
+        for row in session.scalars(
+            select(PhoneProfile).where(PhoneProfile.phone.in_(chunk))
+        ):
+            result[row.phone] = row.kind
+    return result
+
+
 class DropRecord(Base):
     """隐藏掉落记录：使用功能时概率掉落会员天数，管理员后台可查。"""
 
@@ -677,6 +747,7 @@ DEFAULT_WASH_SVC_PRICES: dict[str, float] = {
     "SN": 60.0,      # 年龄
     "手转Q": 30.0,   # 手洗 Q
     "Q转手": 30.0,   # Q 洗手
+    "IMDB": 20.0,    # 苹果iM撞库（按命中数计费）
 }
 
 
