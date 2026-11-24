@@ -182,10 +182,13 @@ class PhoneProfile(Base):
 
 
 def normalize_profile_phone(raw: str) -> str:
-    """从任意文本里取出 11 位手机号。"""
+    """从任意文本里取出一个手机号（优先匹配 1[3-9] 开头的 11 位）。"""
     import re as _re
 
     digits = _re.sub(r"\D", "", raw or "")
+    m = _re.search(r"1[3-9]\d{9}", digits)
+    if m:
+        return m.group(0)
     if len(digits) > 11:
         digits = digits[-11:]
     return digits if len(digits) == 11 else ""
