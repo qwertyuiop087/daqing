@@ -1446,8 +1446,8 @@ async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: 
     await cleanup_state(state)
 
 
-def _import_text_into_db(text: str) -> dict:
-    """把文本里的号码全部按「苹果」写进库，返回统计。"""
+def _parse_phone_library(text: str) -> tuple[list, int]:
+    """从文本里解析号码（全部按苹果），返回 (pairs, 无法识别行数)。"""
     from database import normalize_profile_phone
 
     pairs = []
@@ -1461,15 +1461,27 @@ def _import_text_into_db(text: str) -> dict:
             bad += 1
             continue
         pairs.append((phone, "苹果"))
-        if len(pairs) >= 1000000:
+        if len(pairs) >= 1500000:
             break
+    return pairs, bad
 
+
+def _write_phone_library(pairs: list) -> int:
+    """批量写库，返回提交行数。"""
     from database import bulk_add_phone_profiles
 
     written = 0
     for i in range(0, len(pairs), 20000):
         with SessionLocal() as session:
             written += bulk_add_phone_profiles(session, pairs[i : i + 20000])
+        print(f"[imdb] 已写入 {written:,} / {len(pairs):,}", flush=True)
+    return written
+
+
+def _import_text_into_db(text: str) -> dict:
+    """解析 + 写库（供链接导入等同步场景复用）。"""
+    pairs, bad = _parse_phone_library(text)
+    written = _write_phone_library(pairs)
     return {"rows": len(pairs), "bad": bad, "added": written, "updated": 0}
 
 
@@ -1602,26 +1614,61 @@ async def imdb_import_file(message: Message, state: FSMContext, bot: Bot):
     workdir = get_workdir(message.from_user.id)
     name = sanitize_filename(doc.file_name or "import.txt")
     path = os.path.join(workdir, name)
-    tip = await message.answer("⏳ 正在下载并导入，请稍等…")
+    size_mb = (doc.file_size or 0) / 1024 / 1024
+    tip = await message.answer(f"⏳ 开始下载（{size_mb:.1f}MB）…")
+
+    def _say(text: str) -> None:
+        """尽量编辑提示消息；失败就另发一条，保证用户看得到。"""
+        async def _run():
+            try:
+                await tip.edit_text(text, parse_mode="HTML")
+            except Exception:
+                try:
+                    await message.answer(text, parse_mode="HTML")
+                except Exception:
+                    pass
+        return _run()
+
     try:
+        print(f"[imdb] 下载开始 {name} {size_mb:.1f}MB", flush=True)
         file = await bot.get_file(doc.file_id)
-        await bot.download_file(file.file_path, destination=path)
+        await bot.download_file(file.file_path, destination=path, timeout=600)
         text = decode_bytes(read_file(path))
+        print(f"[imdb] 下载完成 {name}", flush=True)
     except Exception as e:
-        await tip.edit_text(f"⚠️ 读取文件失败：{str(e)[:120]}")
+        print(f"[imdb] 下载失败 {name}: {e}", flush=True)
+        await _say(f"⚠️ 下载失败：{str(e)[:150]}")
         return
 
+    await _say(
+        f"⏳ 下载完成（{size_mb:.1f}MB），正在解析号码…"
+    )
     try:
-        stat = await asyncio.to_thread(_import_text_into_db, text)
+        pairs, bad = await asyncio.to_thread(_parse_phone_library, text)
     except Exception as e:
-        await tip.edit_text(f"⚠️ 导入失败：{str(e)[:150]}")
+        print(f"[imdb] 解析失败: {e}", flush=True)
+        await _say(f"⚠️ 解析失败：{str(e)[:150]}")
         return
 
-    # 不清状态：可以继续发下一个文件，发完了用 /完成导入
-    await tip.edit_text(
-        _import_report(stat)
-        + "\n\n（可以继续发文件；全部发完发 <code>/完成导入</code>）",
-        parse_mode="HTML",
+    if not pairs:
+        await _say("⚠️ 这个文件里没有识别到手机号。")
+        return
+
+    await _say(
+        f"⏳ 解析到 {len(pairs):,} 个号码，正在写入数据库（可能需要 1~5 分钟）…"
+    )
+    try:
+        written = await asyncio.to_thread(_write_phone_library, pairs)
+    except Exception as e:
+        print(f"[imdb] 写库失败: {e}", flush=True)
+        await _say(f"⚠️ 写库失败：{str(e)[:150]}")
+        return
+
+    await _say(
+        _import_report(
+            {"rows": len(pairs), "bad": bad, "added": written, "updated": 0}
+        )
+        + "\n\n（可以继续发文件；全部发完发 <code>/完成导入</code>）"
     )
 
 
