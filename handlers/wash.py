@@ -1398,7 +1398,7 @@ async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: 
             session.add(
                 WashOrder(
                     user_id=user_id,
-                    filename="苹果iM撞库",
+                    filename=f"苹果iM撞库 {len(batches)}个文件 {submitted}个号码",
                     row_count=submitted,
                     cost=cost,
                     type="deduct",
