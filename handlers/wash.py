@@ -1368,15 +1368,17 @@ async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: 
 
     apple_total = sum(1 for p in all_phones if p in kinds)
     android_total = len(all_phones) - apple_total
-    cost = round(per_wan * apple_total / 10000.0, 4)
+    # 按「提交的号码数」计费，命中与否同价
+    submitted = len(all_phones)
+    cost = round(per_wan * submitted / 10000.0, 4)
 
     if cost > 0 and balance < cost:
         await _edit_or_answer(
             cq,
             "⚠️ 余额不足！\n\n"
-            f"命中苹果：{apple_total:,} 个\n"
+            f"提交号码：{submitted:,} 个\n"
             f"本次费用：¥{cost:.4f} 元\n当前余额：¥{balance:.4f} 元\n\n"
-            "撞库按命中数计费，未命中的不收费。",
+            "撞库按提交数量计费。",
             reply_markup=wash_main_kb(balance),
         )
         await cleanup_state(state)
@@ -1397,7 +1399,7 @@ async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: 
                 WashOrder(
                     user_id=user_id,
                     filename="苹果iM撞库",
-                    row_count=apple_total,
+                    row_count=submitted,
                     cost=cost,
                     type="deduct",
                 )
@@ -1437,7 +1439,7 @@ async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: 
         f"苹果：{apple_total:,} 个\n"
         f"安卓：{android_total:,} 个\n"
         f"苹果占比：{rate:.1f}%\n\n"
-        f"费用：¥{cost:.4f}（按命中 {apple_total:,} 个计）\n\n"
+        f"费用：¥{cost:.4f}（按提交 {submitted:,} 个计）\n\n"
         "文件已按「原名_苹果_数量 / 原名_安卓_数量」发出。",
         reply_markup=menu_kb(user_id),
     )
