@@ -1446,6 +1446,17 @@ async def _run_collision(cq: CallbackQuery, state: FSMContext, bot: Bot, files: 
     await cleanup_state(state)
 
 
+# 导入必须串行：多个文件同时写同一张表会抢锁、拖死数据库
+_IMPORT_LOCK: asyncio.Lock | None = None
+
+
+def _import_lock() -> asyncio.Lock:
+    global _IMPORT_LOCK
+    if _IMPORT_LOCK is None:
+        _IMPORT_LOCK = asyncio.Lock()
+    return _IMPORT_LOCK
+
+
 def _parse_phone_library(text: str) -> tuple[list, int]:
     """从文本里解析号码（全部按苹果），返回 (pairs, 无法识别行数)。"""
     from database import normalize_profile_phone
@@ -1461,7 +1472,7 @@ def _parse_phone_library(text: str) -> tuple[list, int]:
             bad += 1
             continue
         pairs.append((phone, "苹果"))
-        if len(pairs) >= 1500000:
+        if len(pairs) >= 5000000:
             break
     return pairs, bad
 
@@ -1615,7 +1626,24 @@ async def imdb_import_file(message: Message, state: FSMContext, bot: Bot):
     name = sanitize_filename(doc.file_name or "import.txt")
     path = os.path.join(workdir, name)
     size_mb = (doc.file_size or 0) / 1024 / 1024
-    tip = await message.answer(f"⏳ 开始下载（{size_mb:.1f}MB）…")
+    lock = _import_lock()
+    if lock.locked():
+        tip = await message.answer(
+            f"⏳ 已有文件在导入，这个（{size_mb:.1f}MB）排队等待…"
+        )
+    else:
+        tip = await message.answer(f"⏳ 开始下载（{size_mb:.1f}MB）…")
+
+    async with lock:
+        await _do_import_file(message, bot, tip, doc, path, size_mb)
+
+
+async def _do_import_file(message, bot, tip, doc, path, size_mb) -> None:
+    """真正的导入逻辑，由 _import_lock 保证同一时间只跑一个。"""
+    from services.file_ops import decode_bytes, read_file
+
+    name = os.path.basename(path)
+
 
     def _say(text: str) -> None:
         """尽量编辑提示消息；失败就另发一条，保证用户看得到。"""
