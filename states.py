@@ -87,6 +87,7 @@ class AdminStates(StatesGroup):
     alt_login_step1 = State()   # 小号登录：输入手机号
     alt_login_step2 = State()   # 小号登录：输入验证码
     alt_login_step3 = State()   # 小号登录：输入两步验证密码
+    imdb_import = State()       # 撞库：等待上传历史号码库
     bind_drop_chat = State()    # 等待绑定掉落通知群
     edit_drop_template = State()  # 等待输入掉落通知模板
     lottery_config = State()    # 等待输入抽奖奖品配置
