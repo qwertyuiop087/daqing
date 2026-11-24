@@ -271,7 +271,9 @@ def bulk_add_phone_profiles(session, pairs, chunk: int = 5000) -> int:
     written = 0
     for i in range(0, len(items), chunk):
         part = items[i : i + chunk]
-        session.execute(stmt, part)
+        # 关键：把整批塞进 values()，生成「单条多行 INSERT」。
+        # 直接 execute(stmt, part) 会走 executemany，一行一次往返，慢几十倍。
+        session.execute(stmt.values(part))
         session.commit()
         written += len(part)
     return written
