@@ -59,8 +59,10 @@ class Settings:
     PORT: int = int(os.getenv("PORT", "8080"))
 
     # ---------------- 功能限制（可按需调整） ----------------
-    # Telegram 机器人 API 实际只能下载 ≤20MB 的文件，所以默认上限统一为 20MB
-    MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE_MB", "20")) * 1024 * 1024   # 单个上传文件大小上限
+    # Telegram 机器人 API 只允许机器人下载 20MB 以内的文件，而且「正好 20.0MB」
+    # 会被服务端直接拒（Bad Request: file is too big），所以留 1MB 余量按 19MB 算。
+    # 环境变量填更大也没用：这里硬性封顶在 19MB，免得用户传上来才发现下不动。
+    MAX_FILE_SIZE: int = min(int(os.getenv("MAX_FILE_SIZE_MB", "19") or 19), 19) * 1024 * 1024   # 单个上传文件大小上限
     MAX_SPLIT_FILES: int = int(os.getenv("MAX_SPLIT_FILES", "500"))                # 单次切割最大份数
     MAX_SPLIT_LINES: int = int(os.getenv("MAX_SPLIT_LINES", "200000"))             # 每份最大行数
     MAX_BATCH_FILES: int = int(os.getenv("MAX_BATCH_FILES", "10"))                 # 每次批量发送文件数（Telegram 媒体组上限 10）
@@ -68,7 +70,7 @@ class Settings:
     MAX_UPLOAD_FILES: int = int(os.getenv("MAX_UPLOAD_FILES", "100"))             # 合并/重命名最多上传文件数
     HTTP_TIMEOUT: int = int(os.getenv("HTTP_TIMEOUT", "30"))                      # 调 Telegram API 超时（秒）
     BOT_USERNAME: str = os.getenv("BOT_USERNAME", "").lstrip("@")                 # 机器人用户名（留空则启动时自动获取）
-    MAX_ZIP_SIZE: int = int(os.getenv("MAX_ZIP_SIZE_MB", "20")) * 1024 * 1024      # ZIP 文件大小上限
+    MAX_ZIP_SIZE: int = min(int(os.getenv("MAX_ZIP_SIZE_MB", "19") or 19), 19) * 1024 * 1024      # ZIP 文件大小上限
     MAX_ZIP_TXT_FILES: int = int(os.getenv("MAX_ZIP_TXT_FILES", "500"))           # ZIP 内最多提取 TXT 数量
 
     # ---------------- 空号检测配置 ----------------
@@ -92,7 +94,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-27.1"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-27.2"))
 
 
 settings = Settings()
@@ -128,6 +130,15 @@ WASH_SERVICE_LABELS: dict[str, str] = {code: label for code, label, _p in WASH_S
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-11-27.2",
+        [
+            "修「点确认清空没反应」：先应答再删、删除丢线程池，Postgres 整表清空改 TRUNCATE（几千万行秒级），失败会把错误写在消息里",
+            "上传上限 20MB → 19MB：Telegram 机器人只能下载 20MB 以内，正好 20.0MB 会被服务端拒（Bad Request: file is too big）",
+            "超限提示改成可操作的话（「用文件切割切小一点」），不再只显示一行英文报错",
+            "文件切割时如果某份超过 19MB 会提醒，免得切出来又传不回去",
+        ],
+    ),
     (
         "2026-11-27.1",
         [

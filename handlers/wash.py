@@ -1262,21 +1262,37 @@ async def wash_got_file(message: Message, state: FSMContext, bot: Bot):
 
     workdir = data.get("workdir") or get_workdir(message.from_user.id)
 
+    # Telegram 机器人 API 只能下载 20MB 以内的文件，正好 20.0MB 会被服务端直接拒
+    # （Bad Request: file is too big），所以把话说清楚，别让用户只看到一行英文报错。
+    limit_mb = settings.MAX_FILE_SIZE // 1024 // 1024
+
+    def _too_big_tip(name: str, size) -> str:
+        size_txt = f"（{size / 1024 / 1024:.1f}MB）" if size else ""
+        return (
+            f"⚠️ 文件 <code>{html.escape(name)}</code>{size_txt} 太大，"
+            f"机器人能下载的上限是 {limit_mb}MB。\n\n"
+            "用「📄 文件切割」把它切成更小的几份（每份行数填小一点，"
+            f"控制在 {limit_mb}MB 以内），再重新上传就行。"
+        )
+
     # 下载文件（大小超限直接提示）。临时文件名带 uuid：
     # 并发下载时不能再用「列表长度+1」当序号，否则同一批文件会写到同一个路径。
     try:
         file = await bot.get_file(doc.file_id)
         if (file.file_size or 0) > settings.MAX_FILE_SIZE:
-            await message.answer(
-                f"⚠️ 文件 <code>{html.escape(doc.file_name or '')}</code> 超过 20MB 上限，已跳过。"
-            )
+            await message.answer(_too_big_tip(doc.file_name or "", file.file_size))
             return
         from services.file_ops import sanitize_filename
         safe = sanitize_filename(doc.file_name or "input.txt")
         tmp_path = os.path.join(workdir, f"in_{uuid.uuid4().hex[:8]}_{safe}")
         await bot.download_file(file.file_path, destination=tmp_path)
     except Exception as e:
-        await message.answer(f"⚠️ 下载失败：{str(e)[:100]}")
+        err = str(e)
+        if "too big" in err.lower() or "file is too large" in err.lower():
+            # 服务端拒绝下载：按文件大小给出可操作的提示，而不是干巴巴一行英文
+            await message.answer(_too_big_tip(doc.file_name or "", doc.file_size))
+            return
+        await message.answer(f"⚠️ 下载失败：{err[:100]}")
         return
 
     # 统计行数与手机号数量
@@ -1698,7 +1714,7 @@ async def imdb_import_cmd(message: Message, state: FSMContext):
         "📥 <b>导入撞库号码库</b>\n\n"
         "库里的号码<b>全部当作苹果号</b>，每行一个号码即可（带其它字段也行）。\n\n"
         "<b>三种方式：</b>\n"
-        "1️⃣ 直接发文件（≤20MB，Telegram 限制）\n"
+        "1️⃣ 直接发文件（≤19MB，Telegram 限制，正好 20.0MB 会传不上去）\n"
         "2️⃣ <code>/导入库 https://.../库.txt</code>（大文件走链接，≤500MB）\n"
         "3️⃣ 分多次发文件，发完发 <code>/完成导入</code>\n\n"
         "每行示例：\n"
@@ -1879,7 +1895,7 @@ async def imdb_import_file(message: Message, state: FSMContext, bot: Bot):
     doc = message.document
     if doc.file_size and doc.file_size > settings.MAX_FILE_SIZE:
         await message.answer(
-            "⚠️ 文件超过 20MB（Telegram 限制），改用链接方式：\n"
+            "⚠️ 文件超过 19MB（Telegram 只给机器人下载 20MB 以内），改用链接方式：\n"
             "把文件传到任意直链后发 <code>/导入库 https://...</code>",
             parse_mode="HTML",
         )

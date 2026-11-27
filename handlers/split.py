@@ -159,6 +159,29 @@ async def _finish_split_with_prefix(event, state: FSMContext, prefix: str):
         paths.append((p, fname))
 
     await state.update_data(chunk_paths=paths, final_stem=final_stem)
+
+    # 切出来的单份超过 19MB 时要提醒：Telegram 只允许机器人下载 20MB 以内
+    # （正好 20.0MB 会被拒），这种大份传回来洗数据/合并都会被拒收。
+    limit = settings.MAX_FILE_SIZE
+    oversize: list[tuple[str, int]] = []
+    for p, name in paths:
+        try:
+            size = os.path.getsize(p)
+        except OSError:
+            continue
+        if size > limit:
+            oversize.append((name, size))
+    if oversize:
+        biggest = max(s for _n, s in oversize)
+        await reply_event(
+            event,
+            f"⚠️ <b>有 {len(oversize)} 份超过 {limit // 1024 // 1024}MB</b>"
+            f"（最大 {biggest / 1024 / 1024:.1f}MB：<code>{html.escape(oversize[0][0])}</code>）。\n\n"
+            "机器人只能下载 19MB 以内的文件，这种大份再传回来（洗数据 / 合并 / 去重）"
+            "会被 Telegram 直接拒绝（Bad Request: file is too big）。\n"
+            "建议趁现在把「每份行数」填小一点重新切一次。",
+        )
+
     await state.set_state(SplitStates.waiting_insert)
     await reply_event(
         event,

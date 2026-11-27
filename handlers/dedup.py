@@ -37,7 +37,7 @@ async def menu_dedup(cq: CallbackQuery, state: FSMContext):
         "🔄 <b>号码去重</b>\n\n"
         "请发送号码列表，<b>一行一个</b>（可直接发文本消息，或上传 TXT 文件）。\n\n"
         "💡 支持多个文件分批发：\n"
-        "• 大文件拆成多个小文件（每个 20MB 以内）分开发\n"
+        "• 大文件拆成多个小文件（每个 19MB 以内）分开发\n"
         "• 全部发完后点「✅ 完成上传，开始去重」\n"
         "• 机器人自动合并所有内容，统一去重\n\n"
         "按纯数字判断是否重复（自动忽略空格、-、括号等），保留首次出现的号码。",
@@ -54,8 +54,9 @@ async def dedup_got_file(message: Message, state: FSMContext, bot: Bot):
 
     if doc.file_size and doc.file_size > settings.MAX_FILE_SIZE:
         await message.answer(
-            f"⚠️ 文件太大了！单个 TXT 文件最大支持 20MB（Telegram 限制）。\n\n"
-            f"当前文件：约 {doc.file_size // 1024 // 1024}MB\n\n"
+            f"⚠️ 文件太大了！单个 TXT 文件最大支持 {settings.MAX_FILE_SIZE // 1024 // 1024}MB"
+            f"（Telegram 只给机器人下载 20MB 以内，正好 20.0MB 会被拒）。\n\n"
+            f"当前文件：约 {doc.file_size / 1024 / 1024:.1f}MB\n\n"
             f"💡 解决办法：把大文件拆成多个小文件，分批发过来。"
         )
         return
