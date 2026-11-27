@@ -2069,7 +2069,6 @@ async def _wash_submit_impl(
     # 跟安卓结果本来就分开发；撞库安卓等群洗回来后一起合成「安卓合计」。
     submit_files = files
     prewash = None
-    wash_lines = total_lines
     input_lines = total_lines  # 上传的原始行数（收费口径的基准）
     if svc_code == "im":
         with SessionLocal() as session:
@@ -2122,7 +2121,6 @@ async def _wash_submit_impl(
             submit_files = prewash["apple_files"]
             # 收费按正常口径：用户上传多少行就收多少行（安卓号照样占行数，
             # 不因为只把苹果送去群洗而降档/少收）。
-            wash_lines = sum(f["lines"] for f in submit_files)
             total_lines = input_lines
             # 整份都是安卓、没送去群洗的那个文件，行数摊到第一个送群文件上：
             # 这样每个结果文件的分摊比例加起来仍然等于总行数，
@@ -2332,7 +2330,6 @@ async def _wash_submit_impl(
         return
 
     # 本地撞库的安卓先存下来：群洗结果回来以后要跟群里判定的安卓相加
-    prewash_note = ""
     if prewash:
         ok_state = await asyncio.to_thread(
             im_prewash.save_state,
@@ -2347,34 +2344,17 @@ async def _wash_submit_impl(
             f"[im-pre] {random_code} 撞库安卓 {stats['android']:,} 个，"
             f"状态{'已登记' if ok_state else '登记失败'}"
         )
-        prewash_note = (
-            "\n────────────\n"
-            f"本地撞库：苹果 <b>{stats['apple']:,}</b> 个（送群洗）"
-            f" / 安卓 <b>{stats['android']:,}</b> 个（不送群）\n"
-            "收费按你上传的原始行数算（局部撞库不降价）。\n"
-            "群洗结果回来后，会把「撞库安卓 + 群里判定出的安卓」"
-            "合成一份「安卓合计」发给你。"
-        )
 
-    lines_text = f"总行数：{total_lines:,} 行"
-    files_text = f"文件数：{sent_ok} 个"
-    if prewash:
-        lines_text = (
-            f"计费行数：{total_lines:,} 行（上传原始行数，安卓号也算）\n"
-            f"送群洗：{wash_lines:,} 行（苹果号）"
-        )
-        files_text = f"送群文件：{sent_ok} 个（本批共上传 {len(files)} 个）"
-
+    # 文案保持原样（用户要求别在提交成功的消息里加撞库解释）
     await _edit_or_answer(
         cq,
         f"✅ <b>已提交洗数据</b>\n\n"
-        f"{files_text}\n"
-        f"{lines_text}\n"
+        f"文件数：{sent_ok} 个\n"
+        f"总行数：{total_lines:,} 行\n"
         f"扣除费用：¥{cost:.4f} 元\n"
         f"剩余余额：¥{balance - cost:.4f} 元\n\n"
         "────────────\n"
-        "正在处理中，完成后会自动把结果发回给你，请稍等。"
-        + prewash_note,
+        "正在处理中，完成后会自动把结果发回给你，请稍等。",
         reply_markup=menu_kb(user_id),
     )
     # 单独发一条进度消息，后面每回传一个文件就编辑它

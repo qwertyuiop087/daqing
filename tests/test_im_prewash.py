@@ -393,9 +393,11 @@ class TestImPrewashSubmitFlow(unittest.TestCase):
         self.assertEqual(state["pre"], 2)
 
         shown = " ".join(cq.message.edits)
-        self.assertIn("本地撞库", shown)
-        self.assertIn("计费行数：4 行", shown)
-        self.assertIn("送群洗：2 行", shown)
+        # 提交成功的消息保持原样（不加撞库解释），但行数按上传原始行数算
+        self.assertIn("已提交洗数据", shown)
+        self.assertIn("文件数：1 个", shown)
+        self.assertIn("总行数：4 行", shown)
+        self.assertNotIn("本地撞库", shown)
 
     def test_android_reply_triggers_android_total(self):
         """群里回安卓那份：不转发原文件，只发合成后的「安卓合计」。"""
@@ -536,7 +538,7 @@ class TestImPrewashEdgeCases(unittest.TestCase):
         self.assertEqual(sum(bill), 5, bill)
         self.assertEqual(impre.load_state(code)["pre"], 3)  # 1 + 2
         shown = " ".join(cq.message.edits)
-        self.assertIn("计费行数：5 行", shown)
+        self.assertIn("总行数：5 行", shown)
 
     def test_duplicate_android_result_not_counted_twice(self):
         """同一个结果文件被重复投递：号码只记一次，安卓合计不会翻倍。"""
