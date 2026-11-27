@@ -46,9 +46,12 @@ def beijing_str(dt: datetime) -> str:
 
 
 if settings.DATABASE_URL:
-    engine = create_engine(
-        normalize_db_url(settings.DATABASE_URL), pool_pre_ping=True
-    )
+    _db_url = normalize_db_url(settings.DATABASE_URL)
+    # SQLite 不允许连接跨线程使用：洗数据预撞库、撞库入库这类重活都在
+    # asyncio.to_thread 里跑，连接会被线程池复用，必须关掉这个检查
+    # （Postgres 等其它库不需要，传空字典也不影响）
+    _connect_args = {"check_same_thread": False} if _db_url.startswith("sqlite") else {}
+    engine = create_engine(_db_url, pool_pre_ping=True, connect_args=_connect_args)
 else:
     # 本地调试用的 SQLite：check_same_thread 需放在 connect_args 中
     engine = create_engine(
@@ -290,6 +293,39 @@ def lookup_phone_profiles(session, phones) -> dict[str, str]:
         ):
             result[row.phone] = row.kind
     return result
+
+
+def count_phone_profiles(session) -> dict:
+    """撞库号码库统计：{'total': 总数, 'apple': 苹果数, 'android': 安卓数}。"""
+    total = int(
+        session.scalar(select(func.count()).select_from(PhoneProfile)) or 0
+    )
+    apple = int(
+        session.scalar(
+            select(func.count())
+            .select_from(PhoneProfile)
+            .where(PhoneProfile.kind == "苹果")
+        )
+        or 0
+    )
+    return {"total": total, "apple": apple, "android": max(0, total - apple)}
+
+
+def clear_phone_profiles(session, kind: str = "") -> int:
+    """清空撞库号码库，返回删除条数（不可恢复）。
+
+    kind 为空删除全部；传「苹果」/「安卓」只删那一类。
+    """
+    one_kind = kind in ("苹果", "安卓")
+    count_stmt = select(func.count()).select_from(PhoneProfile)
+    delete_stmt = sa_delete(PhoneProfile)
+    if one_kind:
+        count_stmt = count_stmt.where(PhoneProfile.kind == kind)
+        delete_stmt = delete_stmt.where(PhoneProfile.kind == kind)
+    removed = int(session.scalar(count_stmt) or 0)
+    session.execute(delete_stmt)
+    session.commit()
+    return removed
 
 
 class DropRecord(Base):
@@ -1012,9 +1048,13 @@ def get_washed_breakdown(session) -> tuple[int, int]:
     # 结果投递去重键跟着任务一起过期，避免 wash_sent:* 无限增长
     if expired_codes:
         for row in session.scalars(
-            select(AppConfig).where(AppConfig.key.like("wash_sent:%"))
+            select(AppConfig).where(
+                AppConfig.key.like("wash_sent:%") | AppConfig.key.like("im_prewash_sent:%")
+            )
         ):
-            code = (row.key or "").split(":", 1)[-1]
+            key = row.key or ""
+            # 两种格式都要认：旧 wash_sent:{码}（JSON 列表）、新 wash_sent:{码}:{摘要}
+            code = key.split(":", 2)[1] if key.count(":") >= 1 else ""
             if code in expired_codes:
                 stale_rows.append(row)
     for row in stale_rows:

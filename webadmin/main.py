@@ -167,6 +167,7 @@ def get_config_api(request: Request):
             "wash_prices": _wash_prices_to_text(database.get_wash_prices(session)),
             "wash_price_floor": database.get_wash_price_floor(session),
             "wash_quota": database.get_wash_quota(session),
+            "im_prewash": database.get_config(session, "im_prewash", "1") or "1",
             "usdt_rate": database.get_config(session, "usdt_rate", ""),
             "welcome_text": database.get_config(session, "welcome_text", database.DEFAULT_WELCOME_TEXT),
             "lottery_notify_template": database.get_lottery_notify_template(session),
@@ -211,6 +212,17 @@ async def save_config(key: str, request: Request):
             if not value.strip().isdigit():
                 raise HTTPException(status_code=400, detail="配额需为非负整数")
             database.set_wash_quota(session, int(value))
+        elif key == "im_prewash":
+            val = value.strip()
+            # 留空 = 恢复默认（开启），避免清空输入框时把功能静默关掉
+            if not val:
+                database.set_config(session, "im_prewash", "")
+            else:
+                database.set_config(
+                    session,
+                    "im_prewash",
+                    "1" if val in ("1", "true", "on", "是", "开") else "0",
+                )
         elif key == "usdt_rate":
             value = value.strip()
             if value:
@@ -252,6 +264,8 @@ def reset_config(key: str, request: Request):
             database.set_wash_price_floor(session, database.DEFAULT_WASH_PRICE_FLOOR)
         elif key == "wash_quota":
             database.set_wash_quota(session, 0)
+        elif key == "im_prewash":
+            database.set_config(session, "im_prewash", "")
         elif key == "usdt_rate":
             database.set_config(session, "usdt_rate", "")
         elif key == "welcome_text":

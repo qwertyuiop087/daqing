@@ -521,6 +521,11 @@ table{min-width:100%}
         <div class="row"><button onclick="save('wash_quota')">保存</button><button class="ghost" onclick="reset('wash_quota')">重置默认</button></div>
       </div>
       <div class="card">
+        <div class="card-head"><h2>苹果 iMessage 预撞库</h2><p>1 开启 / 0 关闭。开启后用户洗苹果 iMessage 时，机器人先用本地撞库库把文件拆成「苹果 / 安卓」：只有苹果号送去群里洗（按苹果行数计费），安卓号不送群；群洗结果回来后把「撞库安卓 + 群里判定的安卓」合成一份「安卓合计」发回给用户</p></div>
+        <input id="im_prewash" type="text" placeholder="1">
+        <div class="row"><button onclick="save('im_prewash')">保存</button><button class="ghost" onclick="reset('im_prewash')">重置默认</button></div>
+      </div>
+      <div class="card">
         <div class="card-head"><h2>USDT 固定汇率</h2><p>实时汇率获取失败时使用，留空则使用内置默认 6.8</p></div>
         <input id="usdt_rate" type="text" placeholder="6.8">
         <div class="row"><button onclick="save('usdt_rate')">保存</button><button class="ghost" onclick="reset('usdt_rate')">清空</button></div>
@@ -792,6 +797,7 @@ const KEY_TO_EL={
   wash_svc_prices:'wash_svc_prices',
   wash_price_floor:'wash_price_floor',
   wash_quota:'wash_quota',
+  im_prewash:'im_prewash',
   usdt_rate:'usdt_rate',
   okpay_shop_id:'okpay_shop_id',
   okpay_token:'okpay_token',

@@ -38,6 +38,7 @@ from database import (
     get_washed_total,
 )
 from states import AdminStates, WashStates
+from services import im_prewash
 from utils.dali_client import get_client
 from utils.helpers import cleanup_state, get_workdir
 from utils.keyboards import cancel_kb, menu_kb
@@ -302,6 +303,7 @@ async def _progress_tick(bot, code: str) -> None:
         # 编辑可能因为「内容没变」报错，不能让它挡住报告计时
         if finished:
             _schedule_report(bot, code)
+            _schedule_im_finalize(bot, code)
         text = (
             f"{'✅' if finished else '⏳'} <b>洗数据{'已完成' if finished else '处理中'}</b>\n\n"
             f"进度：<b>{done}/{total}</b> "
@@ -317,6 +319,104 @@ async def _progress_tick(bot, code: str) -> None:
         print(f"[wash-progress] {code} 进度 {done}/{total}")
     except Exception as e:
         print(f"[wash-progress] 刷新进度失败: {e}")
+
+
+# ---------------- 苹果 iMessage 预撞库：安卓合计 ----------------
+# 「🍎 苹果 iMessage」提交时先做本地撞库（services/im_prewash.py）：
+# 只有苹果号带随机码送去群洗，安卓号留在本地；
+# 群洗带回「洗完的安卓」，跟「撞库的安卓」相加，合成一份安卓合计发回。
+
+# 结果文件是成批陆续到的，安静几秒再合并，避免漏掉后到的安卓结果
+IM_FINALIZE_QUIET_SECONDS = 8
+
+_im_finalize_tasks: dict = {}
+
+
+async def _download_result_phones(bot, doc) -> list:
+    """把群回传的安卓结果下载下来取出号码（下载失败返回空列表）。"""
+    import tempfile
+
+    from services.file_ops import decode_bytes, read_file
+    from utils.phone_db import extract_phones
+
+    workdir = tempfile.mkdtemp(prefix="impre_")
+    try:
+        file = await bot.get_file(doc.file_id)
+        path = os.path.join(workdir, "android_result.txt")
+        await bot.download_file(file.file_path, destination=path)
+        return extract_phones(decode_bytes(read_file(path)))
+    except Exception as e:
+        print(f"[im-pre] 下载安卓结果失败：{e}")
+        return []
+    finally:
+        import shutil
+
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _schedule_im_finalize(bot, code: str) -> None:
+    """安排一次安卓合计合并：期间每来一个结果文件就重新计时。"""
+    if not im_prewash.state_exists(code):
+        return
+    old = _im_finalize_tasks.get(code)
+    if old is not None and not old.done():
+        old.cancel()
+    _im_finalize_tasks[code] = asyncio.create_task(_im_finalize_later(bot, code))
+
+
+async def _im_finalize_later(bot, code: str) -> None:
+    me = asyncio.current_task()
+    try:
+        await asyncio.sleep(IM_FINALIZE_QUIET_SECONDS)
+        await _send_im_android_total(bot, code)
+    except asyncio.CancelledError:
+        return
+    except Exception as e:
+        print(f"[im-pre] 安卓合计发送失败 {code}: {e}")
+    finally:
+        if _im_finalize_tasks.get(code) is me:
+            _im_finalize_tasks.pop(code, None)
+
+
+async def _send_im_android_total(bot, code: str) -> None:
+    """把「撞库安卓 + 洗完安卓」合成一份发给用户（每个任务只发一次）。"""
+    if im_prewash.already_sent(code):
+        return
+    state = im_prewash.load_state(code)
+    if not state:
+        return
+    # 结果还没回传齐就等最后一份：否则合计会少掉后到的安卓结果
+    try:
+        with SessionLocal() as session:
+            total = int(get_config(session, f"wash_prog_total:{code}", "0") or 0)
+        if total > 0 and _progress_count(code) < total:
+            print(f"[im-pre] {code} 结果还没回传齐（{_progress_count(code)}/{total}），安卓合计先不发")
+            return
+    except Exception:
+        pass
+
+    merged = await asyncio.to_thread(im_prewash.build_merged, code)
+    if not merged:
+        return
+    user_id = int(state.get("user") or 0)
+    if not user_id:
+        return
+
+    caption = (
+        "🧮 <b>安卓合计</b>（本地撞库 + 群洗判定）\n"
+        f"撞库安卓：{merged['pre']:,} 个\n"
+        f"群洗出的安卓：{merged['post']:,} 个\n"
+        f"合计：{merged['total']:,} 个\n\n"
+        "这份是安卓号汇总，和上面的苹果结果分开存放。"
+    )
+    ok = await _send_document_retry(
+        bot, user_id, FSInputFile(merged["path"], filename=merged["name"]), caption
+    )
+    if not ok:
+        await _alert_undelivered(bot, merged["name"], code, user_id)
+        return
+    im_prewash.mark_sent(code)
+    print(f"[im-pre] 已发安卓合计 {merged['name']} → {user_id}")
 
 
 # ---------------- 洗数据结果统计报告 ----------------
@@ -1274,11 +1374,27 @@ async def wash_submit_service(cq: CallbackQuery, state: FSMContext, bot: Bot):
             prices = get_wash_prices(session)
             estimate = calc_wash_cost(session, total_lines)
             balance = get_wash_balance(session, cq.from_user.id)
+            # 开关关了 / 本地库没有苹果号时不会预分，提示语要跟着变，
+            # 否则用户会以为机器人一定会先撞库
+            prewash_ready = im_prewash.enabled(session) and im_prewash.library_size(session) > 0
         await cq.answer()
         kb = InlineKeyboardBuilder()
         kb.button(text="✅ 确认扣费并提交", callback_data="wash:svcok:im")
         kb.button(text="❌ 取消", callback_data="cancel")
         kb.adjust(1)
+        prewash_note = (
+            "────────────\n"
+            "提交时先用本地撞库库预分：\n"
+            "· 苹果号 → 带随机码送群洗\n"
+            "· 安卓号 → 不送群，洗完以后跟群里判定的安卓合成"
+            "「安卓合计」发回\n\n"
+            "收费照常：按你上传的原始行数算（只有整批都不是苹果号时"
+            "才不收费）。\n\n"
+            if prewash_ready
+            else "────────────\n"
+            "本批整份文件直接送群洗，洗完把结果发回。\n"
+            "收费按上传的原始行数算。\n\n"
+        )
         await _edit_or_answer(
             cq,
             "🍎 <b>苹果 iMessage</b>\n\n"
@@ -1288,7 +1404,8 @@ async def wash_submit_service(cq: CallbackQuery, state: FSMContext, bot: Bot):
             f"本批：<b>{total_lines:,}</b> 行（{len(files)} 个文件）\n"
             f"预计费用：<b>¥{estimate:.4f}</b>\n"
             f"当前余额：¥{balance:.4f}\n\n"
-            "确认后才会扣费并转发。",
+            + prewash_note
+            + "确认后才会扣费并转发。",
             reply_markup=kb.as_markup(),
         )
         return
@@ -1587,7 +1704,8 @@ async def imdb_import_cmd(message: Message, state: FSMContext):
         "每行示例：\n"
         "<code>13800138000</code>\n"
         "<code>13800138000,蓝号</code>\n"
-        "<code>+8613900139000</code>",
+        "<code>+8613900139000</code>\n\n"
+        "要清空整个库：<code>/清空库</code>（管理面板里也有「🗑 清空撞库库」按钮）",
         reply_markup=cancel_kb(),
     )
 
@@ -1603,6 +1721,96 @@ async def imdb_import_done(message: Message, state: FSMContext):
     await message.answer(
         f"✅ 已结束导入。\n\n库内号码总数：<b>{_profile_total():,}</b>",
         parse_mode="HTML",
+    )
+
+
+# ---------------- 清空撞库号码库 ----------------
+
+def _imdb_clear_page() -> tuple:
+    """号码库清空确认页（命令和管理面板共用同一份文案）。"""
+    from database import count_phone_profiles
+
+    with SessionLocal() as session:
+        stat = count_phone_profiles(session)
+    if stat["total"] <= 0:
+        return ("📭 撞库号码库现在是空的，不用清。", None)
+    kb = InlineKeyboardBuilder()
+    kb.button(
+        text=f"🗑 确认清空 {stat['total']:,} 条", callback_data="wash:imdb_clear:yes"
+    )
+    kb.button(text="❌ 取消", callback_data="cancel")
+    kb.adjust(1)
+    text = (
+        "⚠️ <b>清空撞库号码库</b>\n\n"
+        f"当前库内：<b>{stat['total']:,}</b> 条"
+        f"（苹果 {stat['apple']:,} / 安卓 {stat['android']:,}）\n\n"
+        "清空以后：\n"
+        "· 「🍎 苹果iM撞库」查不到任何号，会全部按安卓出结果；\n"
+        "· 「🍎 苹果 iMessage」洗数据会暂时跳过本地预撞库，整份文件送群洗。\n\n"
+        "<b>删除不可恢复</b>，确认请点下面的按钮（要重新导入用 /导入库）。"
+    )
+    return (text, kb.as_markup())
+
+
+async def _show_imdb_clear(target, cq: CallbackQuery | None = None) -> None:
+    """把清空确认页发出去：命令走 message.answer，面板按钮走回调查询。"""
+    text, markup = _imdb_clear_page()
+    if cq is not None:
+        if markup is None:
+            # 库是空的：弹一句就行，别把管理面板那条消息改成提示
+            await cq.answer("撞库号码库现在是空的，不用清。", show_alert=True)
+            return
+        await _edit_or_answer(cq, text, reply_markup=markup)
+        return
+    await target.answer(text, reply_markup=markup)
+
+
+@router.message(Command("清空库", "imdb_clear", "清空撞库库"))
+async def imdb_clear_cmd(message: Message, state: FSMContext):
+    """管理员：清空撞库号码库（走二次确认，不可恢复）。"""
+    from utils.roles import is_admin
+
+    if not is_admin(message.from_user.id):
+        await message.answer(
+            "⚠️ 这个命令只有管理员能用。\n"
+            f"你的 Telegram ID：<code>{message.from_user.id}</code>",
+            parse_mode="HTML",
+        )
+        return
+    # 正在导入文件时先结束那个会话，否则后续发的文件还会被当成导入
+    if await state.get_state() == AdminStates.imdb_import.state:
+        await cleanup_state(state)
+    await _show_imdb_clear(message)
+
+
+@router.callback_query(F.data == "admin:imdb_clear")
+async def imdb_clear_from_panel(cq: CallbackQuery):
+    from utils.roles import is_admin
+
+    if not is_admin(cq.from_user.id):
+        await cq.answer("没有权限。", show_alert=True)
+        return
+    await _show_imdb_clear(cq.message, cq)
+
+
+@router.callback_query(F.data == "wash:imdb_clear:yes")
+async def imdb_clear_confirm(cq: CallbackQuery):
+    """真正执行清空：只有点了确认按钮才会删。"""
+    from database import clear_phone_profiles
+    from utils.roles import is_admin
+
+    if not is_admin(cq.from_user.id):
+        await cq.answer("没有权限。", show_alert=True)
+        return
+    with SessionLocal() as session:
+        removed = clear_phone_profiles(session)
+    print(f"[imdb] 管理员 {cq.from_user.id} 清空号码库，删除 {removed:,} 条")
+    await cq.answer(f"已清空 {removed:,} 条")
+    await cq.message.edit_text(
+        f"🗑 <b>撞库号码库已清空</b>\n\n共删除 <b>{removed:,}</b> 条。\n\n"
+        "现在「苹果iM撞库」没有可查的号；苹果 iMessage 洗数据会自动跳过"
+        "本地预撞库（整份送群洗）。\n"
+        "要重新导入用 /导入库。",
     )
 
 
@@ -1700,6 +1908,39 @@ async def _do_import_file(message, bot, tip, doc, path, size_mb) -> None:
     )
 
 
+async def _send_android_only(
+    cq: CallbackQuery, state: FSMContext, bot: Bot, prewash: dict
+) -> None:
+    """整批都是安卓号：不送群洗（不产生费用），把撞库安卓直接发回给用户。"""
+    user_id = cq.from_user.id
+    sent = 0
+    for f in prewash.get("android_files") or []:
+        try:
+            await bot.send_document(
+                chat_id=cq.message.chat.id,
+                document=FSInputFile(f["path"], filename=f["name"]),
+                caption=f"撞库安卓 {f['lines']:,} 个",
+            )
+            sent += 1
+        except Exception as e:
+            print(f"[im-pre] 发送安卓文件失败 {f['name']}：{e}")
+
+    stats = prewash["stats"]
+    warn = "" if sent else "\n⚠️ 文件发送失败，请重新提交；如果一直失败请联系管理员。"
+    await _edit_or_answer(
+        cq,
+        "🍎 <b>苹果 iMessage</b>\n\n"
+        f"输入号码：{stats['phones']:,} 个（{stats['files']} 个文件）\n"
+        "本地撞库命中苹果：<b>0</b> 个\n"
+        f"安卓：{stats['android']:,} 个\n\n"
+        "这批文件里没有苹果号，不用送洗数据群，<b>本次没有扣费</b>。\n"
+        f"安卓结果已按「原名_安卓_数量」发出（{sent} 个文件）。"
+        + warn,
+        reply_markup=menu_kb(user_id),
+    )
+    await cleanup_state(state)
+
+
 async def _wash_submit_impl(
     cq: CallbackQuery,
     state: FSMContext,
@@ -1717,6 +1958,18 @@ async def _wash_submit_impl(
             show_alert=True,
         )
         return
+
+    # 防重复提交：预撞库要读一遍文件，提交比原来慢，
+    # 用户连点两次「确认扣费」会重复扣两次钱 —— 这段时间内直接拒掉。
+    # 用时间戳而不是布尔标记：万一中途抛异常也不会把人永久锁住。
+    import time as _time
+
+    if _time.time() < float(data.get("submitting_until") or 0):
+        await cq.answer(
+            "这批文件正在提交中，请稍等，不要重复点击。", show_alert=True
+        )
+        return
+    await state.update_data(submitting_until=_time.time() + 120)
 
     await _stop_upload_render(cq.from_user.id)
 
@@ -1756,6 +2009,79 @@ async def _wash_submit_impl(
         )
         await cleanup_state(state)
         return
+
+    # 🍎 苹果 iMessage：先本地撞库拆分 —— 只把苹果号送去群洗，安卓号留在本地。
+    # 安卓号送群洗是白花钱（本地库已经能判掉），而且用户要的苹果结果
+    # 跟安卓结果本来就分开发；撞库安卓等群洗回来后一起合成「安卓合计」。
+    submit_files = files
+    prewash = None
+    wash_lines = total_lines
+    input_lines = total_lines  # 上传的原始行数（收费口径的基准）
+    if svc_code == "im":
+        with SessionLocal() as session:
+            do_prewash = im_prewash.enabled(session)
+            # 本地库一个苹果号都没有时不能预分：那样会把整批都判成安卓、
+            # 免费放走而且根本送不进群。这种情况退回「整批送群洗」的老流程。
+            if do_prewash and im_prewash.library_size(session) <= 0:
+                do_prewash = False
+                print("[im-pre] 本地库没有苹果号，本次跳过预撞库（整批送群洗）")
+        if do_prewash:
+            workdir = (await state.get_data()).get("workdir") or get_workdir(
+                cq.from_user.id
+            )
+            try:
+                prewash = await asyncio.to_thread(
+                    im_prewash.split_files, files, workdir
+                )
+            except Exception as e:
+                print(f"[im-pre] 本地撞库预处理失败：{e}")
+                await _edit_or_answer(
+                    cq,
+                    "⚠️ 本地撞库预处理失败："
+                    + html.escape(str(e)[:120])
+                    + "\n\n没有扣费，请重新点「🚀 开始洗数据」再试一次。",
+                    reply_markup=menu_kb(cq.from_user.id),
+                )
+                await cleanup_state(state)
+                return
+
+            stats = prewash["stats"]
+            print(
+                f"[im-pre] 拆分完成：输入 {stats['phones']:,} · "
+                f"苹果 {stats['apple']:,} · 安卓 {stats['android']:,}"
+            )
+            if not prewash["apple_files"]:
+                if stats["phones"] <= 0:
+                    # 空文件/全是认不出的内容：没什么可洗的，别让用户以为在排队
+                    await _edit_or_answer(
+                        cq,
+                        "⚠️ 这批文件里没有识别到手机号，没有可洗的数据。\n\n"
+                        "请确认文件是一行一个手机号（可用「提取手机号」先整理一遍），"
+                        "再重新上传。",
+                        reply_markup=menu_kb(cq.from_user.id),
+                    )
+                    await cleanup_state(state)
+                    return
+                # 一个苹果号都没有：不用送群洗，也就没有费用
+                await _send_android_only(cq, state, bot, prewash)
+                return
+            submit_files = prewash["apple_files"]
+            # 收费按正常口径：用户上传多少行就收多少行（安卓号照样占行数，
+            # 不因为只把苹果送去群洗而降档/少收）。
+            wash_lines = sum(f["lines"] for f in submit_files)
+            total_lines = input_lines
+            # 整份都是安卓、没送去群洗的那个文件，行数摊到第一个送群文件上：
+            # 这样每个结果文件的分摊比例加起来仍然等于总行数，
+            # 钱一分不少、配额也按真实行数累计。
+            submitted_bill = sum(
+                int(f.get("bill_lines") or f["lines"]) for f in submit_files
+            )
+            gap = max(0, total_lines - submitted_bill)
+            if gap and submit_files:
+                first = submit_files[0]
+                first["bill_lines"] = int(
+                    first.get("bill_lines") or first["lines"]
+                ) + gap
 
     # 检查累计洗数据配额
     with SessionLocal() as session:
@@ -1813,9 +2139,13 @@ async def _wash_submit_impl(
         from database import set_config
         import time
         # 批量任务：把每个文件的行数存进 pending（第 5 段 JSON），
-        # 回传时按“收到几个结果结算几份”，一直没回传的部分超时按比例退款
+        # 回传时按“收到几个结果结算几份”，一直没回传的部分超时按比例退款。
+        # 行数用计费口径（bill_lines = 源文件原始行数），退款才跟收费对得上。
         batch_map = json.dumps(
-            {"files": [f["lines"] for f in files], "charged": 0.0},
+            {
+                "files": [int(f.get("bill_lines") or f["lines"]) for f in submit_files],
+                "charged": 0.0,
+            },
             ensure_ascii=False,
         )
         set_config(
@@ -1868,7 +2198,7 @@ async def _wash_submit_impl(
     send_error = None
     sent_names = []
     try:
-        for f in files:
+        for f in submit_files:
             new_filename = f"{random_code}_{f['name']}"
             await bot.send_document(
                 chat_id=int(alt_user_id),
@@ -1903,10 +2233,10 @@ async def _wash_submit_impl(
             await cleanup_state(state)
             return
         # 部分已发出：只退回未发出部分的费用，已发出的继续等回传结算
-        sent_files = files[:sent_ok]
-        unsent_files = files[sent_ok:]
-        sent_total = sum(f["lines"] for f in sent_files)
-        unsent_lines = sum(f["lines"] for f in unsent_files)
+        sent_files = submit_files[:sent_ok]
+        unsent_files = submit_files[sent_ok:]
+        sent_total = sum(int(f.get("bill_lines") or f["lines"]) for f in sent_files)
+        unsent_lines = sum(int(f.get("bill_lines") or f["lines"]) for f in unsent_files)
         refund = round(cost * unsent_lines / total_lines, 4)
         remain_cost = round(cost - refund, 4)
         with SessionLocal() as session:
@@ -1923,7 +2253,12 @@ async def _wash_submit_impl(
             )
             # 更新 pending：行数与费用都改为「已发出部分」，结算按已发出文件的比例分摊
             remain_map = json.dumps(
-                {"files": [f["lines"] for f in sent_files], "charged": 0.0},
+                {
+                    "files": [
+                        int(f.get("bill_lines") or f["lines"]) for f in sent_files
+                    ],
+                    "charged": 0.0,
+                },
                 ensure_ascii=False,
             )
             set_config(
@@ -1942,15 +2277,50 @@ async def _wash_submit_impl(
         await cleanup_state(state)
         return
 
+    # 本地撞库的安卓先存下来：群洗结果回来以后要跟群里判定的安卓相加
+    prewash_note = ""
+    if prewash:
+        ok_state = await asyncio.to_thread(
+            im_prewash.save_state,
+            random_code,
+            user_id,
+            im_prewash.file_stem(files[0].get("name") or "result"),
+            prewash["android"],
+            sent_ok,
+        )
+        stats = prewash["stats"]
+        print(
+            f"[im-pre] {random_code} 撞库安卓 {stats['android']:,} 个，"
+            f"状态{'已登记' if ok_state else '登记失败'}"
+        )
+        prewash_note = (
+            "\n────────────\n"
+            f"本地撞库：苹果 <b>{stats['apple']:,}</b> 个（送群洗）"
+            f" / 安卓 <b>{stats['android']:,}</b> 个（不送群）\n"
+            "收费按你上传的原始行数算（局部撞库不降价）。\n"
+            "群洗结果回来后，会把「撞库安卓 + 群里判定出的安卓」"
+            "合成一份「安卓合计」发给你。"
+        )
+
+    lines_text = f"总行数：{total_lines:,} 行"
+    files_text = f"文件数：{sent_ok} 个"
+    if prewash:
+        lines_text = (
+            f"计费行数：{total_lines:,} 行（上传原始行数，安卓号也算）\n"
+            f"送群洗：{wash_lines:,} 行（苹果号）"
+        )
+        files_text = f"送群文件：{sent_ok} 个（本批共上传 {len(files)} 个）"
+
     await _edit_or_answer(
         cq,
         f"✅ <b>已提交洗数据</b>\n\n"
-        f"文件数：{sent_ok} 个\n"
-        f"总行数：{total_lines:,} 行\n"
+        f"{files_text}\n"
+        f"{lines_text}\n"
         f"扣除费用：¥{cost:.4f} 元\n"
         f"剩余余额：¥{balance - cost:.4f} 元\n\n"
         "────────────\n"
-        "正在处理中，完成后会自动把结果发回给你，请稍等。",
+        "正在处理中，完成后会自动把结果发回给你，请稍等。"
+        + prewash_note,
         reply_markup=menu_kb(user_id),
     )
     # 单独发一条进度消息，后面每回传一个文件就编辑它
@@ -1962,11 +2332,12 @@ async def _wash_submit_impl(
     except Exception as e:
         print(f"[wash-progress] 发送进度消息失败: {e}")
     # 记录本批输入数据，全部回传后用来出统计报告
+    # 号码数按「真正送去群洗」的算，报告描述的是这次洗了什么
     _report_begin(
         random_code,
         sent_ok,
         total_lines,
-        sum(int(f.get("phones") or 0) for f in files),
+        sum(int(f.get("phones") or 0) for f in submit_files),
         cost,
         svc_label,
     )
@@ -2068,6 +2439,20 @@ async def alt_user_reply(message: Message, bot: Bot):
             return
         _remember_delivery(random_code, dkey)
         _remember_delivery(random_code, dkey_size)
+
+        # ⓪ 苹果 iMessage 预撞库任务：群里判定出来的「安卓」结果单独收集，
+        #    最后跟本地撞库的安卓相加发回。放在投递去重之后再记，
+        #    同一个结果文件被重复投递时不会把号码记两遍（这里不做去重）。
+        if im_prewash.is_android_result(filename, caption):
+            try:
+                phones = await _download_result_phones(bot, doc)
+                if phones:
+                    added = im_prewash.add_washed_android(random_code, phones)
+                    print(f"[im-pre] {random_code} 洗完安卓 +{added} 个（{filename}）")
+                    _schedule_im_finalize(bot, random_code)
+            except Exception as e:
+                print(f"[im-pre] 记录洗完安卓失败（不影响交付）：{e}")
+
         _progress_mark(random_code, dkey)
         await _progress_tick(bot, random_code)
         print(f"✅ 已把洗好的文件发给用户 {user_id}")

@@ -229,6 +229,7 @@ def admin_kb(is_super: bool = False) -> InlineKeyboardMarkup:
         ("绑定洗数据群", "admin:bind_wash"),
         ("洗数据定价", "admin:edit_wash_prices"),
         ("洗数据用量统计", "admin:wash_usage"),
+        ("🗑 清空撞库库", "admin:imdb_clear"),
         ("洗数据账单", "admin:wash_orders"),
         ("洗数据加/扣余额", "admin:wash_balance"),
         ("小号登录", "admin:alt_login"),

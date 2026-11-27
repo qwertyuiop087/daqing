@@ -92,7 +92,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-20.1"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-27.1"))
 
 
 settings = Settings()
@@ -128,6 +128,17 @@ WASH_SERVICE_LABELS: dict[str, str] = {code: label for code, label, _p in WASH_S
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-11-27.1",
+        [
+            "苹果 iMessage 洗数据新增「预撞库」：提交时先用本地库拆成苹果/安卓，只把苹果号送群洗（省钱、出结果快）",
+            "洗完以后自动把「撞库安卓 + 群里判定出的安卓」相加，合成一份「安卓合计」发回给用户",
+            "整批都是安卓号时不送群洗、不扣费，直接发出撞库安卓结果",
+            "收费照常按上传的原始行数算（只把苹果送群洗不降价，安卓号也占行数）；后台可关（洗数据设置 → 苹果 iMessage 预撞库）",
+            "加固：本地库没有苹果号时自动跳过预撞库（防整批被误判成安卓白洗）、提交中重复点击不会重复扣费",
+            "新增「清空撞库号码库」：管理员发 /清空库（或管理面板「🗑 清空撞库库」），二次确认后一键清空，清空前显示库内条数",
+        ],
+    ),
     (
         "2026-11-20.1",
         [

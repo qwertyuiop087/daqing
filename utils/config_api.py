@@ -152,6 +152,8 @@ def get_all_config(session) -> dict:
         ),
         "wash_price_floor": database.get_wash_price_floor(session),
         "wash_quota": database.get_wash_quota(session),
+        # 苹果 iMessage 预撞库总开关：1 开启（只把苹果号送群洗）/ 0 关闭（整批送群洗）
+        "im_prewash": database.get_config(session, "im_prewash", "1") or "1",
         "usdt_rate": database.get_config(session, "usdt_rate", ""),
         "welcome_text": database.get_config(session, "welcome_text", database.DEFAULT_WELCOME_TEXT),
         "lottery_notify_template": database.get_lottery_notify_template(session),
@@ -204,6 +206,15 @@ def save_config(session, key: str, value: str) -> None:
         if not value.strip().isdigit():
             raise ValueError("配额需为非负整数")
         database.set_wash_quota(session, int(value))
+    elif key == "im_prewash":
+        val = value.strip()
+        # 留空 = 恢复默认（开启），避免管理员清空输入框时把功能静默关掉
+        if not val:
+            database.set_config(session, "im_prewash", "")
+        else:
+            database.set_config(
+                session, "im_prewash", "1" if val in ("1", "true", "on", "是", "开") else "0"
+            )
     elif key == "usdt_rate":
         value = value.strip()
         if value:
@@ -266,6 +277,8 @@ def reset_config(session, key: str) -> None:
         database.set_wash_price_floor(session, database.DEFAULT_WASH_PRICE_FLOOR)
     elif key == "wash_quota":
         database.set_wash_quota(session, 0)
+    elif key == "im_prewash":
+        database.set_config(session, "im_prewash", "")
     elif key == "usdt_rate":
         database.set_config(session, "usdt_rate", "")
     elif key == "welcome_text":
