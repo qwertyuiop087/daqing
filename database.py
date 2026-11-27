@@ -315,16 +315,43 @@ def clear_phone_profiles(session, kind: str = "") -> int:
     """清空撞库号码库，返回删除条数（不可恢复）。
 
     kind 为空删除全部；传「苹果」/「安卓」只删那一类。
+
+    库里有几千万行时，一条 DELETE 会长时间锁表、写爆 WAL，甚至把请求拖到
+    超时（表现就是「点了按钮没反应」）。所以：
+    - Postgres（线上）：整表清空直接 TRUNCATE，几千万行也是秒级；
+    - SQLite / 只删某一类：分批删（每批 2 万行提交一次），不会一个长事务卡死。
     """
     one_kind = kind in ("苹果", "安卓")
     count_stmt = select(func.count()).select_from(PhoneProfile)
-    delete_stmt = sa_delete(PhoneProfile)
     if one_kind:
         count_stmt = count_stmt.where(PhoneProfile.kind == kind)
-        delete_stmt = delete_stmt.where(PhoneProfile.kind == kind)
     removed = int(session.scalar(count_stmt) or 0)
-    session.execute(delete_stmt)
-    session.commit()
+    if removed <= 0:
+        return 0
+
+    try:
+        dialect = session.bind.dialect.name if session.bind is not None else ""
+    except Exception:
+        dialect = ""
+
+    if dialect == "postgresql" and not one_kind:
+        # TRUNCATE 不逐行写 WAL，3000 万行也是秒级
+        from sqlalchemy import text as sa_text
+
+        session.execute(sa_text("TRUNCATE TABLE phone_profiles"))
+        session.commit()
+        return removed
+
+    batch = 20000
+    while True:
+        stmt = select(PhoneProfile.phone).limit(batch)
+        if one_kind:
+            stmt = stmt.where(PhoneProfile.kind == kind)
+        keys = list(session.scalars(stmt))
+        if not keys:
+            break
+        session.execute(sa_delete(PhoneProfile).where(PhoneProfile.phone.in_(keys)))
+        session.commit()
     return removed
 
 

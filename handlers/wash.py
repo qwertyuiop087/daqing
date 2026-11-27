@@ -1726,12 +1726,20 @@ async def imdb_import_done(message: Message, state: FSMContext):
 
 # ---------------- 清空撞库号码库 ----------------
 
-def _imdb_clear_page() -> tuple:
+# 清空是重活（几千万行），同一时间只允许跑一个，避免连点触发两次 TRUNCATE
+_IMDB_CLEAR_RUNNING = False
+
+
+async def _imdb_clear_page() -> tuple:
     """号码库清空确认页（命令和管理面板共用同一份文案）。"""
     from database import count_phone_profiles
 
-    with SessionLocal() as session:
-        stat = count_phone_profiles(session)
+    def _read() -> dict:
+        with SessionLocal() as session:
+            return count_phone_profiles(session)
+
+    # 3000 万行 count(*) 也要几秒，丢线程池，别把整个机器人卡住
+    stat = await asyncio.to_thread(_read)
     if stat["total"] <= 0:
         return ("📭 撞库号码库现在是空的，不用清。", None)
     kb = InlineKeyboardBuilder()
@@ -1754,7 +1762,7 @@ def _imdb_clear_page() -> tuple:
 
 async def _show_imdb_clear(target, cq: CallbackQuery | None = None) -> None:
     """把清空确认页发出去：命令走 message.answer，面板按钮走回调查询。"""
-    text, markup = _imdb_clear_page()
+    text, markup = await _imdb_clear_page()
     if cq is not None:
         if markup is None:
             # 库是空的：弹一句就行，别把管理面板那条消息改成提示
@@ -1793,20 +1801,67 @@ async def imdb_clear_from_panel(cq: CallbackQuery):
     await _show_imdb_clear(cq.message, cq)
 
 
+async def _safe_cq_edit(cq: CallbackQuery, text: str) -> None:
+    """编辑消息失败（消息被删/内容没变）不能影响主流程，也不能静默失败。"""
+    try:
+        await cq.message.edit_text(text)
+    except Exception as e:
+        print(f"[imdb] 编辑消息失败：{e}")
+
+
 @router.callback_query(F.data == "wash:imdb_clear:yes")
 async def imdb_clear_confirm(cq: CallbackQuery):
-    """真正执行清空：只有点了确认按钮才会删。"""
+    """真正执行清空：只有点了确认按钮才会删。
+
+    注意顺序：先 answer + 先把消息改成「正在清空」，再丢线程池去删。
+    3000 万行删除可能要几十秒，如果先删再应答，Telegram 那边早就转圈超时、
+    删除又卡住事件循环，用户看到的就是「点了没反应」。
+    """
+    global _IMDB_CLEAR_RUNNING
+
     from database import clear_phone_profiles
     from utils.roles import is_admin
 
     if not is_admin(cq.from_user.id):
         await cq.answer("没有权限。", show_alert=True)
         return
-    with SessionLocal() as session:
-        removed = clear_phone_profiles(session)
+    if _IMDB_CLEAR_RUNNING:
+        await cq.answer("已经在清空中，请稍等…", show_alert=True)
+        return
+
+    # ① 立刻应答，转圈马上停
+    await cq.answer("正在清空…")
+    _IMDB_CLEAR_RUNNING = True
+    # ② 先把消息改成进行中：就算后面删很久，用户也知道在动
+    await _safe_cq_edit(
+        cq,
+        "⏳ <b>正在清空撞库号码库…</b>\n\n"
+        "库大的话要几十秒（几千万行走 TRUNCATE，一般是秒级），请勿重复点击。",
+    )
+
+    def _run_clear() -> int:
+        # 线程里自己开 session：SQLAlchemy 的 session 不能跨线程共用
+        with SessionLocal() as session:
+            return clear_phone_profiles(session)
+
+    try:
+        removed = await asyncio.to_thread(_run_clear)
+    except Exception as e:
+        print(f"[imdb] 清空号码库失败：{e}")
+        await _safe_cq_edit(
+            cq,
+            "⚠️ <b>清空失败</b>\n\n"
+            f"错误：<code>{html.escape(str(e)[:200])}</code>\n\n"
+            "数据没有被清掉（或只清了一部分），可以再点一次；"
+            "一直失败把这条错误发给技术。",
+        )
+        return
+    finally:
+        _IMDB_CLEAR_RUNNING = False
+
     print(f"[imdb] 管理员 {cq.from_user.id} 清空号码库，删除 {removed:,} 条")
-    await cq.answer(f"已清空 {removed:,} 条")
-    await cq.message.edit_text(
+    await _safe_cq_edit(
+        cq,
         f"🗑 <b>撞库号码库已清空</b>\n\n共删除 <b>{removed:,}</b> 条。\n\n"
         "现在「苹果iM撞库」没有可查的号；苹果 iMessage 洗数据会自动跳过"
         "本地预撞库（整份送群洗）。\n"

@@ -118,11 +118,36 @@ class TestImdbClear(unittest.TestCase):
         )
 
     def test_confirm_deletes_everything(self):
+        """点确认后立刻应答（转圈马上停），删完把结果写回消息。"""
         cq = FakeCq(ADMIN_ID)
         asyncio.run(wash_module.imdb_clear_confirm(cq))
         self.assertEqual(_total(), 0)
-        self.assertIn("已清空 3 条", " ".join(cq.answers))
-        self.assertIn("已清空", " ".join(cq.message.edits))
+        # 先应答，别等删除跑完再应答（否则 Telegram 早超时、看起来像没反应）
+        self.assertTrue(cq.answers and "正在清空" in cq.answers[0], cq.answers)
+        shown = " ".join(cq.message.edits)
+        self.assertIn("正在清空", shown)
+        self.assertIn("已清空", shown)
+        self.assertIn("3", shown)
+
+    def test_confirm_reports_error_instead_of_silence(self):
+        """删除抛异常时必须把错误写到消息里，不能静默。"""
+        import database
+
+        real = database.clear_phone_profiles
+
+        def boom(session, kind=""):
+            raise RuntimeError("db gone")
+
+        database.clear_phone_profiles = boom
+        try:
+            cq = FakeCq(ADMIN_ID)
+            asyncio.run(wash_module.imdb_clear_confirm(cq))
+        finally:
+            database.clear_phone_profiles = real
+        shown = " ".join(cq.message.edits)
+        self.assertIn("清空失败", shown)
+        self.assertIn("db gone", shown)
+        self.assertEqual(_total(), 3, "失败时不能假装删掉了")
 
     def test_normal_user_cannot_clear(self):
         cq = FakeCq(NORMAL_ID)
