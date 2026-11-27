@@ -1724,6 +1724,105 @@ async def imdb_import_done(message: Message, state: FSMContext):
     )
 
 
+# ---------------- 预撞库一键开关 ----------------
+
+def _im_prewash_status_text(on: bool) -> str:
+    body = (
+        "当前状态：<b>🟢 已开启</b>\n\n"
+        "苹果 iMessage 洗数据会先用本地库拆成苹果 / 安卓：\n"
+        "· 苹果号 → 送群洗，洗完发回\n"
+        "· 安卓号 → 不送群，跟群里判定的安卓合成一份"
+        " <code>原名_安卓_N.txt</code> 发回"
+        if on
+        else "当前状态：<b>🔴 已关闭</b>\n\n"
+        "苹果 iMessage 洗数据会把整份文件直接送群洗，"
+        "不预分苹果/安卓，也不会有单独的安卓结果。"
+    )
+    return f"⚙️ <b>苹果 iM 预撞库</b>\n\n{body}\n\n点下面的按钮一键切换。"
+
+
+def _im_prewash_switch_kb() -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text="🟢 开启预撞库", callback_data="wash:im_prewash:on")
+    b.button(text="🔴 关闭预撞库", callback_data="wash:im_prewash:off")
+    b.adjust(2)
+    return b.as_markup()
+
+
+async def _show_im_prewash_switch(target, cq=None) -> None:
+    with SessionLocal() as session:
+        on = im_prewash.enabled(session)
+    text = _im_prewash_status_text(on)
+    markup = _im_prewash_switch_kb()
+    if cq is not None:
+        await _edit_or_answer(cq, text, reply_markup=markup)
+        return
+    await target.answer(text, reply_markup=markup)
+
+
+@router.message(Command("预撞库", "im_prewash"))
+async def im_prewash_switch_cmd(message: Message):
+    """管理员：查看/切换预撞库开关（也可以点管理面板那个按钮）。"""
+    from utils.roles import is_admin
+
+    if not is_admin(message.from_user.id):
+        await message.answer(
+            "⚠️ 这个命令只有管理员能用。\n"
+            f"你的 Telegram ID：<code>{message.from_user.id}</code>",
+            parse_mode="HTML",
+        )
+        return
+    await _show_im_prewash_switch(message)
+
+
+async def _set_im_prewash(on: bool) -> None:
+    from database import set_config
+
+    with SessionLocal() as session:
+        set_config(session, "im_prewash", "1" if on else "0")
+
+
+@router.callback_query(F.data.in_({"wash:im_prewash:on", "wash:im_prewash:off"}))
+async def im_prewash_switch_callback(cq: CallbackQuery):
+    from utils.roles import is_admin
+
+    if not is_admin(cq.from_user.id):
+        await cq.answer("没有权限。", show_alert=True)
+        return
+    on = (cq.data or "").endswith(":on")
+    await _set_im_prewash(on)
+    print(f"[im-pre] 管理员 {cq.from_user.id} {'开启' if on else '关闭'}预撞库")
+    await cq.answer("已开启预撞库" if on else "已关闭预撞库")
+    await _edit_or_answer(
+        cq, _im_prewash_status_text(on), reply_markup=_im_prewash_switch_kb()
+    )
+
+
+@router.callback_query(F.data == "admin:im_prewash")
+async def im_prewash_toggle_from_panel(cq: CallbackQuery):
+    """管理面板那个「🟢 预撞库：开」按钮：点一下直接切换，并刷新按钮文字。"""
+    from utils.keyboards import admin_kb
+    from utils.roles import is_admin, is_super_admin
+
+    if not is_admin(cq.from_user.id):
+        await cq.answer("没有权限。", show_alert=True)
+        return
+    with SessionLocal() as session:
+        now_on = im_prewash.enabled(session)
+    await _set_im_prewash(not now_on)
+    print(
+        f"[im-pre] 管理员 {cq.from_user.id} 面板切换预撞库："
+        f"{'开→关' if now_on else '关→开'}"
+    )
+    await cq.answer("🔴 已关闭预撞库" if now_on else "🟢 已开启预撞库")
+    try:
+        await cq.message.edit_reply_markup(
+            reply_markup=admin_kb(is_super=is_super_admin(cq.from_user.id))
+        )
+    except Exception as e:
+        print(f"[im-pre] 刷新管理面板按钮失败：{e}")
+
+
 # ---------------- 清空撞库号码库 ----------------
 
 # 清空是重活（几千万行），同一时间只允许跑一个，避免连点触发两次 TRUNCATE

@@ -212,8 +212,23 @@ def buy_prompt_kb() -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+def im_prewash_state() -> bool:
+    """「苹果 iM 预撞库」当前是开还是关（管理面板按钮上要显示）。"""
+    try:
+        from database import SessionLocal
+        from services import im_prewash
+
+        with SessionLocal() as session:
+            return im_prewash.enabled(session)
+    except Exception:
+        return True
+
+
 def admin_kb(is_super: bool = False) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
+    switch_text = (
+        "🟢 预撞库：开" if im_prewash_state() else "🔴 预撞库：关"
+    )
     items = [
         ("生成卡密", "admin:gen"),
         ("删除卡密", "admin:delcard"),
@@ -229,6 +244,7 @@ def admin_kb(is_super: bool = False) -> InlineKeyboardMarkup:
         ("绑定洗数据群", "admin:bind_wash"),
         ("洗数据定价", "admin:edit_wash_prices"),
         ("洗数据用量统计", "admin:wash_usage"),
+        (switch_text, "admin:im_prewash"),
         ("🗑 清空撞库库", "admin:imdb_clear"),
         ("洗数据账单", "admin:wash_orders"),
         ("洗数据加/扣余额", "admin:wash_balance"),

@@ -94,7 +94,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-27.6"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-27.7"))
 
 
 settings = Settings()
@@ -130,6 +130,13 @@ WASH_SERVICE_LABELS: dict[str, str] = {code: label for code, label, _p in WASH_S
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-11-27.7",
+        [
+            "新增预撞库一键开关：管理面板按钮「🟢 预撞库：开 / 🔴 预撞库：关」点一下直接切换，按钮文字跟着变",
+            "新增 /预撞库 命令（别名 /im_prewash）：看当前状态 + 「开启 / 关闭」两个按钮，不用进网页后台",
+        ],
+    ),
     (
         "2026-11-27.6",
         [
