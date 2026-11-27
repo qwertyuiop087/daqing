@@ -232,7 +232,7 @@ class TestImPrewashMerge(unittest.TestCase):
         self.assertEqual(merged["post"], 2)
         # 不去重：13900000004 两边都有就出现两次
         self.assertEqual(merged["total"], 5)
-        self.assertEqual(merged["name"], "名单_安卓合计_5.txt")
+        self.assertEqual(merged["name"], "名单_安卓_5.txt")
         with open(merged["path"], encoding="utf-8") as fh:
             self.assertEqual(
                 fh.read().split(),
@@ -416,9 +416,13 @@ class TestImPrewashSubmitFlow(unittest.TestCase):
 
         to_user = [d for d in bot.docs if d[0] == USER_ID]
         self.assertTrue(to_user, "用户一个文件都没收到")
-        # 只有安卓那份时：原文件不发，只发「安卓合计」
+        # 只有安卓那份时：原文件不发，只发合成的「安卓」
         self.assertEqual(len(to_user), 1, to_user)
-        self.assertIn("安卓合计_3", to_user[0][1])  # 撞库 2 + 群里判定的 1 = 3
+        self.assertIn("_安卓_3.txt", to_user[0][1])  # 撞库 2 + 群里判定的 1 = 3
+        # 说明文字必须和普通结果一样，客户看不出内部做过撞库/合并
+        self.assertIn("你的洗数据已完成", to_user[0][2] or "")
+        self.assertNotIn("撞库", to_user[0][2] or "")
+        self.assertNotIn("合计", to_user[0][2] or "")
         self.assertTrue(impre.already_sent(code))
 
     def test_apple_reply_is_forwarded_as_is(self):
@@ -434,14 +438,14 @@ class TestImPrewashSubmitFlow(unittest.TestCase):
 
         asyncio.run(flow())
         to_user = [d for d in bot.docs if d[0] == USER_ID]
-        apple_docs = [d for d in to_user if "安卓合计" not in d[1]]
-        merged = [d for d in to_user if "安卓合计" in d[1]]
+        apple_docs = [d for d in to_user if "_安卓_" not in d[1]]
+        merged = [d for d in to_user if "_安卓_" in d[1]]
         # 洗好的苹果原样发回（没被吞）
         self.assertEqual(len(apple_docs), 1, to_user)
         self.assertIn("洗数据已完成", apple_docs[0][2] or "")
         # 群里一个安卓都没判出来时，撞库那份安卓也要单独发回
         self.assertEqual(len(merged), 1, to_user)
-        self.assertIn("安卓合计_2", merged[0][1])
+        self.assertIn("_安卓_2.txt", merged[0][1])
 
     def test_toggle_off_sends_whole_file(self):
         """后台关掉预撞库（im_prewash=0）时退回老流程：整批文件直接送群洗。"""
@@ -553,10 +557,10 @@ class TestImPrewashEdgeCases(unittest.TestCase):
             await asyncio.sleep(0.2)
 
         asyncio.run(flow())
-        merged = [d for d in bot.docs if d[0] == USER_ID and "安卓合计" in d[1]]
+        merged = [d for d in bot.docs if d[0] == USER_ID and "_安卓_" in d[1]]
         self.assertTrue(merged, bot.docs)
         # 撞库 2 + 洗完 1 = 3（重复投递不再加一次）
-        self.assertIn("安卓合计_3", merged[0][1])
+        self.assertIn("_安卓_3.txt", merged[0][1])
 
     def test_empty_batch_tells_user_no_phones(self):
         """空文件/认不出号码：明确提示，不扣费、不送群。"""

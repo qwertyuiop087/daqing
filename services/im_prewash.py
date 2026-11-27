@@ -380,7 +380,8 @@ def build_merged(code: str) -> dict | None:
     stem = file_stem(meta.get("stem") or "result")
     return {
         "path": path,
-        "name": f"{stem}_安卓合计_{len(merged)}.txt",
+        # 文件名不写「合计」：客户看到的就应该是「原名_安卓_N.txt」这种普通结果名
+        "name": f"{stem}_安卓_{len(merged)}.txt",
         "pre": len(pre),
         "post": len(post),
         "total": len(merged),

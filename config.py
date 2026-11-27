@@ -94,7 +94,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-27.5"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-27.6"))
 
 
 settings = Settings()
@@ -130,6 +130,13 @@ WASH_SERVICE_LABELS: dict[str, str] = {code: label for code, label, _p in WASH_S
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-11-27.6",
+        [
+            "安卓那份只发一次、只叫「原名_安卓_N.txt」：不再有「安卓合计」字样，也不再重复发群里那份原文件",
+            "安卓那份的说明文字改成跟普通结果一样（你的洗数据已完成！原文件：…），客户看不出内部撞库/合并",
+        ],
+    ),
     (
         "2026-11-27.5",
         [

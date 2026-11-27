@@ -402,12 +402,10 @@ async def _send_im_android_total(bot, code: str) -> None:
     if not user_id:
         return
 
+    # 说明文字跟普通结果一模一样：客户只知道自己收到了「安卓」这份结果，
+    # 看不出机器人内部做过撞库/合并（撞库数、群洗数只打在服务器日志里）。
     caption = (
-        "🧮 <b>安卓合计</b>（本地撞库 + 群洗判定）\n"
-        f"撞库安卓：{merged['pre']:,} 个\n"
-        f"群洗出的安卓：{merged['post']:,} 个\n"
-        f"合计：{merged['total']:,} 个\n\n"
-        "这份是安卓号汇总，和上面的苹果结果分开存放。"
+        f"✅ 你的洗数据已完成！\n原文件：{html.escape(merged['name'])}"
     )
     ok = await _send_document_retry(
         bot, user_id, FSInputFile(merged["path"], filename=merged["name"]), caption
@@ -416,7 +414,10 @@ async def _send_im_android_total(bot, code: str) -> None:
         await _alert_undelivered(bot, merged["name"], code, user_id)
         return
     im_prewash.mark_sent(code)
-    print(f"[im-pre] 已发安卓合计 {merged['name']} → {user_id}")
+    print(
+        f"[im-pre] 已发安卓 {merged['name']} → {user_id}"
+        f"（撞库 {merged['pre']:,} + 群洗 {merged['post']:,} = {merged['total']:,}）"
+    )
 
 
 # ---------------- 洗数据结果统计报告 ----------------
