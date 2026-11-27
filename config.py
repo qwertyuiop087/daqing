@@ -94,7 +94,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-27.2"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-27.3"))
 
 
 settings = Settings()
@@ -130,6 +130,12 @@ WASH_SERVICE_LABELS: dict[str, str] = {code: label for code, label, _p in WASH_S
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-11-27.3",
+        [
+            "苹果 iMessage 确认页去掉「提交时先用本地撞库库预分 / 收费照常」那段说明，只留价格、行数、费用、余额",
+        ],
+    ),
     (
         "2026-11-27.2",
         [

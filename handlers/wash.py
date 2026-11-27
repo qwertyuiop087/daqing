@@ -1390,27 +1390,11 @@ async def wash_submit_service(cq: CallbackQuery, state: FSMContext, bot: Bot):
             prices = get_wash_prices(session)
             estimate = calc_wash_cost(session, total_lines)
             balance = get_wash_balance(session, cq.from_user.id)
-            # 开关关了 / 本地库没有苹果号时不会预分，提示语要跟着变，
-            # 否则用户会以为机器人一定会先撞库
-            prewash_ready = im_prewash.enabled(session) and im_prewash.library_size(session) > 0
         await cq.answer()
         kb = InlineKeyboardBuilder()
         kb.button(text="✅ 确认扣费并提交", callback_data="wash:svcok:im")
         kb.button(text="❌ 取消", callback_data="cancel")
         kb.adjust(1)
-        prewash_note = (
-            "────────────\n"
-            "提交时先用本地撞库库预分：\n"
-            "· 苹果号 → 带随机码送群洗\n"
-            "· 安卓号 → 不送群，洗完以后跟群里判定的安卓合成"
-            "「安卓合计」发回\n\n"
-            "收费照常：按你上传的原始行数算（只有整批都不是苹果号时"
-            "才不收费）。\n\n"
-            if prewash_ready
-            else "────────────\n"
-            "本批整份文件直接送群洗，洗完把结果发回。\n"
-            "收费按上传的原始行数算。\n\n"
-        )
         await _edit_or_answer(
             cq,
             "🍎 <b>苹果 iMessage</b>\n\n"
@@ -1420,8 +1404,7 @@ async def wash_submit_service(cq: CallbackQuery, state: FSMContext, bot: Bot):
             f"本批：<b>{total_lines:,}</b> 行（{len(files)} 个文件）\n"
             f"预计费用：<b>¥{estimate:.4f}</b>\n"
             f"当前余额：¥{balance:.4f}\n\n"
-            + prewash_note
-            + "确认后才会扣费并转发。",
+            "确认后才会扣费并转发。",
             reply_markup=kb.as_markup(),
         )
         return
