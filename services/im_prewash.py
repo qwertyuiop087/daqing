@@ -299,6 +299,18 @@ def state_exists(code: str) -> bool:
     return load_state(code) is not None
 
 
+def ensure_state(code: str, user_id: int, stem: str, submitted: int = 0) -> bool:
+    """给「没走预撞库」的任务补一份合并状态。
+
+    什么时候会用到：本地库没有苹果号 / 用户关掉了预撞库 / 老任务 ——
+    这时机器人没登记过撞库安卓，但群里照样会判出安卓，
+    那份也得发回给用户，所以第一次见到安卓结果时把状态补上（撞库那份为空）。
+    """
+    if state_exists(code):
+        return True
+    return save_state(code, user_id, stem or "result", [], submitted)
+
+
 def add_washed_android(code: str, phones: list) -> int:
     """登记群里判定出来的安卓（洗完的安卓），返回本次条数。
 
@@ -408,18 +420,54 @@ def mark_sent(code: str) -> None:
 
 # ---------------- 结果文件识别 ----------------
 
-def is_android_result(filename: str, caption: str = "") -> bool:
-    """判断群回传的这个文件是不是「安卓」结果。
+# 群里的结果名常把两种数量都写进去：`原名-苹果-285-安卓-205.txt`。
+# 这时候光看名字分不出这份文件装的是哪一半，得靠行数对号入座。
+_COUNT_PAIR_RE = re.compile(r"苹果[^0-9]{0,4}(\d+).{0,8}?安卓[^0-9]{0,4}(\d+)")
+_SINGLE_ANDROID_COUNT_RE = re.compile(r"安卓[^0-9]{0,4}(\d+)")
 
-    群里的结果文件名形如 `xxxx-苹果-927-安卓-29.txt`：
-    类型标记在倒数第二段、最后一段是数量。只看这个位置，
-    用户自己的文件名里带「安卓」时不会把苹果结果误判成安卓结果。
 
-    倒数第二段必须是「安卓 / 安卓机 / android」这种纯标签，
-    「安卓对照表」之类的描述段不算（那是名字，不是分类）。
+def count_pair(filename: str) -> tuple[int, int] | None:
+    """从结果文件名里取 (苹果数, 安卓数)；名字里没同时写两个数量就返回 None。"""
+    tail = _PREFIX_RE.sub("", str(filename or ""))
+    m = _COUNT_PAIR_RE.search(tail)
+    if not m:
+        return None
+    try:
+        return int(m.group(1)), int(m.group(2))
+    except Exception:
+        return None
+
+
+def needs_count_probe(filename: str) -> bool:
+    """名字里同时写了苹果数和安卓数时，必须下载数一下行数才知道是哪一半。"""
+    return count_pair(filename) is not None
+
+
+def is_android_result(
+    filename: str, caption: str = "", line_count: int | None = None
+) -> bool:
+    """判断群回传的这个文件是不是「安卓」那份。
+
+    判断顺序：
+    1. 名字里同时有「苹果-N-安卓-M」且给了行数：按行数对号入座
+       （行数≈M 就是安卓那份，≈N 就是苹果那份）。这一步最关键 ——
+       群把两种数量都写进文件名时，光看最后一段会把苹果那份也判成安卓；
+    2. 否则看最后一段的标签：`…-安卓-29.txt` 这种倒数第二段是
+       「安卓 / 安卓机 / android」才算（「安卓对照表」这种描述段不算）；
+    3. caption 里有「安卓」也算；
+    4. 兜底：整个名字以「安卓」结尾。
     """
     tail = _PREFIX_RE.sub("", str(filename or ""))
     stem = os.path.splitext(tail)[0]
+
+    pair = count_pair(filename)
+    if pair and line_count:
+        apple_n, android_n = pair
+        if android_n == line_count and android_n != apple_n:
+            return True
+        if apple_n == line_count and android_n != apple_n:
+            return False
+
     fields = [f for f in _FIELD_SPLIT_RE.split(stem) if f]
     if len(fields) >= 2 and _DIGITS_RE.match(fields[-1]):
         label = fields[-2].strip().lower()
@@ -431,3 +479,12 @@ def is_android_result(filename: str, caption: str = "") -> bool:
         return True
     # 兜底：整个名字就是「xxx_安卓」
     return stem.strip().endswith("安卓")
+
+
+def clean_stem(filename: str) -> str:
+    """去掉结果名里的 `_苹果_285-安卓_205` 尾巴，只留用户原本的名字。"""
+    tail = _PREFIX_RE.sub("", str(filename or ""))
+    stem = os.path.splitext(tail)[0]
+    stem = re.sub(r"[-_—]?\s*苹果[^0-9]{0,4}\d+(\s*[-_—]\s*安卓[^0-9]{0,4}\d+)?$", "", stem)
+    stem = re.sub(r"[-_—]?\s*安卓[^0-9]{0,4}\d+$", "", stem)
+    return file_stem(stem or tail)

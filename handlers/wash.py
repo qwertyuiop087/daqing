@@ -2469,6 +2469,16 @@ async def alt_user_reply(message: Message, bot: Bot):
         # 提取原文件名：只取文件名本身，不要把消息 caption（如“蓝号(IOS/imessage/FaceTime)”）拼进去
         original_name = _washed_original_name(filename)
 
+        # 这份是「洗好的苹果」还是「群里判定不是苹果的」？
+        # 群里的结果名常把两种数量都写上（原名-苹果-285-安卓-205.txt），
+        # 这时光看名字分不出装的是哪一半，得先数行数，再按 285/205 对号入座。
+        phones = None
+        line_count = None
+        if im_prewash.needs_count_probe(filename):
+            phones = await _download_result_phones(bot, doc)
+            line_count = len(phones) or None
+        is_android = im_prewash.is_android_result(filename, caption, line_count)
+
         # ① 先把文件交给用户：这是用户唯一关心的结果。
         #    记账放在后面，记账只要出一点问题都不能影响交付（以前是先记账后发送，
         #    记账一抛异常就整条 update 被全局错误处理器吞掉，用户永远收不到文件）。
@@ -2481,35 +2491,51 @@ async def alt_user_reply(message: Message, bot: Bot):
         ):
             print(f"⚠️ 这个结果文件已经发过了，跳过重复投递: {filename}")
             return
-        ok = await _send_document_retry(
-            bot,
-            user_id,
-            doc.file_id,
-            f"✅ 你的洗数据已完成！\n原文件：{html.escape(original_name)}",
-        )
-        if not ok:
-            # 没送到用户手上：不记账（不扣钱），通知管理员人工补发
-            await _alert_undelivered(bot, filename, random_code, user_id)
-            return
-        _remember_delivery(random_code, dkey)
-        _remember_delivery(random_code, dkey_size)
 
-        # ⓪ 苹果 iMessage 预撞库任务：群里判定出来的「安卓」结果单独收集，
-        #    最后跟本地撞库的安卓相加发回。放在投递去重之后再记，
-        #    同一个结果文件被重复投递时不会把号码记两遍（这里不做去重）。
-        if im_prewash.is_android_result(filename, caption):
-            try:
+        if is_android:
+            # 安卓那份不发原文件：用户要的是「撞库安卓 + 洗完安卓」合成的一份。
+            # 号码在这里记下来，等结果齐了统一发「安卓合计」。
+            if phones is None:
                 phones = await _download_result_phones(bot, doc)
-                if phones:
+            if phones:
+                try:
+                    if not im_prewash.state_exists(random_code):
+                        # 没走预撞库（本地库没苹果号/开关关了）：也照样把这份发回去
+                        im_prewash.ensure_state(
+                            random_code,
+                            user_id,
+                            im_prewash.clean_stem(original_name),
+                        )
                     added = im_prewash.add_washed_android(random_code, phones)
                     print(f"[im-pre] {random_code} 洗完安卓 +{added} 个（{filename}）")
                     _schedule_im_finalize(bot, random_code)
-            except Exception as e:
-                print(f"[im-pre] 记录洗完安卓失败（不影响交付）：{e}")
+                except Exception as e:
+                    print(f"[im-pre] 记录洗完安卓失败：{e}")
+            else:
+                # 下载失败（拿不到号码）时宁可退回老行为，也不能把用户的数据丢了
+                print(f"[im-pre] 安卓结果下载失败，改为原样转发: {filename}")
+                is_android = False
+
+        if not is_android:
+            ok = await _send_document_retry(
+                bot,
+                user_id,
+                doc.file_id,
+                f"✅ 你的洗数据已完成！\n原文件：{html.escape(original_name)}",
+            )
+            if not ok:
+                # 没送到用户手上：不记账（不扣钱），通知管理员人工补发
+                await _alert_undelivered(bot, filename, random_code, user_id)
+                return
+            print(f"✅ 已把洗好的苹果发给用户 {user_id}")
+        else:
+            print(f"🧮 安卓那份先收着，等结果齐了合成「安卓合计」再发: {filename}")
+
+        _remember_delivery(random_code, dkey)
+        _remember_delivery(random_code, dkey_size)
 
         _progress_mark(random_code, dkey)
         await _progress_tick(bot, random_code)
-        print(f"✅ 已把洗好的文件发给用户 {user_id}")
 
         # ② 送达后再记账（费用提交时已预扣，这里只记流水，不重复扣费）
         try:

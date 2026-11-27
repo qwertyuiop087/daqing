@@ -280,6 +280,24 @@ class TestAndroidResultDetection(unittest.TestCase):
         self.assertTrue(impre.is_android_result("FBhFN4E_名单_安卓_12.txt"))
         self.assertFalse(impre.is_android_result("FBhFN4E_名单_苹果_12.txt"))
 
+    def test_combined_name_is_classified_by_line_count(self):
+        """名字里同时写了两种数量时，按行数对号入座，别把苹果那份当成安卓。"""
+        name = "FBhFN4E_提取手机号_苹果_285-安卓_205.txt"
+        self.assertTrue(impre.needs_count_probe(name))
+        self.assertEqual(impre.count_pair(name), (285, 205))
+        # 205 行 = 安卓那份；285 行 = 苹果那份
+        self.assertTrue(impre.is_android_result(name, line_count=205))
+        self.assertFalse(impre.is_android_result(name, line_count=285))
+        # 数不出来时退回看标签（最后一段是安卓），老行为不变
+        self.assertTrue(impre.is_android_result(name, line_count=None))
+
+    def test_clean_stem_drops_count_tail(self):
+        """合成「安卓合计」的文件名要回到用户原本的名字。"""
+        self.assertEqual(
+            impre.clean_stem("FBhFN4E_提取手机号_苹果_285-安卓_205.txt"), "提取手机号"
+        )
+        self.assertEqual(impre.clean_stem("FBhFN4E_提取手机号_苹果_285.txt"), "提取手机号")
+
     def test_user_filename_with_android_word_is_not_misread(self):
         """用户自己的文件名里带「安卓」时，苹果结果不能被误判成安卓结果。"""
         self.assertFalse(impre.is_android_result("Ab12Cd3_3月安卓名单_苹果_500.txt"))
@@ -380,6 +398,7 @@ class TestImPrewashSubmitFlow(unittest.TestCase):
         self.assertIn("送群洗：2 行", shown)
 
     def test_android_reply_triggers_android_total(self):
+        """群里回安卓那份：不转发原文件，只发合成后的「安卓合计」。"""
         bot = FakeBot()
         self._submit(bot)
         code = _latest_code()
@@ -395,11 +414,32 @@ class TestImPrewashSubmitFlow(unittest.TestCase):
 
         to_user = [d for d in bot.docs if d[0] == USER_ID]
         self.assertTrue(to_user, "用户一个文件都没收到")
-        merged = [d for d in to_user if "安卓合计" in d[1]]
-        self.assertTrue(merged, to_user)
-        # 撞库 2 个 + 群里判定的 1 个 = 3 个
-        self.assertIn("安卓合计_3", merged[0][1])
+        # 只有安卓那份时：原文件不发，只发「安卓合计」
+        self.assertEqual(len(to_user), 1, to_user)
+        self.assertIn("安卓合计_3", to_user[0][1])  # 撞库 2 + 群里判定的 1 = 3
         self.assertTrue(impre.already_sent(code))
+
+    def test_apple_reply_is_forwarded_as_is(self):
+        """群里回苹果那份：原样转发给用户，不合成、不吞。"""
+        bot = FakeBot()
+        self._submit(bot)
+        code = _latest_code()
+
+        async def flow():
+            msg = FakeMessage(code=code, name="客户名单-苹果-2-苹果-2.txt")
+            await wash_module.alt_user_reply(msg, bot)
+            await asyncio.sleep(0.2)
+
+        asyncio.run(flow())
+        to_user = [d for d in bot.docs if d[0] == USER_ID]
+        apple_docs = [d for d in to_user if "安卓合计" not in d[1]]
+        merged = [d for d in to_user if "安卓合计" in d[1]]
+        # 洗好的苹果原样发回（没被吞）
+        self.assertEqual(len(apple_docs), 1, to_user)
+        self.assertIn("洗数据已完成", apple_docs[0][2] or "")
+        # 群里一个安卓都没判出来时，撞库那份安卓也要单独发回
+        self.assertEqual(len(merged), 1, to_user)
+        self.assertIn("安卓合计_2", merged[0][1])
 
     def test_toggle_off_sends_whole_file(self):
         """后台关掉预撞库（im_prewash=0）时退回老流程：整批文件直接送群洗。"""

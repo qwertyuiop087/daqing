@@ -94,7 +94,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-27.3"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-27.4"))
 
 
 settings = Settings()
@@ -130,6 +130,15 @@ WASH_SERVICE_LABELS: dict[str, str] = {code: label for code, label, _p in WASH_S
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-11-27.4",
+        [
+            "苹果 iMessage 洗数据只发两份：洗好的苹果 + 「安卓合计」（撞库安卓 + 群里判定不是苹果的）",
+            "群里那份安卓原文件不再单独转发（以前会多发一份，等于给用户两个安卓文件）",
+            "结果名同时写「苹果-285-安卓-205」时按行数分辨是哪一半，不会把苹果那份误判成安卓",
+            "没走预撞库的任务也会兜底：见到群里安卓结果就合成合计发回；下载失败则退回原样转发，不丢数据",
+        ],
+    ),
     (
         "2026-11-27.3",
         [
