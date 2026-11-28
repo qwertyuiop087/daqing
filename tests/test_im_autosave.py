@@ -79,12 +79,55 @@ class TestAutosave(unittest.TestCase):
         with SessionLocal() as session:
             bulk_add_phone_profiles(session, [("13900000001", "安卓")])
         with SessionLocal() as session:
-            bulk_upsert_phone_profiles(
+            stat = bulk_upsert_phone_profiles(
                 session, [("13900000001", "苹果"), ("13900000002", "苹果")]
             )
         kinds = _kinds(["13900000001", "13900000002"])
         self.assertEqual(kinds["13900000001"], "苹果", "老号应该从安卓改成苹果")
         self.assertEqual(kinds["13900000002"], "苹果", "新号应该插进去")
+        self.assertEqual(stat["new"], 1)
+        self.assertEqual(stat["updated"], 1)
+        self.assertEqual(stat["skipped"], 0)
+        self.assertEqual(stat["total"], 2)
+
+    def test_import_dedups_batch_and_existing_rows(self):
+        """入库要先去重：批内重复只算一次，库里已有的不再写。"""
+        with SessionLocal() as session:
+            bulk_add_phone_profiles(
+                session, [("13900000001", "苹果"), ("13900000002", "苹果")]
+            )
+        with SessionLocal() as session:
+            stat = bulk_upsert_phone_profiles(
+                session,
+                [
+                    ("13900000001", "苹果"),   # 库里已有，跳过
+                    ("13900000002", "苹果"),   # 库里已有，跳过
+                    ("13900000003", "苹果"),   # 新号
+                    ("13900000003", "苹果"),   # 批内重复，只算一次
+                    ("13900000004", "苹果"),   # 新号
+                ],
+            )
+        self.assertEqual(stat["total"], 4, "批内重复要去重")
+        self.assertEqual(stat["new"], 2)
+        self.assertEqual(stat["skipped"], 2)
+        with SessionLocal() as session:
+            from sqlalchemy import func, select
+
+            from database import PhoneProfile
+
+            total = int(session.scalar(select(func.count()).select_from(PhoneProfile)) or 0)
+        self.assertEqual(total, 4, "库里不该出现重复行")
+
+    def test_reimport_is_idempotent(self):
+        """同一批洗好的苹果重复入库：第二次全是「已存在跳过」，不新增。"""
+        with SessionLocal() as session:
+            first = bulk_upsert_phone_profiles(session, [(p, "苹果") for p in NEW_PHONES])
+        with SessionLocal() as session:
+            second = bulk_upsert_phone_profiles(session, [(p, "苹果") for p in NEW_PHONES])
+        self.assertEqual(first["new"], 2)
+        self.assertEqual(second["new"], 0)
+        self.assertEqual(second["updated"], 0)
+        self.assertEqual(second["skipped"], 2)
 
     def test_apple_result_is_saved(self):
         _set_meta("🍎 苹果 iMessage")

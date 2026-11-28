@@ -422,8 +422,8 @@ async def _send_im_android_total(bot, code: str) -> None:
 
 # ---------------- 洗好的苹果自动入库 ----------------
 
-def _save_apple_library(pairs: list) -> int:
-    """线程里跑：批量 upsert 到本地号码库（新号插入、老号改类型）。"""
+def _save_apple_library(pairs: list) -> dict:
+    """线程里跑：批量入库（内部会批内去重、按需新增/改正、已存在的跳过）。"""
     from database import SessionLocal, bulk_upsert_phone_profiles
 
     with SessionLocal() as session:
@@ -437,6 +437,9 @@ async def _remember_washed_apples(bot, doc, code: str, phones: list | None = Non
     本地撞库直接命中（预撞库能命中、群洗就少花钱）。
     只认「苹果 iMessage」的任务 —— 支付宝/微信那些洗出来的也是手机号，
     但那是别家业务的结果，不能当苹果号入库。
+
+    入库时**先去重**：这批里的重复号只算一次；库里已经是苹果的直接跳过、
+    不重写也不刷新时间（同一个号洗多少遍，库里也只有一行）。
     """
     with SessionLocal() as session:
         meta_raw = get_config(session, f"wash_meta:{code}", "")
@@ -457,8 +460,12 @@ async def _remember_washed_apples(bot, doc, code: str, phones: list | None = Non
         return
     pairs = [(p, "苹果") for p in dict.fromkeys(phones) if p]
     try:
-        written = await asyncio.to_thread(_save_apple_library, pairs)
-        print(f"[im-lib] {code} 洗好的苹果入库 {written:,} 个（去重后 {len(pairs):,}）")
+        stat = await asyncio.to_thread(_save_apple_library, pairs)
+        print(
+            f"[im-lib] {code} 洗好的苹果入库：去重后 {stat['total']:,} 个，"
+            f"新增 {stat['new']:,} / 改正 {stat['updated']:,} / "
+            f"已在库里跳过 {stat['skipped']:,}"
+        )
     except Exception as e:
         print(f"[im-lib] 苹果入库失败（不影响交付）：{e}")
 

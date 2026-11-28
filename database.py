@@ -282,20 +282,53 @@ def bulk_add_phone_profiles(session, pairs, chunk: int = 5000) -> int:
     return written
 
 
-def bulk_upsert_phone_profiles(session, pairs, chunk: int = 5000) -> int:
-    """批量写入 (号码, 类型)：新号插入，老号**改类型**（苹果↔安卓）。
+def bulk_upsert_phone_profiles(session, pairs, chunk: int = 5000) -> dict:
+    """批量写入 (号码, 类型)，**先去重再写**。
 
-    洗数据回传里群里判定成苹果的号，就是最准的撞库数据；它可能早就以
-    「安卓」存在库里，所以这里必须 DO UPDATE 而不是 DO NOTHING。
-    返回提交行数。
+    规则（洗完的苹果自动入库用）：
+    · 这批里重复的号码只算一次；
+    · 库里没有的 → 新增；
+    · 库里已有但类型不同（安卓→苹果）→ 改正；
+    · 库里已有且就是苹果 → 直接跳过，不写、不刷新时间（省 IO，也不产生重复）。
+
+    返回 {"new": 新增, "updated": 改正, "skipped": 已存在跳过, "total": 去重后总数}。
     """
-    from sqlalchemy import insert
+    # ① 批内去重：同一号码只留一次（后出现的类型优先）
+    want: dict[str, str] = {}
+    for p, k in pairs:
+        if p and k in ("苹果", "安卓"):
+            want[p] = k
+    if not want:
+        return {"new": 0, "updated": 0, "skipped": 0, "total": 0}
 
-    items = [
-        {"phone": p, "kind": k} for p, k in pairs if p and k in ("苹果", "安卓")
-    ]
-    if not items:
-        return 0
+    # ② 查库里已有什么，分成「新增 / 改正 / 跳过」
+    existing: dict[str, str] = {}
+    phones = list(want)
+    for i in range(0, len(phones), 500):
+        part = phones[i : i + 500]
+        for row in session.scalars(
+            select(PhoneProfile).where(PhoneProfile.phone.in_(part))
+        ):
+            existing[row.phone] = row.kind
+
+    to_insert: list[dict] = []
+    to_update: list[dict] = []
+    skipped = 0
+    for phone, kind in want.items():
+        old = existing.get(phone)
+        if old is None:
+            to_insert.append({"phone": phone, "kind": kind})
+        elif old != kind:
+            to_update.append({"phone": phone, "kind": kind})
+        else:
+            skipped += 1
+
+    result = {
+        "new": 0,
+        "updated": 0,
+        "skipped": skipped,
+        "total": len(want),
+    }
 
     dialect = ""
     try:
@@ -303,34 +336,56 @@ def bulk_upsert_phone_profiles(session, pairs, chunk: int = 5000) -> int:
     except Exception:
         dialect = ""
 
-    stmt = None
-    try:
-        if dialect == "postgresql":
-            from sqlalchemy.dialects.postgresql import insert as _ins
-        elif dialect == "sqlite":
-            from sqlalchemy.dialects.sqlite import insert as _ins
-        else:
-            _ins = None
-        if _ins is not None:
+    def _stmt(mode: str):
+        """mode=insert 只插不覆盖；mode=update 冲突时改类型。"""
+        try:
+            if dialect == "postgresql":
+                from sqlalchemy.dialects.postgresql import insert as _ins
+            elif dialect == "sqlite":
+                from sqlalchemy.dialects.sqlite import insert as _ins
+            else:
+                return None
             base = _ins(PhoneProfile)
-            stmt = base.on_conflict_do_update(
+            if mode == "insert":
+                return base.on_conflict_do_nothing(index_elements=["phone"])
+            return base.on_conflict_do_update(
                 index_elements=["phone"],
                 set_={"kind": base.excluded.kind, "updated_at": func.now()},
             )
-    except Exception:
-        stmt = None
+        except Exception:
+            return None
 
-    if stmt is None:
-        # 方言不支持 upsert：退回逐条（慢，但不丢数据）
-        added, updated = upsert_phone_profiles(session, [(i["phone"], i["kind"]) for i in items])
-        return added + updated
+    if to_insert:
+        stmt = _stmt("insert")
+        if stmt is None:
+            for item in to_insert:
+                session.add(PhoneProfile(phone=item["phone"], kind=item["kind"]))
+            session.commit()
+            result["new"] = len(to_insert)
+        else:
+            for i in range(0, len(to_insert), chunk):
+                part = to_insert[i : i + chunk]
+                session.execute(stmt.values(part))
+                session.commit()
+                result["new"] += len(part)
 
-    written = 0
-    for i in range(0, len(items), chunk):
-        session.execute(stmt.values(items[i : i + chunk]))
-        session.commit()
-        written += len(items[i : i + chunk])
-    return written
+    if to_update:
+        stmt = _stmt("update")
+        if stmt is None:
+            for item in to_update:
+                row = session.get(PhoneProfile, item["phone"])
+                if row is not None:
+                    row.kind = item["kind"]
+            session.commit()
+            result["updated"] = len(to_update)
+        else:
+            for i in range(0, len(to_update), chunk):
+                part = to_update[i : i + chunk]
+                session.execute(stmt.values(part))
+                session.commit()
+                result["updated"] += len(part)
+
+    return result
 
 
 def lookup_phone_profiles(session, phones) -> dict[str, str]:
