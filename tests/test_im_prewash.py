@@ -185,8 +185,8 @@ class TestImPrewashSplit(unittest.TestCase):
             self.assertEqual(fh.read().split(), APPLE_PHONES)
         self.assertEqual(res["android"], ANDROID_PHONES)
 
-    def test_split_keeps_repeated_phones(self):
-        """不去重：用户给多少行就洗多少行；重复号码照洗、照按行计费。"""
+    def test_split_keeps_apple_duplicates_but_dedups_android(self):
+        """苹果不去重（按行收费），安卓那份是给客户的清单，要去重。"""
         path = os.path.join(self.workdir, "重复.txt")
         _write(path, ["13800000001", "13800000001", "13900000003", "13900000003"])
 
@@ -195,9 +195,9 @@ class TestImPrewashSplit(unittest.TestCase):
         )
 
         self.assertEqual(res["stats"]["phones"], 4)
-        self.assertEqual(res["stats"]["apple"], 2)
-        self.assertEqual(res["stats"]["android"], 2)
-        self.assertEqual(res["android"], ["13900000003", "13900000003"])
+        self.assertEqual(res["stats"]["apple"], 2)      # 苹果原样保留
+        self.assertEqual(res["stats"]["android"], 1)    # 安卓去重
+        self.assertEqual(res["android"], ["13900000003"])
         with open(res["apple_files"][0]["path"], encoding="utf-8") as fh:
             self.assertEqual(fh.read().split(), ["13800000001", "13800000001"])
 
@@ -219,8 +219,8 @@ class TestImPrewashMerge(unittest.TestCase):
     def setUp(self):
         init_db()
 
-    def test_merge_adds_collision_android_and_washed_android(self):
-        """「撞库的安卓」+「洗完的安卓」直接相加（不去重，重叠的也留着）。"""
+    def test_merge_dedups_collision_and_washed_android(self):
+        """「撞库的安卓」+「洗完的安卓」合并，重复号码只留一次。"""
         code = "Mrg0001"
         impre.save_state(code, USER_ID, "名单", ANDROID_PHONES + ["13800000001"], 1)
         impre.add_washed_android(code, ["13900000004"] + WASHED_ANDROID)
@@ -230,19 +230,13 @@ class TestImPrewashMerge(unittest.TestCase):
         self.assertIsNotNone(merged)
         self.assertEqual(merged["pre"], 3)
         self.assertEqual(merged["post"], 2)
-        # 不去重：13900000004 两边都有就出现两次
-        self.assertEqual(merged["total"], 5)
-        self.assertEqual(merged["name"], "名单_安卓_5.txt")
+        # 13900000004 两边都有，只留一次
+        self.assertEqual(merged["total"], 4)
+        self.assertEqual(merged["name"], "名单_安卓_4.txt")
         with open(merged["path"], encoding="utf-8") as fh:
             self.assertEqual(
                 fh.read().split(),
-                [
-                    "13900000003",
-                    "13900000004",
-                    "13800000001",
-                    "13900000004",
-                    "13900000005",
-                ],
+                ["13900000003", "13900000004", "13800000001", "13900000005"],
             )
 
     def test_merge_without_washed_android_still_returns_collision_part(self):
