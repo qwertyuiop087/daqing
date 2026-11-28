@@ -425,6 +425,16 @@ class TestImPrewashSubmitFlow(unittest.TestCase):
         self.assertNotIn("合计", to_user[0][2] or "")
         self.assertTrue(impre.already_sent(code))
 
+    def test_report_numbers_match_uploaded_lines(self):
+        """完成报告里「提交行数」和「号码总数」必须一致，否则客户会察觉被拆过。"""
+        bot = FakeBot()
+        self._submit(bot)
+        code = _latest_code()
+        with SessionLocal() as session:
+            meta = json.loads(get_config(session, f"wash_meta:{code}", ""))
+        self.assertEqual(meta["lines"], meta["phones"], meta)
+        self.assertEqual(meta["lines"], 4)
+
     def test_apple_reply_is_forwarded_as_is(self):
         """群里回苹果那份：原样转发给用户，不合成、不吞。"""
         bot = FakeBot()
@@ -604,7 +614,7 @@ class TestImPrewashEdgeCases(unittest.TestCase):
             bulk_add_phone_profiles(session, [(p, "苹果") for p in APPLE_PHONES])
 
     def test_all_android_batch_is_free_and_not_forwarded(self):
-        """整批没苹果号：不送群、不扣费，直接把撞库安卓发回。"""
+        """整批没苹果号：不送群、不扣费，结果直接发回；话术不能漏内部机制。"""
         from database import get_wash_balance
 
         f = self._file("纯安卓.txt", ANDROID_PHONES)
@@ -616,7 +626,12 @@ class TestImPrewashEdgeCases(unittest.TestCase):
         sent = [d for d in bot.docs if d[0] == CHAT_ID]
         self.assertEqual(len(sent), 1, bot.docs)
         self.assertIn("安卓", sent[0][1])
-        self.assertIn("没有苹果号", " ".join(cq.message.edits))
+        shown = " ".join(cq.message.edits)
+        self.assertIn("没有可用的苹果号", shown)
+        # 客户不该看到「撞库 / 预分 / 送群」这些内部词
+        for word in ("撞库", "预分", "送群", "群洗"):
+            self.assertNotIn(word, shown, f"话术泄露了内部流程：{word}")
+            self.assertNotIn(word, sent[0][2] or "", f"文件说明泄露了内部流程：{word}")
         with SessionLocal() as session:
             self.assertAlmostEqual(get_wash_balance(session, USER_ID), before)
 

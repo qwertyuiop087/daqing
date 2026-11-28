@@ -2157,7 +2157,11 @@ async def _do_import_file(message, bot, tip, doc, path, size_mb) -> None:
 async def _send_android_only(
     cq: CallbackQuery, state: FSMContext, bot: Bot, prewash: dict
 ) -> None:
-    """整批都是安卓号：不送群洗（不产生费用），把撞库安卓直接发回给用户。"""
+    """整批都不是苹果号：不送群洗（不产生费用），把结果直接发回给用户。
+
+    给客户看的话术不能出现「撞库 / 预分 / 送群」这些内部词，
+    否则一眼就看出来机器人背后做了本地库比对。
+    """
     user_id = cq.from_user.id
     sent = 0
     for f in prewash.get("android_files") or []:
@@ -2165,7 +2169,7 @@ async def _send_android_only(
             await bot.send_document(
                 chat_id=cq.message.chat.id,
                 document=FSInputFile(f["path"], filename=f["name"]),
-                caption=f"撞库安卓 {f['lines']:,} 个",
+                caption=f"✅ 你的洗数据已完成！\n原文件：{f['name']}",
             )
             sent += 1
         except Exception as e:
@@ -2176,11 +2180,9 @@ async def _send_android_only(
     await _edit_or_answer(
         cq,
         "🍎 <b>苹果 iMessage</b>\n\n"
-        f"输入号码：{stats['phones']:,} 个（{stats['files']} 个文件）\n"
-        "本地撞库命中苹果：<b>0</b> 个\n"
-        f"安卓：{stats['android']:,} 个\n\n"
-        "这批文件里没有苹果号，不用送洗数据群，<b>本次没有扣费</b>。\n"
-        f"安卓结果已按「原名_安卓_数量」发出（{sent} 个文件）。"
+        f"本批共 {stats['phones']:,} 个号码，处理完成。\n"
+        "这批里没有可用的苹果号，<b>本次没有扣费</b>。\n\n"
+        f"结果已按「原名_安卓_数量」发出（{sent} 个文件）。"
         + warn,
         reply_markup=menu_kb(user_id),
     )
@@ -2282,9 +2284,8 @@ async def _wash_submit_impl(
                 print(f"[im-pre] 本地撞库预处理失败：{e}")
                 await _edit_or_answer(
                     cq,
-                    "⚠️ 本地撞库预处理失败："
-                    + html.escape(str(e)[:120])
-                    + "\n\n没有扣费，请重新点「🚀 开始洗数据」再试一次。",
+                    "⚠️ 文件预处理失败，这次<b>没有扣费</b>。\n\n"
+                    "请重新点「🚀 开始洗数据」再试一次；还是不行就重新发一次文件。",
                     reply_markup=menu_kb(cq.from_user.id),
                 )
                 await cleanup_state(state)
@@ -2558,12 +2559,13 @@ async def _wash_submit_impl(
     except Exception as e:
         print(f"[wash-progress] 发送进度消息失败: {e}")
     # 记录本批输入数据，全部回传后用来出统计报告
-    # 号码数按「真正送去群洗」的算，报告描述的是这次洗了什么
+    # 「号码总数」按用户上传的号码算：报告里行数和号码数必须对得上，
+    # 否则客户会追问「我传了 6 行怎么只有 2 个号」，等于把内部拆分暴露出去。
     _report_begin(
         random_code,
         sent_ok,
         total_lines,
-        sum(int(f.get("phones") or 0) for f in submit_files),
+        total_phones if prewash else sum(int(f.get("phones") or 0) for f in submit_files),
         cost,
         svc_label,
     )
