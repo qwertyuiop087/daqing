@@ -94,6 +94,7 @@ def main_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     buttons = [
         ("文件切割", "menu:split"),
+        ("号码拆包", "menu:cut"),
         ("解压Zip提取TXT", "menu:zip"),
         ("批量重命名", "menu:rename"),
         ("号码转VCF", "menu:vcf"),
@@ -163,6 +164,33 @@ def split_insert_kb() -> InlineKeyboardMarkup:
     b.button(text="✅ 需要插入", callback_data="split:insert:yes")
     b.button(text="❌ 不需要", callback_data="split:insert:no")
     b.adjust(2)
+    return b.as_markup()
+
+
+def cut_seg_kb(before: int = 0, after: int = 0) -> InlineKeyboardMarkup:
+    """号码拆包：选前段 / 后段 / 两段都要（没内容的那段置灰提示）。"""
+    b = InlineKeyboardBuilder()
+    b.button(
+        text=f"⬆️ 前段（1~号码那行，{before} 条）",
+        callback_data="cut:seg:before",
+    )
+    b.button(
+        text=f"⬇️ 后段（号码之后，{after} 条）",
+        callback_data="cut:seg:after",
+    )
+    b.button(text="📚 两段都要", callback_data="cut:seg:both")
+    b.button(text="❌ 取消", callback_data="cancel")
+    b.adjust(1, 1, 1, 1)
+    return b.as_markup()
+
+
+def cut_name_kb() -> InlineKeyboardMarkup:
+    """号码拆包：文件名用原包名还是自定义。"""
+    b = InlineKeyboardBuilder()
+    b.button(text="📄 用原包名", callback_data="cut:name:orig")
+    b.button(text="✍️ 自定义名字", callback_data="cut:name:custom")
+    b.button(text="❌ 取消", callback_data="cancel")
+    b.adjust(2, 1)
     return b.as_markup()
 
 

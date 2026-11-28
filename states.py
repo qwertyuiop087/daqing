@@ -15,6 +15,14 @@ class ZipStates(StatesGroup):
     waiting_file = State()      # 等待上传 ZIP
 
 
+class CutByPhoneStates(StatesGroup):
+    """号码拆包：按手机号在文件里的位置切成前段/后段。"""
+    waiting_file = State()      # 等待上传名单
+    waiting_phone = State()     # 等待手机号
+    waiting_segment = State()   # 等待选前段/后段/两段
+    waiting_name = State()      # 等待输入自定义文件名
+
+
 class RenameStates(StatesGroup):
     waiting_files = State()     # 等待上传多个 TXT
     waiting_name = State()      # 等待新文件名前缀

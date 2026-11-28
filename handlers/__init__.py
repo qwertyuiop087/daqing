@@ -5,6 +5,7 @@ from handlers import (
     add_area_code,
     buy,
     classify,
+    cut_by_phone,
     dedup,
     extract,
     lottery,
@@ -35,6 +36,7 @@ def register_all_routers(dp: Dispatcher) -> None:
     dp.include_router(phone_check.router)
     dp.include_router(extract.router)
     dp.include_router(add_area_code.router)
+    dp.include_router(cut_by_phone.router)
     dp.include_router(split.router)
     dp.include_router(zip_extract.router)
     dp.include_router(rename.router)
