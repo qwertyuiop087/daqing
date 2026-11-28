@@ -94,7 +94,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-28.6"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-28.7"))
 
 
 settings = Settings()
@@ -130,6 +130,12 @@ WASH_SERVICE_LABELS: dict[str, str] = {code: label for code, label, _p in WASH_S
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-11-28.7",
+        [
+            "回退 2026-11-28.5 的安卓去重：拆分/合并恢复成原样相加（去重只保留在「洗好的苹果自动入库」这一步）",
+        ],
+    ),
     (
         "2026-11-28.6",
         [

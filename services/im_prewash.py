@@ -162,11 +162,9 @@ def split_files(files: list, workdir: str) -> dict:
 
         stem = file_stem(f.get("name") or "input.txt")
         apple = [p for p in phones if kinds.get(p) == "苹果"]
-        # 苹果那份不去重（用户给多少行就洗多少行、算多少行的钱）；
-        # 安卓是发给客户的结果清单，重复号码没意义，这里按首次出现去重。
-        android = list(
-            dict.fromkeys(p for p in phones if kinds.get(p) != "苹果")
-        )
+        # 不去重：用户给多少行就洗多少行、算多少行的钱，重复号码照洗。
+        # （去重只发生在「洗好的苹果自动入库」那一步，见 bulk_upsert_phone_profiles）
+        android = [p for p in phones if kinds.get(p) != "苹果"]
         bill_lines = len(phones)
         apple_total += len(apple)
         android_all.extend(android)
@@ -199,16 +197,15 @@ def split_files(files: list, workdir: str) -> dict:
                 }
             )
 
-    android_unique = list(dict.fromkeys(android_all))
     return {
         "apple_files": apple_files,
         "android_files": android_files,
-        "android": android_unique,
+        "android": android_all,
         "stats": {
             "files": len(files),
             "phones": phone_total,
             "apple": apple_total,
-            "android": len(android_unique),
+            "android": len(android_all),
         },
     }
 
@@ -358,8 +355,9 @@ def _read_lines(path: str) -> list[str]:
 def build_merged(code: str) -> dict | None:
     """合成「安卓 = 撞库安卓 + 洗完安卓」文件，返回 {path,name,pre,post,total}。
 
-    **去重**：撞库那份在前，群里判出来的接在后面，重复号码（同一边重复、
-    或两边都出现）只留第一次出现的那次 —— 客户拿到的是一份干净的号码清单。
+    直接相加、不去重（2026-11-28.7 按需求回退）：撞库那份在前，
+    群里判出来的接在后面，一行不多一行不少。
+    去重只在「洗好的苹果自动入库」那一步做，发给客户的结果保持原样。
     """
     code = _safe_code(code)
     if not code:
@@ -371,8 +369,7 @@ def build_merged(code: str) -> dict | None:
     with _LOCK:
         pre = _read_lines(pre_path)
         post = _read_lines(post_path)
-        # 撞库那份理论上已经去过重，但老任务可能存着重复，这里统一兜一次
-        merged = list(dict.fromkeys(pre + post))
+        merged = pre + post
         if not merged:
             return None
 
@@ -389,7 +386,7 @@ def build_merged(code: str) -> dict | None:
         "path": path,
         # 文件名不写「合计」：客户看到的就应该是「原名_安卓_N.txt」这种普通结果名
         "name": f"{stem}_安卓_{len(merged)}.txt",
-        "pre": len(list(dict.fromkeys(pre))),
+        "pre": len(pre),
         "post": len(post),
         "total": len(merged),
     }
