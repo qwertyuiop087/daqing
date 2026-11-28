@@ -38,11 +38,11 @@ def load_btn_icons() -> None:
             icons = {}
             styles = {}
             for key in [
-                "menu:split", "menu:zip", "menu:rename", "menu:vcf",
+                "menu:split", "menu:cut", "menu:zip", "menu:rename", "menu:vcf",
                 "menu:dedup", "menu:extract", "menu:addcode", "menu:classify", "menu:phonecheck",
                 "menu:merge", "menu:sort", "menu:plate", "menu:xlsx", "menu:wash", "menu:lottery",
                 "menu:membership", "buy:plans", "menu:admin",
-                "admin:bind_drop_chat",
+                "admin:bind_drop_chat", "admin:im_prewash", "admin:imdb_clear",
             ]:
                 icon_val = get_config(session, f"btn_icon:{key}", "")
                 if icon_val:

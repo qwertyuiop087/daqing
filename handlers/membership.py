@@ -1756,6 +1756,7 @@ async def admin_edit_drop_template_input(message: Message, state: FSMContext):
 # 所有可设置图标的按钮列表
 BTN_ICONS_LIST = [
     ("文件切割", "menu:split"),
+    ("号码拆包", "menu:cut"),
     ("解压Zip提取TXT", "menu:zip"),
     ("批量重命名", "menu:rename"),
     ("号码转VCF", "menu:vcf"),
@@ -1773,6 +1774,8 @@ BTN_ICONS_LIST = [
     ("会员中心", "menu:membership"),
     ("购买会员", "buy:plans"),
     ("管理面板", "menu:admin"),
+    ("预撞库开关", "admin:im_prewash"),
+    ("清空撞库库", "admin:imdb_clear"),
     ("绑定抽奖通知群", "admin:bind_drop_chat"),
 ]
 
