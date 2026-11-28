@@ -5,6 +5,32 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>错落雨分包机器人 · CUOLUOYU</title>
 <meta name="description" content="错落雨分包机器人：文件切割、号码去重、空号检测、催收分包、洗数据、抽奖系统，Telegram 一键使用。">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#dfeafb">
+
+<!-- 链接预览：发到 Telegram / 微信 / 推特时不再只剩一行域名 -->
+<link rel="canonical" href="https://cuoluoyu.com/">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/favicon.svg">
+<link rel="mask-icon" href="/favicon.svg" color="#3b82f6">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="错落雨 CUOLUOYU">
+<meta property="og:title" content="错落雨分包机器人 · 号码数据处理一站式">
+<meta property="og:description" content="文件切割、号码去重、空号检测、催收分包、洗数据——Telegram 里发个文件就完事。">
+<meta property="og:url" content="https://cuoluoyu.com/">
+<meta property="og:image" content="https://cuoluoyu.com/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="错落雨分包机器人 · 号码数据处理一站式">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="错落雨分包机器人 · 号码数据处理一站式">
+<meta name="twitter:description" content="文件切割、号码去重、空号检测、催收分包、洗数据——Telegram 里发个文件就完事。">
+<meta name="twitter:image" content="https://cuoluoyu.com/og.jpg">
+
+<!-- 先给 <html> 打上 js 标记：滚动显现只在 JS 真的能跑时才把内容藏起来，
+     否则（内置浏览器拦截脚本/加载失败）整页会停在 opacity:0 上，看着像白屏 -->
+<script>document.documentElement.classList.add('js');</script>
 <style>
 :root{
   /* 底色：留够对比度，让玻璃层有东西可折射 */
@@ -147,7 +173,7 @@ nav.scrolled{
 }
 .badge .dot{width:7px;height:7px;border-radius:50%;background:#34d399;box-shadow:0 0 12px #34d399;animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-.hero h1{font-size:clamp(38px,6vw,70px);font-weight:900;letter-spacing:-1.4px;line-height:1.1}
+.hero h1{font-size:clamp(38px,6vw,70px);font-weight:900;letter-spacing:-1.4px;line-height:1.1;text-wrap:balance}
 .grad-text{
   background:linear-gradient(115deg,#8ab4ff 6%,#5ed0ff 42%,#a9b6ff 82%);
   background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
@@ -1498,7 +1524,19 @@ nav.scrolled{
 @media(max-width:420px){
   .hero h1{font-size:25px}
   .sec-head h2{font-size:21.5px}
-}</style>
+}
+
+/* ---------------- 兜底：无脚本 / 减少动态效果 ----------------
+   放在样式表最后，覆盖上面各套主题里的滚动显现规则：
+   · 脚本被拦、加载失败（没有 .js）时，内容一律直接可见，不能停在 opacity:0 + blur 上；
+   · 系统开了「减少动态效果」时，不再滚入渐显、不再渐变流动、不再平滑滚动。 */
+html:not(.js) .reveal{opacity:1!important;transform:none!important;filter:none!important}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+  html{scroll-behavior:auto!important}
+  .reveal,.js .reveal{opacity:1!important;transform:none!important;filter:none!important}
+}
+</style>
 </head>
 <body>
 
@@ -1547,7 +1585,7 @@ nav.scrolled{
 <header class="hero" id="hero">
   <div class="wrap">
     <span class="badge"><span class="dot"></span> Telegram 机器人 · 24/7 自动处理</span>
-    <h1>号码数据处理<br>一站式的 <span class="grad-text" id="heroHighlight">错落雨分包机器人</span></h1>
+    <h1>号码数据处理<br>一站式的 <span class="grad-text" id="heroHighlight">分包机器人</span></h1>
     <p class="sub" id="heroSubtitle">文件切割、号码去重、空号检测、催收分包、洗数据…… 上传即处理，结果秒回。内置抽奖系统与会员体系，运营一步到位。</p>
     <div class="cta">
       <a class="btn primary glow bot-link" href="https://t.me/sechou_bot" target="_blank" rel="noopener"><svg class="ii" aria-hidden="true"><use href="#i-send"/></svg> 立即开始使用</a>

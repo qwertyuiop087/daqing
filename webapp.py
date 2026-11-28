@@ -23,6 +23,8 @@ from config import settings
 from utils import config_api
 
 ROOT = Path(__file__).resolve().parent
+# 介绍页可以直接对外提供的小文件（白名单，防目录遍历）
+SITE_ASSETS = {"favicon.svg", "og.jpg"}
 COOKIE_NAME = "dqfb_admin"
 COOKIE_TTL = 24 * 3600  # 登录有效期 24 小时
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
@@ -252,6 +254,22 @@ async def index(request: web.Request):
         return resp
     print("⚠️ 缺少 website/index.html（代码没传全），已使用内置备用页")
     return web.Response(text=_FALLBACK_HTML, content_type="text/html")
+
+
+async def site_asset(request: web.Request):
+    """介绍页用的小文件：favicon.svg / og.jpg（链接预览图）。
+
+    只认这两个名字，不做目录遍历——避免 /favicon.svg/../../etc/passwd 这类花活。
+    """
+    name = request.path.rsplit("/", 1)[-1]
+    if name not in SITE_ASSETS:
+        raise web.HTTPNotFound()
+    path = ROOT / "website" / name
+    if not path.exists():
+        raise web.HTTPNotFound()
+    resp = web.FileResponse(path)
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
 
 
 async def admin_page(request: web.Request):
@@ -810,6 +828,8 @@ def build_app(bot=None) -> web.Application:
     app = web.Application(client_max_size=256 * 1024, middlewares=[guard_middleware])
     app.router.add_get("/", index)
     app.router.add_get("/admin", admin_page)
+    app.router.add_get("/favicon.svg", site_asset)
+    app.router.add_get("/og.jpg", site_asset)
     app.router.add_get("/health", health)
     app.router.add_get("/api/version", version_api)
     app.router.add_get("/api/public/feed", public_feed)

@@ -94,7 +94,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-28.7"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-29.1"))
 
 
 settings = Settings()
@@ -130,6 +130,16 @@ WASH_SERVICE_LABELS: dict[str, str] = {code: label for code, label, _p in WASH_S
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-11-29.1",
+        [
+            "介绍页补上链接预览：og / twitter 卡片、1200×630 分享图、favicon、theme-color、canonical（群里发链接不再只剩域名）",
+            "介绍页照顾「减少动态效果」：系统开了就不再做滚入渐显/渐变流动/平滑滚动",
+            "脚本被拦或不执行时内容不再整页空白（没有 .js 标记就一律直接显示）",
+            "首屏大标题改短一行（去掉重复的品牌名）+ text-wrap 平衡换行",
+            "webapp 新增 /favicon.svg、/og.jpg 两个静态资源路由（白名单，防目录遍历）",
+        ],
+    ),
     (
         "2026-11-28.7",
         [

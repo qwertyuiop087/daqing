@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="错落雨 CUOLUOYU">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#g)"/>
+  <g fill="none" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"
+     transform="translate(8 8) scale(2)">
+    <path d="M12 2.8l8 4.6v9.2l-8 4.6-8-4.6V7.4z"/>
+    <path d="M12 8.2l4 2.3v4.6l-4 2.3-4-2.3v-4.6z"/>
+  </g>
+</svg>
