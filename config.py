@@ -94,7 +94,7 @@ class Settings:
     OKPAY_TOKEN: str = _clean_env(os.getenv("OKPAY_TOKEN", ""))
     OKPAY_CALLBACK_URL: str = _clean_env(os.getenv("OKPAY_CALLBACK_URL", ""))
     # 版本号：/version 命令会显示，用于确认线上部署的是不是最新包
-    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-28.2"))
+    VERSION: str = _clean_env(os.getenv("BOT_VERSION", "2026-11-28.3"))
 
 
 settings = Settings()
@@ -130,6 +130,14 @@ WASH_SERVICE_LABELS: dict[str, str] = {code: label for code, label, _p in WASH_S
 # /version 只显示「当前 VERSION 对应的那一条」。
 # 升版本时把新版本放在最前面，版本号必须和上面的 VERSION 完全一致（有测试校验）。
 CHANGELOG: list[tuple[str, list[str]]] = [
+    (
+        "2026-11-28.3",
+        [
+            "洗完的苹果自动入库：苹果 iMessage 任务里群里判定成苹果的号码，自动写进本地撞库号码库（老号从安卓改成苹果）",
+            "/预撞库 页面新增「自动入库」开关（🟢 开启 / 🔴 关闭），网页后台也能改（im_autosave）",
+            "只认苹果 iMessage 的结果；支付宝/微信等其它业务的洗后号码不会当苹果入库",
+        ],
+    ),
     (
         "2026-11-28.2",
         [

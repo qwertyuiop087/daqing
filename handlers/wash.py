@@ -420,6 +420,49 @@ async def _send_im_android_total(bot, code: str) -> None:
     )
 
 
+# ---------------- 洗好的苹果自动入库 ----------------
+
+def _save_apple_library(pairs: list) -> int:
+    """线程里跑：批量 upsert 到本地号码库（新号插入、老号改类型）。"""
+    from database import SessionLocal, bulk_upsert_phone_profiles
+
+    with SessionLocal() as session:
+        return bulk_upsert_phone_profiles(session, pairs)
+
+
+async def _remember_washed_apples(bot, doc, code: str, phones: list | None = None) -> None:
+    """把群里判定成「苹果」的号码自动写进本地号码库。
+
+    这是最准的撞库数据：洗一遍就多一批，下次别人送来同样的号，
+    本地撞库直接命中（预撞库能命中、群洗就少花钱）。
+    只认「苹果 iMessage」的任务 —— 支付宝/微信那些洗出来的也是手机号，
+    但那是别家业务的结果，不能当苹果号入库。
+    """
+    with SessionLocal() as session:
+        meta_raw = get_config(session, f"wash_meta:{code}", "")
+        flag = (get_config(session, "im_autosave", "1") or "1").strip().lower()
+    if flag in ("0", "false", "off", "no", "关", "关闭"):
+        return
+    service = ""
+    try:
+        service = str((json.loads(meta_raw) or {}).get("service") or "")
+    except Exception:
+        service = ""
+    if "苹果" not in service:
+        return
+
+    if phones is None:
+        phones = await _download_result_phones(bot, doc)
+    if not phones:
+        return
+    pairs = [(p, "苹果") for p in dict.fromkeys(phones) if p]
+    try:
+        written = await asyncio.to_thread(_save_apple_library, pairs)
+        print(f"[im-lib] {code} 洗好的苹果入库 {written:,} 个（去重后 {len(pairs):,}）")
+    except Exception as e:
+        print(f"[im-lib] 苹果入库失败（不影响交付）：{e}")
+
+
 # ---------------- 洗数据结果统计报告 ----------------
 
 def _report_begin(
@@ -1724,9 +1767,23 @@ async def imdb_import_done(message: Message, state: FSMContext):
     )
 
 
-# ---------------- 预撞库一键开关 ----------------
+# ---------------- 预撞库 / 自动入库 一键开关 ----------------
 
-def _im_prewash_status_text(on: bool) -> str:
+def _im_autosave_on() -> bool:
+    """洗好的苹果是否自动入库（默认开启）。"""
+    from database import get_config
+
+    try:
+        with SessionLocal() as session:
+            raw = (get_config(session, "im_autosave", "1") or "").strip().lower()
+    except Exception:
+        return True
+    return raw not in ("0", "false", "off", "no", "关", "关闭")
+
+
+def _im_prewash_status_text(on: bool, autosave: bool | None = None) -> str:
+    if autosave is None:
+        autosave = _im_autosave_on()
     body = (
         "当前状态：<b>🟢 已开启</b>\n\n"
         "苹果 iMessage 洗数据会先用本地库拆成苹果 / 安卓：\n"
@@ -1738,14 +1795,25 @@ def _im_prewash_status_text(on: bool) -> str:
         "苹果 iMessage 洗数据会把整份文件直接送群洗，"
         "不预分苹果/安卓，也不会有单独的安卓结果。"
     )
-    return f"⚙️ <b>苹果 iM 预撞库</b>\n\n{body}\n\n点下面的按钮一键切换。"
+    save_line = (
+        "🟢 已开启：群里判定成苹果的号会自动写进本地号码库"
+        if autosave
+        else "🔴 已关闭：洗完的苹果不写库"
+    )
+    return (
+        f"⚙️ <b>苹果 iM 预撞库</b>\n\n{body}\n\n点下面的按钮一键切换。\n\n"
+        "────────────\n"
+        f"🤖 <b>洗好的苹果自动入库</b>\n{save_line}"
+    )
 
 
 def _im_prewash_switch_kb() -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
     b.button(text="🟢 开启预撞库", callback_data="wash:im_prewash:on")
     b.button(text="🔴 关闭预撞库", callback_data="wash:im_prewash:off")
-    b.adjust(2)
+    b.button(text="🟢 开启自动入库", callback_data="wash:im_autosave:on")
+    b.button(text="🔴 关闭自动入库", callback_data="wash:im_autosave:off")
+    b.adjust(2, 2)
     return b.as_markup()
 
 
@@ -1793,8 +1861,32 @@ async def im_prewash_switch_callback(cq: CallbackQuery):
     await _set_im_prewash(on)
     print(f"[im-pre] 管理员 {cq.from_user.id} {'开启' if on else '关闭'}预撞库")
     await cq.answer("已开启预撞库" if on else "已关闭预撞库")
+    with SessionLocal() as session:
+        still_on = im_prewash.enabled(session)
     await _edit_or_answer(
-        cq, _im_prewash_status_text(on), reply_markup=_im_prewash_switch_kb()
+        cq, _im_prewash_status_text(still_on), reply_markup=_im_prewash_switch_kb()
+    )
+
+
+@router.callback_query(F.data.in_({"wash:im_autosave:on", "wash:im_autosave:off"}))
+async def im_autosave_switch_callback(cq: CallbackQuery):
+    """洗完的苹果要不要自动写进本地号码库。"""
+    from database import set_config
+    from utils.roles import is_admin
+
+    if not is_admin(cq.from_user.id):
+        await cq.answer("没有权限。", show_alert=True)
+        return
+    on = (cq.data or "").endswith(":on")
+    with SessionLocal() as session:
+        set_config(session, "im_autosave", "1" if on else "0")
+        prewash_on = im_prewash.enabled(session)
+    print(f"[im-lib] 管理员 {cq.from_user.id} {'开启' if on else '关闭'}自动入库")
+    await cq.answer("已开启自动入库" if on else "已关闭自动入库")
+    await _edit_or_answer(
+        cq,
+        _im_prewash_status_text(prewash_on, autosave=on),
+        reply_markup=_im_prewash_switch_kb(),
     )
 
 
@@ -2608,6 +2700,8 @@ async def alt_user_reply(message: Message, bot: Bot):
                 await _alert_undelivered(bot, filename, random_code, user_id)
                 return
             print(f"✅ 已把洗好的苹果发给用户 {user_id}")
+            # 洗完的苹果自动入库：下次别人送来同样的号，本地撞库直接命中
+            await _remember_washed_apples(bot, doc, random_code, phones)
         else:
             print(f"🧮 安卓那份先收着，等结果齐了合成「安卓合计」再发: {filename}")
 

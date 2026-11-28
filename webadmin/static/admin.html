@@ -526,6 +526,11 @@ table{min-width:100%}
         <div class="row"><button onclick="save('im_prewash')">保存</button><button class="ghost" onclick="reset('im_prewash')">重置默认</button></div>
       </div>
       <div class="card">
+        <div class="card-head"><h2>洗好的苹果自动入库</h2><p>1 开启 / 0 关闭。开启后，群里判定成「苹果」的号码会自动写进本地撞库号码库（新号插入、老号改成苹果），下次别人洗同样的号本地就能直接命中</p></div>
+        <input id="im_autosave" type="text" placeholder="1">
+        <div class="row"><button onclick="save('im_autosave')">保存</button><button class="ghost" onclick="reset('im_autosave')">重置默认</button></div>
+      </div>
+      <div class="card">
         <div class="card-head"><h2>USDT 固定汇率</h2><p>实时汇率获取失败时使用，留空则使用内置默认 6.8</p></div>
         <input id="usdt_rate" type="text" placeholder="6.8">
         <div class="row"><button onclick="save('usdt_rate')">保存</button><button class="ghost" onclick="reset('usdt_rate')">清空</button></div>
@@ -798,6 +803,7 @@ const KEY_TO_EL={
   wash_price_floor:'wash_price_floor',
   wash_quota:'wash_quota',
   im_prewash:'im_prewash',
+  im_autosave:'im_autosave',
   usdt_rate:'usdt_rate',
   okpay_shop_id:'okpay_shop_id',
   okpay_token:'okpay_token',

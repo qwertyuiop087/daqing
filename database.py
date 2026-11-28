@@ -282,6 +282,57 @@ def bulk_add_phone_profiles(session, pairs, chunk: int = 5000) -> int:
     return written
 
 
+def bulk_upsert_phone_profiles(session, pairs, chunk: int = 5000) -> int:
+    """批量写入 (号码, 类型)：新号插入，老号**改类型**（苹果↔安卓）。
+
+    洗数据回传里群里判定成苹果的号，就是最准的撞库数据；它可能早就以
+    「安卓」存在库里，所以这里必须 DO UPDATE 而不是 DO NOTHING。
+    返回提交行数。
+    """
+    from sqlalchemy import insert
+
+    items = [
+        {"phone": p, "kind": k} for p, k in pairs if p and k in ("苹果", "安卓")
+    ]
+    if not items:
+        return 0
+
+    dialect = ""
+    try:
+        dialect = session.bind.dialect.name if session.bind is not None else ""
+    except Exception:
+        dialect = ""
+
+    stmt = None
+    try:
+        if dialect == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as _ins
+        elif dialect == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as _ins
+        else:
+            _ins = None
+        if _ins is not None:
+            base = _ins(PhoneProfile)
+            stmt = base.on_conflict_do_update(
+                index_elements=["phone"],
+                set_={"kind": base.excluded.kind, "updated_at": func.now()},
+            )
+    except Exception:
+        stmt = None
+
+    if stmt is None:
+        # 方言不支持 upsert：退回逐条（慢，但不丢数据）
+        added, updated = upsert_phone_profiles(session, [(i["phone"], i["kind"]) for i in items])
+        return added + updated
+
+    written = 0
+    for i in range(0, len(items), chunk):
+        session.execute(stmt.values(items[i : i + chunk]))
+        session.commit()
+        written += len(items[i : i + chunk])
+    return written
+
+
 def lookup_phone_profiles(session, phones) -> dict[str, str]:
     """批量查询号码类型，返回 {号码: 苹果/安卓}。"""
     result: dict[str, str] = {}
